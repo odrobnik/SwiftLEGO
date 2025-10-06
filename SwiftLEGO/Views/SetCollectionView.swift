@@ -73,6 +73,7 @@ struct SetCollectionView: View {
                     Label("Add Set", systemImage: "plus")
                 }
             }
+
         }
         .sheet(isPresented: $showingAddSetSheet) {
             AddSetView(list: list) { result in

@@ -6,6 +6,7 @@ struct ListSidebarView: View {
     @Query(sort: \CollectionList.name, animation: .default) private var lists: [CollectionList]
     @Binding var selection: CollectionList?
     @State private var editorState: EditorState?
+    @State private var showingPartSearch = false
 
     private var listCountDescription: String {
         "\(lists.count) list\(lists.count == 1 ? "" : "s")"
@@ -13,6 +14,14 @@ struct ListSidebarView: View {
 
     var body: some View {
         List(selection: $selection) {
+            Section("Tools") {
+                Button {
+                    showingPartSearch = true
+                } label: {
+                    Label("Find Part", systemImage: "magnifyingglass")
+                }
+            }
+
             Section(listCountDescription) {
                 ForEach(lists) { list in
                     Label {
@@ -91,6 +100,9 @@ struct ListSidebarView: View {
                 onSubmit: handleEditorSubmit(_:),
                 onDelete: { list in delete(list) }
             )
+        }
+        .sheet(isPresented: $showingPartSearch) {
+            PartSearchView()
         }
     }
 
