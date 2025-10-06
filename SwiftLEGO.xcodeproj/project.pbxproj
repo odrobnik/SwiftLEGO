@@ -3,21 +3,31 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		003b71505824429e8f563e5a /* Part.swift in Sources */ = {isa = PBXBuildFile; fileRef = a6784f013ddf499db8bdabcf /* Part.swift */; };
 		05c24418ed434579b51dfe52 /* SwiftLEGOApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69821dc787e1438d9dbca1f2 /* SwiftLEGOApp.swift */; };
+		11aa22bb33cc44dd55ee66ff /* BrickLinkInventoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = c1e2d3f4a5b6409897654321 /* BrickLinkInventoryModels.swift */; };
 		1292bfd2f98e4dafa738882f /* SetCollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22f3a692b1b448c58de41adb /* SetCollectionView.swift */; };
+		22bb33cc44dd55ee66ff77aa /* BrickLinkInventoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = b4c5d6e7f8a9401234567890 /* BrickLinkInventoryService.swift */; };
+		33cc44dd55ee66ff77aa88bb /* DomBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = a1b2c3d4e5f6401298765432 /* DomBuilder.swift */; };
 		341d57700e1e4afe84023d72 /* Preview Content.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4e644b8d22b54a309c76e5d3 /* Preview Content.xcassets */; };
 		360f6b44ed3545d98f309e88 /* BrickSet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5dc696c200de4abbadd5dc07 /* BrickSet.swift */; };
+		44dd55ee66ff77aa88bb99cc /* DomElement.swift in Sources */ = {isa = PBXBuildFile; fileRef = d1c2b3a4e5f6401298765433 /* DomElement.swift */; };
+		55ee66ff77aa88bb99cc00dd /* DomNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = e1f2a3b4c5d6401298765434 /* DomNode.swift */; };
 		5b1023cd80a2408b832e1582 /* RenameSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = cbff937e47d941a48c5de551 /* RenameSetView.swift */; };
 		611dd05dd88145119315cd4a /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = e5f74c86b9c646ed886d3173 /* Assets.xcassets */; };
+		66ff77aa88bb99cc00ddeeff /* DomText.swift in Sources */ = {isa = PBXBuildFile; fileRef = f1e2d3c4b5a6401298765435 /* DomText.swift */; };
 		67f46c450fed42189ee3b2e0 /* AddSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35386ab795c64cfe8821d271 /* AddSetView.swift */; };
+		77aa88bb99cc00ddeeff11aa /* HTML💡Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = abc123def4567890fedcba98 /* HTML💡Markdown.swift */; };
 		77f04ea713e442e682ca6680 /* BrickLinkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87e2ca925daf41bd8f822bb3 /* BrickLinkService.swift */; };
 		78b83b4b7a6f4f549f1d6945 /* SetCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = b7f25c9f025b48bfbb5e7b71 /* SetCardView.swift */; };
 		7fb8e185242b4dbf99b33cec /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5711145d88b540d0805bbf42 /* ContentView.swift */; };
+		88bb99cc00ddeeff11aa22bb /* String+Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = bca132def5468790fedcba97 /* String+Markdown.swift */; };
+		99cc00ddeeff11aa22bb33cc /* WebKitBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = cab231edf6547890fedcba96 /* WebKitBrowser.swift */; };
+		A7AB6DDF2E945E6300C813E2 /* HTMLParser in Frameworks */ = {isa = PBXBuildFile; productRef = FEEDBEEFCAFEDADA12345678 /* HTMLParser */; };
 		aa759d4131464a139628de43 /* CollectionList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46ad3394cab847e4b893b19f /* CollectionList.swift */; };
 		d2a6d403f42b4da69a1e084d /* ListEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73dd9c1c1c804386b3c34afe /* ListEditorView.swift */; };
 		e361b9b9b52e4e1ab05cbab4 /* ListSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = f4399a533a6241e3a32c327d /* ListSidebarView.swift */; };
@@ -28,57 +38,154 @@
 /* Begin PBXFileReference section */
 		22f3a692b1b448c58de41adb /* SetCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCollectionView.swift; sourceTree = "<group>"; };
 		35386ab795c64cfe8821d271 /* AddSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSetView.swift; sourceTree = "<group>"; };
-		39cdcbe6fa9b4cec8e34ec53 /* Products */ = {isa = PBXGroup; children = (
-				9b0c8c2b52db434f8bd11e26 /* SwiftLEGO.app */,
-			); name = Products; sourceTree = "<group>"; };
-		3a45e6690d9e4a5fa0adf731 /* Frameworks */ = {isa = PBXGroup; children = (
-			); name = Frameworks; sourceTree = "<group>"; };
 		46ad3394cab847e4b893b19f /* CollectionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionList.swift; sourceTree = "<group>"; };
-		4b9c990f617d4737865d90dc = {isa = PBXGroup; children = (
+		4e644b8d22b54a309c76e5d3 /* Preview Content.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Content.xcassets"; sourceTree = "<group>"; };
+		5711145d88b540d0805bbf42 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		5dc696c200de4abbadd5dc07 /* BrickSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickSet.swift; sourceTree = "<group>"; };
+		69821dc787e1438d9dbca1f2 /* SwiftLEGOApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLEGOApp.swift; sourceTree = "<group>"; };
+		73dd9c1c1c804386b3c34afe /* ListEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListEditorView.swift; sourceTree = "<group>"; };
+		758747c27be345a686ec6d11 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
+		87e2ca925daf41bd8f822bb3 /* BrickLinkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickLinkService.swift; sourceTree = "<group>"; };
+		9b0c8c2b52db434f8bd11e26 /* SwiftLEGO.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftLEGO.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		a1b2c3d4e5f6401298765432 /* DomBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomBuilder.swift; sourceTree = "<group>"; };
+		a6784f013ddf499db8bdabcf /* Part.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Part.swift; sourceTree = "<group>"; };
+		abc123def4567890fedcba98 /* HTML💡Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HTML💡Markdown.swift"; sourceTree = "<group>"; };
+		b4c5d6e7f8a9401234567890 /* BrickLinkInventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickLinkInventoryService.swift; sourceTree = "<group>"; };
+		b7f25c9f025b48bfbb5e7b71 /* SetCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCardView.swift; sourceTree = "<group>"; };
+		bca132def5468790fedcba97 /* String+Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Markdown.swift"; sourceTree = "<group>"; };
+		c1e2d3f4a5b6409897654321 /* BrickLinkInventoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickLinkInventoryModels.swift; sourceTree = "<group>"; };
+		cab231edf6547890fedcba96 /* WebKitBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebKitBrowser.swift; sourceTree = "<group>"; };
+		cbff937e47d941a48c5de551 /* RenameSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameSetView.swift; sourceTree = "<group>"; };
+		d1c2b3a4e5f6401298765433 /* DomElement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomElement.swift; sourceTree = "<group>"; };
+		e1f2a3b4c5d6401298765434 /* DomNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomNode.swift; sourceTree = "<group>"; };
+		e5f74c86b9c646ed886d3173 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		f18655541b944772b8a0b924 /* SwiftLEGOModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLEGOModelContainer.swift; sourceTree = "<group>"; };
+		f1e2d3c4b5a6401298765435 /* DomText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomText.swift; sourceTree = "<group>"; };
+		f4399a533a6241e3a32c327d /* ListSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListSidebarView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		a89c6ea71fba44de8239acf0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A7AB6DDF2E945E6300C813E2 /* HTMLParser in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		39cdcbe6fa9b4cec8e34ec53 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9b0c8c2b52db434f8bd11e26 /* SwiftLEGO.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3a45e6690d9e4a5fa0adf731 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		4b9c990f617d4737865d90dc = {
+			isa = PBXGroup;
+			children = (
 				d218a4a82740413ab5dbc5bd /* SwiftLEGO */,
+				DEADDEADDEADDEADDEADDEAD /* BrickCore */,
 				39cdcbe6fa9b4cec8e34ec53 /* Products */,
 				3a45e6690d9e4a5fa0adf731 /* Frameworks */,
-			); sourceTree = "<group>"; };
-		4e2d4aa7b8ee444b8b004e5d /* Components */ = {isa = PBXGroup; children = (
+			);
+			sourceTree = "<group>";
+		};
+		4e2d4aa7b8ee444b8b004e5d /* Components */ = {
+			isa = PBXGroup;
+			children = (
 				758747c27be345a686ec6d11 /* EmptyStateView.swift */,
 				73dd9c1c1c804386b3c34afe /* ListEditorView.swift */,
 				35386ab795c64cfe8821d271 /* AddSetView.swift */,
 				cbff937e47d941a48c5de551 /* RenameSetView.swift */,
 				b7f25c9f025b48bfbb5e7b71 /* SetCardView.swift */,
-			); path = Components; sourceTree = "<group>"; };
-		4e644b8d22b54a309c76e5d3 /* Preview Content.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Content.xcassets"; sourceTree = "<group>"; };
-		5677c2bde8ff4c7e88df43b0 /* Views */ = {isa = PBXGroup; children = (
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		5677c2bde8ff4c7e88df43b0 /* Views */ = {
+			isa = PBXGroup;
+			children = (
 				5711145d88b540d0805bbf42 /* ContentView.swift */,
 				f4399a533a6241e3a32c327d /* ListSidebarView.swift */,
 				22f3a692b1b448c58de41adb /* SetCollectionView.swift */,
-			); path = Views; sourceTree = "<group>"; };
-		5711145d88b540d0805bbf42 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		5dc696c200de4abbadd5dc07 /* BrickSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickSet.swift; sourceTree = "<group>"; };
-		69821dc787e1438d9dbca1f2 /* SwiftLEGOApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLEGOApp.swift; sourceTree = "<group>"; };
-		6fb0db6162e84ef5a41c39a1 /* Services */ = {isa = PBXGroup; children = (
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		6fb0db6162e84ef5a41c39a1 /* Services */ = {
+			isa = PBXGroup;
+			children = (
 				87e2ca925daf41bd8f822bb3 /* BrickLinkService.swift */,
-			); path = Services; sourceTree = "<group>"; };
-		73dd9c1c1c804386b3c34afe /* ListEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListEditorView.swift; sourceTree = "<group>"; };
-		758747c27be345a686ec6d11 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
-		7ce0b45e3ec9414f958a844b /* Persistence */ = {isa = PBXGroup; children = (
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		7ce0b45e3ec9414f958a844b /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
 				f18655541b944772b8a0b924 /* SwiftLEGOModelContainer.swift */,
-			); path = Persistence; sourceTree = "<group>"; };
-		87e2ca925daf41bd8f822bb3 /* BrickLinkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickLinkService.swift; sourceTree = "<group>"; };
-		8c2fc0c3dae14e24aa63cb8c /* Models */ = {isa = PBXGroup; children = (
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		8c2fc0c3dae14e24aa63cb8c /* Models */ = {
+			isa = PBXGroup;
+			children = (
 				46ad3394cab847e4b893b19f /* CollectionList.swift */,
 				5dc696c200de4abbadd5dc07 /* BrickSet.swift */,
 				a6784f013ddf499db8bdabcf /* Part.swift */,
-			); path = Models; sourceTree = "<group>"; };
-		9b0c8c2b52db434f8bd11e26 /* SwiftLEGO.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftLEGO.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		a6784f013ddf499db8bdabcf /* Part.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Part.swift; sourceTree = "<group>"; };
-		b7f25c9f025b48bfbb5e7b71 /* SetCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCardView.swift; sourceTree = "<group>"; };
-		be3bfda94cea40dc9eb87cc9 /* Resources */ = {isa = PBXGroup; children = (
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		DEADDEADDEADDEADDEADDEAD /* BrickCore */ = {
+			isa = PBXGroup;
+			children = (
+				c1e2d3f4a5b6409897654321 /* BrickLinkInventoryModels.swift */,
+				b4c5d6e7f8a9401234567890 /* BrickLinkInventoryService.swift */,
+				FEEDFEEDFEEDFEEDFEEDFEED /* Scraper */,
+			);
+			name = BrickCore;
+			path = Sources/BrickCore;
+			sourceTree = SOURCE_ROOT;
+		};
+		FEEDFEEDFEEDFEEDFEEDFEED /* Scraper */ = {
+			isa = PBXGroup;
+			children = (
+				a1b2c3d4e5f6401298765432 /* DomBuilder.swift */,
+				d1c2b3a4e5f6401298765433 /* DomElement.swift */,
+				e1f2a3b4c5d6401298765434 /* DomNode.swift */,
+				f1e2d3c4b5a6401298765435 /* DomText.swift */,
+				abc123def4567890fedcba98 /* HTML💡Markdown.swift */,
+				bca132def5468790fedcba97 /* String+Markdown.swift */,
+				cab231edf6547890fedcba96 /* WebKitBrowser.swift */,
+			);
+			path = Scraper;
+			sourceTree = "<group>";
+		};
+		be3bfda94cea40dc9eb87cc9 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
 				e5f74c86b9c646ed886d3173 /* Assets.xcassets */,
 				4e644b8d22b54a309c76e5d3 /* Preview Content.xcassets */,
-				6682272ae0e54f599423745b /* Info.plist */,
-			); path = Resources; sourceTree = "<group>"; };
-		cbff937e47d941a48c5de551 /* RenameSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameSetView.swift; sourceTree = "<group>"; };
-		d218a4a82740413ab5dbc5bd /* SwiftLEGO */ = {isa = PBXGroup; children = (
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		d218a4a82740413ab5dbc5bd /* SwiftLEGO */ = {
+			isa = PBXGroup;
+			children = (
 				69821dc787e1438d9dbca1f2 /* SwiftLEGOApp.swift */,
 				5677c2bde8ff4c7e88df43b0 /* Views */,
 				4e2d4aa7b8ee444b8b004e5d /* Components */,
@@ -86,54 +193,87 @@
 				7ce0b45e3ec9414f958a844b /* Persistence */,
 				6fb0db6162e84ef5a41c39a1 /* Services */,
 				be3bfda94cea40dc9eb87cc9 /* Resources */,
-			); path = SwiftLEGO; sourceTree = "<group>"; };
-		e5f74c86b9c646ed886d3173 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		f18655541b944772b8a0b924 /* SwiftLEGOModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLEGOModelContainer.swift; sourceTree = "<group>"; };
-		f4399a533a6241e3a32c327d /* ListSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListSidebarView.swift; sourceTree = "<group>"; };
-/* End PBXFileReference section */
-
-/* Begin PBXFrameworksBuildPhase section */
-		a89c6ea71fba44de8239acf0 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (
-			); runOnlyForDeploymentPostprocessing = 0; };
-/* End PBXFrameworksBuildPhase section */
+			);
+			path = SwiftLEGO;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		37728bf91ab24335adaf523e /* SwiftLEGO */ = {isa = PBXNativeTarget; buildConfigurationList = 1dcdc6fe64a14fb3aa7a69c2 /* Build configuration list for PBXNativeTarget "SwiftLEGO" */; buildPhases = (
+		37728bf91ab24335adaf523e /* SwiftLEGO */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1dcdc6fe64a14fb3aa7a69c2 /* Build configuration list for PBXNativeTarget "SwiftLEGO" */;
+			buildPhases = (
 				f1a54ae14def4a069838f310 /* Sources */,
 				a89c6ea71fba44de8239acf0 /* Frameworks */,
 				f5cb9b524daa455094f1b384 /* Resources */,
-			); buildRules = (
-			); dependencies = (
-			); name = SwiftLEGO; productName = SwiftLEGO; productReference = 9b0c8c2b52db434f8bd11e26 /* SwiftLEGO.app */; productType = "com.apple.product-type.application"; };
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A7AB6DE12E94638A00C813E2 /* PBXTargetDependency */,
+			);
+			name = SwiftLEGO;
+			packageProductDependencies = (
+				FEEDBEEFCAFEDADA12345678 /* HTMLParser */,
+			);
+			productName = SwiftLEGO;
+			productReference = 9b0c8c2b52db434f8bd11e26 /* SwiftLEGO.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		a0d5b774d55345d1857a5cb9 = {isa = PBXProject; attributes = {
+		a0d5b774d55345d1857a5cb9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 1520;
-				LastUpgradeCheck = 1520;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					37728bf91ab24335adaf523e = {
 						CreatedOnToolsVersion = 15.2;
 					};
 				};
-			}; buildConfigurationList = ccd12730c0d0491bab55bf72 /* Build configuration list for PBXProject "SwiftLEGO" */; compatibilityVersion = "Xcode 15.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (
+			};
+			buildConfigurationList = ccd12730c0d0491bab55bf72 /* Build configuration list for PBXProject "SwiftLEGO" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
 				en,
 				Base,
-			); mainGroup = 4b9c990f617d4737865d90dc; productRefGroup = 39cdcbe6fa9b4cec8e34ec53 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (
+			);
+			mainGroup = 4b9c990f617d4737865d90dc;
+			packageReferences = (
+				DADADA00A1B2C3D4E5F60708 /* XCRemoteSwiftPackageReference "HTMLParser" */,
+			);
+			productRefGroup = 39cdcbe6fa9b4cec8e34ec53 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
 				37728bf91ab24335adaf523e /* SwiftLEGO */,
-			); };
+			);
+		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		f5cb9b524daa455094f1b384 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
+		f5cb9b524daa455094f1b384 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 				611dd05dd88145119315cd4a /* Assets.xcassets in Resources */,
 				341d57700e1e4afe84023d72 /* Preview Content.xcassets in Resources */,
-			); runOnlyForDeploymentPostprocessing = 0; };
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		f1a54ae14def4a069838f310 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+		f1a54ae14def4a069838f310 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 				05c24418ed434579b51dfe52 /* SwiftLEGOApp.swift in Sources */,
 				7fb8e185242b4dbf99b33cec /* ContentView.swift in Sources */,
 				e361b9b9b52e4e1ab05cbab4 /* ListSidebarView.swift in Sources */,
@@ -148,14 +288,106 @@
 				003b71505824429e8f563e5a /* Part.swift in Sources */,
 				f49698ea079a443d975c54c3 /* SwiftLEGOModelContainer.swift in Sources */,
 				77f04ea713e442e682ca6680 /* BrickLinkService.swift in Sources */,
-			); runOnlyForDeploymentPostprocessing = 0; };
+				11aa22bb33cc44dd55ee66ff /* BrickLinkInventoryModels.swift in Sources */,
+				22bb33cc44dd55ee66ff77aa /* BrickLinkInventoryService.swift in Sources */,
+				33cc44dd55ee66ff77aa88bb /* DomBuilder.swift in Sources */,
+				44dd55ee66ff77aa88bb99cc /* DomElement.swift in Sources */,
+				55ee66ff77aa88bb99cc00dd /* DomNode.swift in Sources */,
+				66ff77aa88bb99cc00ddeeff /* DomText.swift in Sources */,
+				77aa88bb99cc00ddeeff11aa /* HTML💡Markdown.swift in Sources */,
+				88bb99cc00ddeeff11aa22bb /* String+Markdown.swift in Sources */,
+				99cc00ddeeff11aa22bb33cc /* WebKitBrowser.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		A7AB6DE12E94638A00C813E2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = A7AB6DE02E94638A00C813E2 /* HTMLParser */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		20fea35c5b7a40bca22d1f96 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+		20fea35c5b7a40bca22d1f96 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
-			}; name = Debug; };
-		bf5edaef9f9e4fe9bc04f9e8 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+			};
+			name = Debug;
+		};
+		411ee3b741724f2ebb610353 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		bf5edaef9f9e4fe9bc04f9e8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
@@ -187,16 +419,16 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"$(inherited)",
-				);
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -220,8 +452,12 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
-			}; name = Release; };
-		f48f6e48a68f467e82cb530a /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+			};
+			name = Release;
+		};
+		f48f6e48a68f467e82cb530a /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
@@ -253,8 +489,10 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -286,24 +524,55 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
-			}; name = Debug; };
-/* End XCBuildConfiguration section */
-
-		411ee3b741724f2ebb610353 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
-				DEVELOPMENT_TEAM = "";
-			}; name = Release; };
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		1dcdc6fe64a14fb3aa7a69c2 /* Build configuration list for PBXNativeTarget "SwiftLEGO" */ = {isa = XCConfigurationList; buildConfigurations = (
+		1dcdc6fe64a14fb3aa7a69c2 /* Build configuration list for PBXNativeTarget "SwiftLEGO" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
 				f48f6e48a68f467e82cb530a /* Debug */,
 				bf5edaef9f9e4fe9bc04f9e8 /* Release */,
-			); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		ccd12730c0d0491bab55bf72 /* Build configuration list for PBXProject "SwiftLEGO" */ = {isa = XCConfigurationList; buildConfigurations = (
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ccd12730c0d0491bab55bf72 /* Build configuration list for PBXProject "SwiftLEGO" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
 				20fea35c5b7a40bca22d1f96 /* Debug */,
 				411ee3b741724f2ebb610353 /* Release */,
-			); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DADADA00A1B2C3D4E5F60708 /* XCRemoteSwiftPackageReference "HTMLParser" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/odrobnik/HTMLParser.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A7AB6DE02E94638A00C813E2 /* HTMLParser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DADADA00A1B2C3D4E5F60708 /* XCRemoteSwiftPackageReference "HTMLParser" */;
+			productName = HTMLParser;
+		};
+		FEEDBEEFCAFEDADA12345678 /* HTMLParser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DADADA00A1B2C3D4E5F60708 /* XCRemoteSwiftPackageReference "HTMLParser" */;
+			productName = HTMLParser;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = a0d5b774d55345d1857a5cb9 /* Project object */;
 }

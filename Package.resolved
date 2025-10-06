@@ -1,0 +1,15 @@
+{
+  "originHash" : "e0b1018e88b886fb0df96d5714cb803a432417fdee3277c0376446494f8d3619",
+  "pins" : [
+    {
+      "identity" : "htmlparser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/odrobnik/HTMLParser.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "42be6657022b56cc5827b2589cd9d58efc48b8cf"
+      }
+    }
+  ],
+  "version" : 3
+}

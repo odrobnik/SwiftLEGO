@@ -45,8 +45,26 @@ enum SwiftLEGOModelContainer {
             name: "Volkswagen T1 Camper Van",
             thumbnailURLString: nil,
             parts: [
-                Part(partID: "3001", colorID: "5", quantityNeeded: 24, quantityHave: 12),
-                Part(partID: "3020", colorID: "1", quantityNeeded: 40, quantityHave: 8)
+                Part(
+                    partID: "3001",
+                    name: "Brick 2 x 4",
+                    colorID: "5",
+                    colorName: "Red",
+                    quantityNeeded: 24,
+                    quantityHave: 12,
+                    imageURLString: nil,
+                    partURLString: nil
+                ),
+                Part(
+                    partID: "3020",
+                    name: "Plate 2 x 4",
+                    colorID: "1",
+                    colorName: "White",
+                    quantityNeeded: 40,
+                    quantityHave: 8,
+                    imageURLString: nil,
+                    partURLString: nil
+                )
             ],
             collection: sampleList
         )

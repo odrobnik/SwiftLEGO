@@ -64,34 +64,41 @@ struct AddSetView: View {
         errorMessage = nil
         isSaving = true
 
-        let inputSetNumber = setNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        let inputSetNumber = normalizedSetNumber(setNumber)
 
         Task {
             do {
-                let payload = try await brickLinkService.fetchSetDetails(for: inputSetNumber)
-                await MainActor.run {
-                    let newSet = BrickSet(
-                        setNumber: payload.setNumber,
-                        name: customName.isEmpty ? payload.name : customName,
-                        thumbnailURLString: payload.thumbnailURL?.absoluteString
-                    )
+                let existingSet = try await existingSetWithInventory(for: inputSetNumber)
 
-                    let partModels = payload.parts.map { part in
-                        Part(
-                            partID: part.partID,
-                            colorID: part.colorID,
-                            quantityNeeded: part.quantityNeeded,
-                            set: newSet
+                if let existingSet {
+                    await MainActor.run {
+                        persistSet(
+                            setNumber: existingSet.setNumber,
+                            defaultName: existingSet.name,
+                            thumbnailURLString: existingSet.thumbnailURLString,
+                            parts: existingSet.parts.map {
+                                BrickLinkPartPayload(
+                                    partID: $0.partID,
+                                    name: $0.name,
+                                    colorID: $0.colorID,
+                                    colorName: $0.colorName,
+                                    quantityNeeded: $0.quantityNeeded,
+                                    imageURL: $0.imageURL,
+                                    partURL: $0.partURL
+                                )
+                            }
                         )
                     }
-
-                    newSet.parts = partModels
-                    newSet.collection = list
-                    list.sets.append(newSet)
-                    modelContext.insert(newSet)
-                    try? modelContext.save()
-                    completion(.success(newSet))
-                    dismiss()
+                } else {
+                    let payload = try await brickLinkService.fetchSetDetails(for: inputSetNumber)
+                    await MainActor.run {
+                        persistSet(
+                            setNumber: payload.setNumber,
+                            defaultName: payload.name,
+                            thumbnailURLString: payload.thumbnailURL?.absoluteString,
+                            parts: payload.parts
+                        )
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -104,6 +111,65 @@ struct AddSetView: View {
                 isSaving = false
             }
         }
+    }
+
+    private func existingSetWithInventory(for setNumber: String) async throws -> BrickSet? {
+        try await MainActor.run {
+            let descriptor = FetchDescriptor<BrickSet>(
+                predicate: #Predicate { $0.setNumber == setNumber }
+            )
+
+            let sets = try modelContext.fetch(descriptor)
+            return sets.first(where: { !$0.parts.isEmpty })
+        }
+    }
+
+    @MainActor
+    private func persistSet(
+        setNumber: String,
+        defaultName: String,
+        thumbnailURLString: String?,
+        parts: [BrickLinkPartPayload]
+    ) {
+        let newSet = BrickSet(
+            setNumber: setNumber,
+            name: customName.isEmpty ? defaultName : customName,
+            thumbnailURLString: thumbnailURLString
+        )
+
+        let partModels = parts.map { part in
+            Part(
+                partID: part.partID,
+                name: part.name,
+                colorID: part.colorID,
+                colorName: part.colorName,
+                quantityNeeded: part.quantityNeeded,
+                quantityHave: 0,
+                imageURLString: part.imageURL?.absoluteString,
+                partURLString: part.partURL?.absoluteString,
+                set: newSet
+            )
+        }
+
+        newSet.parts = partModels
+        newSet.collection = list
+        list.sets.append(newSet)
+        modelContext.insert(newSet)
+        try? modelContext.save()
+        completion(.success(newSet))
+        dismiss()
+    }
+
+    private func normalizedSetNumber(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty else { return trimmed }
+
+        if trimmed.contains("-") {
+            return trimmed
+        }
+
+        return "\(trimmed)-1"
     }
 }
 
