@@ -137,7 +137,9 @@ struct AddSetView: View {
             thumbnailURLString: thumbnailURLString
         )
 
-        let partModels = parts.map { part in
+        let aggregatedParts = aggregateParts(parts)
+
+        let partModels = aggregatedParts.map { part in
             Part(
                 partID: part.partID,
                 name: part.name,
@@ -170,6 +172,41 @@ struct AddSetView: View {
         }
 
         return "\(trimmed)-1"
+    }
+
+    private func aggregateParts(_ parts: [BrickLinkPartPayload]) -> [BrickLinkPartPayload] {
+        struct PartGroupKey: Hashable {
+            let partID: String
+            let colorID: String
+        }
+
+        let grouped = Dictionary(grouping: parts) { PartGroupKey(partID: $0.partID, colorID: $0.colorID) }
+
+        return grouped.map { (_, group) in
+            guard let sample = group.first else { fatalError("Unexpected empty group") }
+            let totalNeeded = group.reduce(0) { $0 + $1.quantityNeeded }
+
+            return BrickLinkPartPayload(
+                partID: sample.partID,
+                name: sample.name,
+                colorID: sample.colorID,
+                colorName: sample.colorName,
+                quantityNeeded: totalNeeded,
+                imageURL: sample.imageURL,
+                partURL: sample.partURL
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.colorName != rhs.colorName {
+                return lhs.colorName < rhs.colorName
+            }
+
+            if lhs.name != rhs.name {
+                return lhs.name < rhs.name
+            }
+
+            return lhs.partID < rhs.partID
+        }
     }
 }
 

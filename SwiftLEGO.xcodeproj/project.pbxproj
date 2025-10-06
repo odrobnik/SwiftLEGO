@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		003b71505824429e8f563e5a /* Part.swift in Sources */ = {isa = PBXBuildFile; fileRef = a6784f013ddf499db8bdabcf /* Part.swift */; };
+		0abc1234def56789abcd0123 /* SetDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5e4d3c2b1a0f4987bcde6543 /* SetDetailView.swift */; };
 		05c24418ed434579b51dfe52 /* SwiftLEGOApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69821dc787e1438d9dbca1f2 /* SwiftLEGOApp.swift */; };
 		11aa22bb33cc44dd55ee66ff /* BrickLinkInventoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = c1e2d3f4a5b6409897654321 /* BrickLinkInventoryModels.swift */; };
 		1292bfd2f98e4dafa738882f /* SetCollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22f3a692b1b448c58de41adb /* SetCollectionView.swift */; };
@@ -38,6 +39,7 @@
 /* Begin PBXFileReference section */
 		22f3a692b1b448c58de41adb /* SetCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCollectionView.swift; sourceTree = "<group>"; };
 		35386ab795c64cfe8821d271 /* AddSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSetView.swift; sourceTree = "<group>"; };
+		5e4d3c2b1a0f4987bcde6543 /* SetDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetDetailView.swift; sourceTree = "<group>"; };
 		46ad3394cab847e4b893b19f /* CollectionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionList.swift; sourceTree = "<group>"; };
 		4e644b8d22b54a309c76e5d3 /* Preview Content.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Content.xcassets"; sourceTree = "<group>"; };
 		5711145d88b540d0805bbf42 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -119,6 +121,7 @@
 				5711145d88b540d0805bbf42 /* ContentView.swift */,
 				f4399a533a6241e3a32c327d /* ListSidebarView.swift */,
 				22f3a692b1b448c58de41adb /* SetCollectionView.swift */,
+				5e4d3c2b1a0f4987bcde6543 /* SetDetailView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -290,6 +293,7 @@
 				77f04ea713e442e682ca6680 /* BrickLinkService.swift in Sources */,
 				11aa22bb33cc44dd55ee66ff /* BrickLinkInventoryModels.swift in Sources */,
 				22bb33cc44dd55ee66ff77aa /* BrickLinkInventoryService.swift in Sources */,
+				0abc1234def56789abcd0123 /* SetDetailView.swift in Sources */,
 				33cc44dd55ee66ff77aa88bb /* DomBuilder.swift in Sources */,
 				44dd55ee66ff77aa88bb99cc /* DomElement.swift in Sources */,
 				55ee66ff77aa88bb99cc00dd /* DomNode.swift in Sources */,

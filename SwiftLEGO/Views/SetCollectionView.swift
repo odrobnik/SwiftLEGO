@@ -24,29 +24,32 @@ struct SetCollectionView: View {
         ScrollView {
             LazyVGrid(columns: adaptiveColumns, spacing: 16) {
                 ForEach(sortedSets) { set in
-                    SetCardView(brickSet: set)
-                        .contextMenu {
-                            Button("Rename", systemImage: "pencil") {
-                                setBeingRenamed = set
-                            }
-                            Button(role: .destructive) {
-                                delete(set)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
+                    NavigationLink(destination: SetDetailView(brickSet: set)) {
+                        SetCardView(brickSet: set)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("Rename", systemImage: "pencil") {
+                            setBeingRenamed = set
                         }
-                        .swipeActions {
-                            Button("Rename") {
-                                setBeingRenamed = set
-                            }
-                            .tint(.blue)
+                        Button(role: .destructive) {
+                            delete(set)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    .swipeActions {
+                        Button("Rename") {
+                            setBeingRenamed = set
+                        }
+                        .tint(.blue)
 
-                            Button(role: .destructive) {
-                                delete(set)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
+                        Button(role: .destructive) {
+                            delete(set)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
+                    }
                 }
             }
             .padding()

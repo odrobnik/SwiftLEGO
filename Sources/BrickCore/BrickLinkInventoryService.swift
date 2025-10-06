@@ -32,6 +32,8 @@ public final class BrickLinkInventoryService {
 		var parts: [BrickLinkPart] = []
 		var index = tableHeaderIndex + 2 // skip header and separator lines
 
+		var skippingExtras = false
+
 		while index < lines.count {
 			let line = lines[index].trimmingCharacters(in: .whitespaces)
 			if line.isEmpty {
@@ -40,6 +42,18 @@ public final class BrickLinkInventoryService {
 			}
 
 			if !line.hasPrefix("|") {
+				index += 1
+				continue
+			}
+
+			if line.contains("**Extra Items:**") {
+				skippingExtras = true
+				index += 1
+				continue
+			}
+
+			if line.contains("**Regular Items:**") {
+				skippingExtras = false
 				index += 1
 				continue
 			}
@@ -57,6 +71,11 @@ public final class BrickLinkInventoryService {
 			}
 
 			if !columns.contains(where: { $0.contains("catalog/catalogitem.page?P=") }) {
+				index += 1
+				continue
+			}
+
+			if skippingExtras {
 				index += 1
 				continue
 			}
