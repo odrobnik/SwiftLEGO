@@ -3,6 +3,8 @@ import SwiftData
 
 struct SetCardView: View {
     let brickSet: BrickSet
+    @State private var thumbnailReloadID = UUID()
+    @State private var thumbnailRetryCount = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -12,7 +14,7 @@ struct SetCardView: View {
                     .frame(height: 140)
 
                 if let url = brickSet.thumbnailURL {
-                    AsyncImage(url: url) { phase in
+                    AsyncImage(url: url, transaction: Transaction(animation: .default)) { phase in
                         switch phase {
                         case .empty:
                             ProgressView()
@@ -22,12 +24,21 @@ struct SetCardView: View {
                                 .scaledToFit()
                                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 .padding()
-                        case .failure:
+                                .onAppear {
+                                    if thumbnailRetryCount != 0 {
+                                        thumbnailRetryCount = 0
+                                    }
+                                }
+                        case .failure(let error):
                             PlaceholderArtworkView(symbol: "shippingbox.fill")
+                                .onAppear {
+                                    scheduleThumbnailRetry(for: error, url: url)
+                                }
                         @unknown default:
                             PlaceholderArtworkView(symbol: "questionmark")
                         }
                     }
+                    .id(thumbnailReloadID)
                 } else {
                     PlaceholderArtworkView(symbol: "shippingbox.fill")
                 }
@@ -55,6 +66,38 @@ struct SetCardView: View {
                 .fill(Color(uiColor: .secondarySystemBackground))
                 .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 10)
         }
+    }
+
+    private func scheduleThumbnailRetry(for error: Error, url: URL) {
+        guard shouldRetryThumbnail(for: error) else {
+            #if DEBUG
+            print("\(url.absoluteString) - \(error.localizedDescription)")
+            #endif
+            return
+        }
+
+        let attempt = thumbnailRetryCount
+
+        Task {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+
+            await MainActor.run {
+                guard thumbnailRetryCount == attempt else { return }
+                thumbnailRetryCount += 1
+                thumbnailReloadID = UUID()
+            }
+        }
+    }
+
+    private func shouldRetryThumbnail(for error: Error) -> Bool {
+        guard thumbnailRetryCount < 3 else { return false }
+
+        if let urlError = error as? URLError {
+            return urlError.code == .cancelled
+        }
+
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == URLError.cancelled.rawValue
     }
 }
 

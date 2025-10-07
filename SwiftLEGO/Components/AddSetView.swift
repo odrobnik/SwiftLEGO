@@ -64,64 +64,45 @@ struct AddSetView: View {
         errorMessage = nil
         isSaving = true
 
-        let inputSetNumber = normalizedSetNumber(setNumber)
+        let inputSetNumber = SetImportUtilities.normalizedSetNumber(setNumber)
 
-        Task {
+        Task { @MainActor in
             do {
-                let existingSet = try await existingSetWithInventory(for: inputSetNumber)
+                let existingSet = try existingSetWithInventory(for: inputSetNumber)
 
                 if let existingSet {
-                    await MainActor.run {
-                        persistSet(
-                            setNumber: existingSet.setNumber,
-                            defaultName: existingSet.name,
-                            thumbnailURLString: existingSet.thumbnailURLString,
-                            parts: existingSet.parts.map {
-                                BrickLinkPartPayload(
-                                    partID: $0.partID,
-                                    name: $0.name,
-                                    colorID: $0.colorID,
-                                    colorName: $0.colorName,
-                                    quantityNeeded: $0.quantityNeeded,
-                                    imageURL: $0.imageURL,
-                                    partURL: $0.partURL
-                                )
-                            }
-                        )
-                    }
+                    persistSet(
+                        setNumber: existingSet.setNumber,
+                        defaultName: existingSet.name,
+                        thumbnailURLString: existingSet.thumbnailURLString,
+                        parts: SetImportUtilities.partPayloads(from: existingSet.parts)
+                    )
                 } else {
                     let payload = try await brickLinkService.fetchSetDetails(for: inputSetNumber)
-                    await MainActor.run {
-                        persistSet(
-                            setNumber: payload.setNumber,
-                            defaultName: payload.name,
-                            thumbnailURLString: payload.thumbnailURL?.absoluteString,
-                            parts: payload.parts
-                        )
-                    }
+                    persistSet(
+                        setNumber: payload.setNumber,
+                        defaultName: payload.name,
+                        thumbnailURLString: payload.thumbnailURL?.absoluteString,
+                        parts: payload.parts
+                    )
                 }
             } catch {
-                await MainActor.run {
-                    errorMessage = "We couldn’t load that BrickLink set yet. Try again soon."
-                    completion(.failure(error))
-                }
+                errorMessage = "We couldn’t load that BrickLink set yet. Try again soon."
+                completion(.failure(error))
             }
 
-            await MainActor.run {
-                isSaving = false
-            }
+            isSaving = false
         }
     }
 
-    private func existingSetWithInventory(for setNumber: String) async throws -> BrickSet? {
-        try await MainActor.run {
-            let descriptor = FetchDescriptor<BrickSet>(
-                predicate: #Predicate { $0.setNumber == setNumber }
-            )
+    @MainActor
+    private func existingSetWithInventory(for setNumber: String) throws -> BrickSet? {
+        let descriptor = FetchDescriptor<BrickSet>(
+            predicate: #Predicate { $0.setNumber == setNumber }
+        )
 
-            let sets = try modelContext.fetch(descriptor)
-            return sets.first(where: { !$0.parts.isEmpty })
-        }
+        let sets = try modelContext.fetch(descriptor)
+        return sets.first(where: { !$0.parts.isEmpty })
     }
 
     @MainActor
@@ -131,82 +112,18 @@ struct AddSetView: View {
         thumbnailURLString: String?,
         parts: [BrickLinkPartPayload]
     ) {
-        let newSet = BrickSet(
+        let newSet = SetImportUtilities.persistSet(
+            list: list,
+            modelContext: modelContext,
             setNumber: setNumber,
-            name: customName.isEmpty ? defaultName : customName,
-            thumbnailURLString: thumbnailURLString
+            defaultName: defaultName,
+            customName: customName.isEmpty ? nil : customName,
+            thumbnailURLString: thumbnailURLString,
+            parts: parts
         )
 
-        let aggregatedParts = aggregateParts(parts)
-
-        let partModels = aggregatedParts.map { part in
-            Part(
-                partID: part.partID,
-                name: part.name,
-                colorID: part.colorID,
-                colorName: part.colorName,
-                quantityNeeded: part.quantityNeeded,
-                quantityHave: 0,
-                imageURLString: part.imageURL?.absoluteString,
-                partURLString: part.partURL?.absoluteString,
-                set: newSet
-            )
-        }
-
-        newSet.parts = partModels
-        newSet.collection = list
-        list.sets.append(newSet)
-        modelContext.insert(newSet)
-        try? modelContext.save()
         completion(.success(newSet))
         dismiss()
-    }
-
-    private func normalizedSetNumber(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmed.isEmpty else { return trimmed }
-
-        if trimmed.contains("-") {
-            return trimmed
-        }
-
-        return "\(trimmed)-1"
-    }
-
-    private func aggregateParts(_ parts: [BrickLinkPartPayload]) -> [BrickLinkPartPayload] {
-        struct PartGroupKey: Hashable {
-            let partID: String
-            let colorID: String
-        }
-
-        let grouped = Dictionary(grouping: parts) { PartGroupKey(partID: $0.partID, colorID: $0.colorID) }
-
-        return grouped.map { (_, group) in
-            guard let sample = group.first else { fatalError("Unexpected empty group") }
-            let totalNeeded = group.reduce(0) { $0 + $1.quantityNeeded }
-
-            return BrickLinkPartPayload(
-                partID: sample.partID,
-                name: sample.name,
-                colorID: sample.colorID,
-                colorName: sample.colorName,
-                quantityNeeded: totalNeeded,
-                imageURL: sample.imageURL,
-                partURL: sample.partURL
-            )
-        }
-        .sorted { lhs, rhs in
-            if lhs.colorName != rhs.colorName {
-                return lhs.colorName < rhs.colorName
-            }
-
-            if lhs.name != rhs.name {
-                return lhs.name < rhs.name
-            }
-
-            return lhs.partID < rhs.partID
-        }
     }
 }
 

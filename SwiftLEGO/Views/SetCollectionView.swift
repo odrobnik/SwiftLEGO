@@ -6,6 +6,7 @@ struct SetCollectionView: View {
     @Bindable var list: CollectionList
     let onNavigate: (ContentView.Destination) -> Void
     @State private var showingAddSetSheet = false
+    @State private var showingBulkAddSheet = false
     @State private var setBeingRenamed: BrickSet?
     @State private var searchText: String = ""
 
@@ -39,16 +40,36 @@ struct SetCollectionView: View {
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search Part ID")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingAddSetSheet = true
+                Menu {
+                    Button {
+                        showingAddSetSheet = true
+                    } label: {
+                        Label("Add Single Set", systemImage: "plus")
+                    }
+
+                    Button {
+                        showingBulkAddSheet = true
+                    } label: {
+                        Label("Bulk Add from File", systemImage: "tray.and.arrow.down.fill")
+                    }
                 } label: {
-                    Label("Add Set", systemImage: "plus")
+                    Label("Add Sets", systemImage: "plus")
                 }
             }
 
         }
         .sheet(isPresented: $showingAddSetSheet) {
             AddSetView(list: list) { result in
+                switch result {
+                case .success:
+                    try? modelContext.save()
+                case .failure:
+                    break
+                }
+            }
+        }
+        .sheet(isPresented: $showingBulkAddSheet) {
+            BulkAddSetsView(list: list) { result in
                 switch result {
                 case .success:
                     try? modelContext.save()
