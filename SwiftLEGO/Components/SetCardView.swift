@@ -23,7 +23,6 @@ struct SetCardView: View {
                                 .resizable()
                                 .scaledToFit()
                                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .padding()
                                 .onAppear {
                                     if thumbnailRetryCount != 0 {
                                         thumbnailRetryCount = 0
@@ -63,7 +62,7 @@ struct SetCardView: View {
         .padding()
         .background {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemBackground))
+                .fill(Color.white)
                 .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 10)
         }
     }

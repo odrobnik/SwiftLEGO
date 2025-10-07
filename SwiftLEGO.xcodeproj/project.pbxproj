@@ -13,6 +13,8 @@
 		11aa22bb33cc44dd55ee66ff /* BrickLinkInventoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = c1e2d3f4a5b6409897654321 /* BrickLinkInventoryModels.swift */; };
 		1292bfd2f98e4dafa738882f /* SetCollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22f3a692b1b448c58de41adb /* SetCollectionView.swift */; };
 		22bb33cc44dd55ee66ff77aa /* BrickLinkInventoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = b4c5d6e7f8a9401234567890 /* BrickLinkInventoryService.swift */; };
+		6a7b8c9d0e1f23456789abcd /* InventorySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5f3c1a2b4d6e7f8091a2b3c4 /* InventorySnapshot.swift */; };
+		7c8d9e0f1a2b3456789abcde /* InventorySnapshotDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4a5b6c7d8e9f0123456789ab /* InventorySnapshotDocument.swift */; };
 		2a3b4c5d6e7f8091a2b3c4d5 /* BulkAddSetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1f2e3d4c5b6a79808796a5b4 /* BulkAddSetsView.swift */; };
 		33cc44dd55ee66ff77aa88bb /* DomBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = a1b2c3d4e5f6401298765432 /* DomBuilder.swift */; };
 		341d57700e1e4afe84023d72 /* Preview Content.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4e644b8d22b54a309c76e5d3 /* Preview Content.xcassets */; };
@@ -43,6 +45,7 @@
 		22f3a692b1b448c58de41adb /* SetCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCollectionView.swift; sourceTree = "<group>"; };
 		35386ab795c64cfe8821d271 /* AddSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSetView.swift; sourceTree = "<group>"; };
 		3c4d5e6f708192a3b4c5d6e7 /* SetImportUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetImportUtilities.swift; sourceTree = "<group>"; };
+		4a5b6c7d8e9f0123456789ab /* InventorySnapshotDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventorySnapshotDocument.swift; sourceTree = "<group>"; };
 		46ad3394cab847e4b893b19f /* CollectionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionList.swift; sourceTree = "<group>"; };
 		4e644b8d22b54a309c76e5d3 /* Preview Content.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Content.xcassets"; sourceTree = "<group>"; };
 		5711145d88b540d0805bbf42 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -52,6 +55,7 @@
 		73dd9c1c1c804386b3c34afe /* ListEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListEditorView.swift; sourceTree = "<group>"; };
 		758747c27be345a686ec6d11 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		87e2ca925daf41bd8f822bb3 /* BrickLinkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickLinkService.swift; sourceTree = "<group>"; };
+		5f3c1a2b4d6e7f8091a2b3c4 /* InventorySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventorySnapshot.swift; sourceTree = "<group>"; };
 		9b0c8c2b52db434f8bd11e26 /* SwiftLEGO.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftLEGO.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		a1b2c3d4e5f6401298765432 /* DomBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomBuilder.swift; sourceTree = "<group>"; };
 		a6784f013ddf499db8bdabcf /* Part.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Part.swift; sourceTree = "<group>"; };
@@ -136,6 +140,8 @@
 			children = (
 				87e2ca925daf41bd8f822bb3 /* BrickLinkService.swift */,
 				3c4d5e6f708192a3b4c5d6e7 /* SetImportUtilities.swift */,
+				5f3c1a2b4d6e7f8091a2b3c4 /* InventorySnapshot.swift */,
+				4a5b6c7d8e9f0123456789ab /* InventorySnapshotDocument.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -299,6 +305,8 @@
 				f49698ea079a443d975c54c3 /* SwiftLEGOModelContainer.swift in Sources */,
 				77f04ea713e442e682ca6680 /* BrickLinkService.swift in Sources */,
 				4d5e6f708192a3b4c5d6e7f8 /* SetImportUtilities.swift in Sources */,
+				6a7b8c9d0e1f23456789abcd /* InventorySnapshot.swift in Sources */,
+				7c8d9e0f1a2b3456789abcde /* InventorySnapshotDocument.swift in Sources */,
 				11aa22bb33cc44dd55ee66ff /* BrickLinkInventoryModels.swift in Sources */,
 				22bb33cc44dd55ee66ff77aa /* BrickLinkInventoryService.swift in Sources */,
 				0abc1234def56789abcd0123 /* SetDetailView.swift in Sources */,

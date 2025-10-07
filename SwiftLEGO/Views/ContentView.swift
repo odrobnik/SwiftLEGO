@@ -19,12 +19,12 @@ struct ContentView: View {
             NavigationStack(path: $path) {
                 Group {
                     if let list = selectedList {
-                        SetCollectionView(list: list) { destination in
+                        SetCollectionView(list: list, allLists: lists) { destination in
                             path.append(destination)
                         }
                         .id(list.persistentModelID)
                     } else if let first = lists.first {
-                        SetCollectionView(list: first) { destination in
+                        SetCollectionView(list: first, allLists: lists) { destination in
                             path.append(destination)
                         }
                         .task { setSelectedList(first) }
