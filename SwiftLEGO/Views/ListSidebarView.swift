@@ -29,10 +29,16 @@ struct ListSidebarView: View {
                 Section(isExpanded: binding(for: list)) {
                     let sets = sortedSets(for: list)
                     if sets.isEmpty {
-                        Label("No sets yet", systemImage: "tray")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 32)
+                        HStack(spacing: 12) {
+                            Image(systemName: "tray")
+                                .foregroundStyle(.secondary)
+                            Text("No sets yet")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.leading, 28)
+                        .padding(.vertical, 6)
                     } else {
                         ForEach(sets) { set in
                             HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -50,7 +56,6 @@ struct ListSidebarView: View {
                             }
                             .padding(.leading, 28)
                             .padding(.vertical, 4)
-                            .contentShape(Rectangle())
                             .background(selectionHighlight(for: set))
                             .onTapGesture {
                                 handleSetSelection(set, in: list)
@@ -70,6 +75,7 @@ struct ListSidebarView: View {
                 } header: {
                     listHeader(for: list)
                 }
+                .listRowBackground(Color.clear)
             }
             .onDelete { indexSet in
                 indexSet.map { lists[$0] }.forEach(delete)
@@ -186,8 +192,6 @@ struct ListSidebarView: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(listSelectionHighlight(for: list))
-        .contentShape(Rectangle())
         .simultaneousGesture(
             TapGesture().onEnded {
                 selectionID = list.persistentModelID
@@ -225,17 +229,6 @@ struct ListSidebarView: View {
     private func deleteSet(_ set: BrickSet) {
         modelContext.delete(set)
         try? modelContext.save()
-    }
-
-    @ViewBuilder
-    private func listSelectionHighlight(for list: CollectionList) -> some View {
-        if selectionID == list.persistentModelID {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.accentColor.opacity(0.12))
-                .padding(.horizontal, -8)
-        } else {
-            EmptyView()
-        }
     }
 
     @ViewBuilder

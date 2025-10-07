@@ -238,9 +238,23 @@ struct SetCollectionView: View {
         let rawQuery = trimmedSearchText.lowercased()
         guard !rawQuery.isEmpty else { return [] }
 
+        let startsWithNumber = rawQuery.first?.isNumber == true
+        let components = rawQuery.split(whereSeparator: { $0.isWhitespace })
+        let primaryToken = components.first.map(String.init) ?? rawQuery
+        let secondaryToken = components.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespaces)
+
         return list.sets.flatMap { set in
             set.parts.filter { part in
-                part.partID.lowercased() == rawQuery
+                let partIDLower = part.partID.lowercased()
+                let colorLower = part.colorName.lowercased()
+
+                if startsWithNumber {
+                    guard partIDLower == primaryToken else { return false }
+                    if secondaryToken.isEmpty { return true }
+                    return colorLower.contains(secondaryToken)
+                } else {
+                    return colorLower.contains(rawQuery)
+                }
             }
         }
     }

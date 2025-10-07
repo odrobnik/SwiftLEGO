@@ -10,8 +10,8 @@ struct SetCardView: View {
         VStack(alignment: .leading, spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemBackground))
-                    .frame(height: 140)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
 
                 if let url = brickSet.thumbnailURL {
                     AsyncImage(url: url, transaction: Transaction(animation: .default)) { phase in
