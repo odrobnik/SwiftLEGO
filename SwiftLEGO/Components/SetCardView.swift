@@ -10,8 +10,8 @@ struct SetCardView: View {
         VStack(alignment: .leading, spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+                    .fill(Color(.white))
+                   
 
                 if let url = brickSet.thumbnailURL {
                     AsyncImage(url: url, transaction: Transaction(animation: .default)) { phase in
@@ -42,6 +42,7 @@ struct SetCardView: View {
                     PlaceholderArtworkView(symbol: "shippingbox.fill")
                 }
             }
+            .aspectRatio(1, contentMode: .fit)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(brickSet.setNumber)
@@ -62,8 +63,8 @@ struct SetCardView: View {
         .padding()
         .background {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 10)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.primary.opacity(0.15), radius: 14, x: 0, y: 10)
         }
     }
 

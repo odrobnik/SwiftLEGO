@@ -142,6 +142,7 @@ private struct PartRowView: View {
                     placeholder
                 }
             }
+            .background(.white)
         } else {
             placeholder
         }
