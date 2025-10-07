@@ -52,7 +52,7 @@ struct SetCardView: View {
         .padding()
         .background {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Material.thin)
+                .fill(Color(uiColor: .secondarySystemBackground))
                 .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 10)
         }
     }

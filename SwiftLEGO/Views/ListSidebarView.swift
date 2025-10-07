@@ -4,24 +4,15 @@ import SwiftData
 struct ListSidebarView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \CollectionList.name, animation: .default) private var lists: [CollectionList]
-    @Binding var selection: CollectionList?
+    @Binding var selectionID: PersistentIdentifier?
     @State private var editorState: EditorState?
-    @State private var showingPartSearch = false
 
     private var listCountDescription: String {
         "\(lists.count) list\(lists.count == 1 ? "" : "s")"
     }
 
     var body: some View {
-        List(selection: $selection) {
-            Section("Tools") {
-                Button {
-                    showingPartSearch = true
-                } label: {
-                    Label("Find Part", systemImage: "magnifyingglass")
-                }
-            }
-
+        List(selection: $selectionID) {
             Section(listCountDescription) {
                 ForEach(lists) { list in
                     Label {
@@ -35,7 +26,7 @@ struct ListSidebarView: View {
                     } icon: {
                         Image(systemName: "square.stack.3d.up")
                     }
-                    .tag(list)
+                    .tag(list.persistentModelID)
                     .contextMenu {
                         Button("Rename", systemImage: "pencil") {
                             editorState = .rename(list)
@@ -84,15 +75,8 @@ struct ListSidebarView: View {
                 .padding()
             }
         }
-        .onChange(of: lists.count) { _, newValue in
-            guard newValue > 0 else {
-                selection = nil
-                return
-            }
-
-            if selection == nil {
-                selection = lists.first
-            }
+        .onChange(of: lists.count) { _, _ in
+            ensureSelection()
         }
         .sheet(item: $editorState) { state in
             ListEditorView(
@@ -101,17 +85,15 @@ struct ListSidebarView: View {
                 onDelete: { list in delete(list) }
             )
         }
-        .sheet(isPresented: $showingPartSearch) {
-            PartSearchView()
-        }
     }
 
     private func delete(_ list: CollectionList) {
-        if selection?.persistentModelID == list.persistentModelID {
-            selection = nil
+        if selectionID == list.persistentModelID {
+            selectionID = nil
         }
         modelContext.delete(list)
         try? modelContext.save()
+        ensureSelection()
     }
 
     private func handleEditorSubmit(_ result: EditorResult) {
@@ -119,13 +101,24 @@ struct ListSidebarView: View {
         case .created(let name):
             let newList = CollectionList(name: name)
             modelContext.insert(newList)
-            selection = newList
+            selectionID = newList.persistentModelID
         case .renamed(let list, let name):
             list.name = name
-            selection = list
+            selectionID = list.persistentModelID
         }
 
         try? modelContext.save()
+    }
+
+    private func ensureSelection() {
+        guard !lists.isEmpty else {
+            selectionID = nil
+            return
+        }
+
+        if selectionID == nil {
+            selectionID = lists.first?.persistentModelID
+        }
     }
 }
 
