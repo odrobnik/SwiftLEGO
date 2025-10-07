@@ -177,7 +177,13 @@ struct SetCollectionView: View {
                             VStack(spacing: 16) {
                                 ForEach(group.entries) { entry in
                                     SearchResultRow(entry: entry) {
-                                        onNavigate(.filteredSet(entry.set.persistentModelID, partID: trimmedSearchText))
+                                        onNavigate(
+                                            .filteredSet(
+                                                entry.set.persistentModelID,
+                                                partID: entry.part.partID,
+                                                colorID: entry.part.colorID
+                                            )
+                                        )
                                     }
                                 }
                             }

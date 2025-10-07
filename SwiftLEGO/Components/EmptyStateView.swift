@@ -12,7 +12,6 @@ struct EmptyStateView: View {
             Text(message)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background)
     }
 }
 

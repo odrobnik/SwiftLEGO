@@ -74,7 +74,7 @@ struct ContentView: View {
         switch path.last {
         case .set(let id):
             return id
-        case .filteredSet(let id, _):
+        case .filteredSet(let id, _, _):
             return id
         case .none:
             return nil
@@ -97,10 +97,11 @@ struct ContentView: View {
                 Text("Set unavailable")
                     .foregroundStyle(.secondary)
             }
-        case .filteredSet(let setID, let partID):
+        case .filteredSet(let setID, let partID, let colorID):
             if let set = fetchSet(with: setID) {
                 SetDetailView(brickSet: set) { part in
                     part.partID.compare(partID, options: .caseInsensitive) == .orderedSame
+                        && part.colorID.compare(colorID, options: .caseInsensitive) == .orderedSame
                 }
             } else {
                 Text("Set unavailable")
@@ -122,7 +123,7 @@ struct ContentView: View {
 extension ContentView {
     enum Destination: Hashable {
         case set(PersistentIdentifier)
-        case filteredSet(PersistentIdentifier, partID: String)
+        case filteredSet(PersistentIdentifier, partID: String, colorID: String)
     }
 }
 
