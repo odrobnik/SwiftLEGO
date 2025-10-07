@@ -6,6 +6,10 @@ struct ListSidebarView: View {
     @Query(sort: \CollectionList.name, animation: .default) private var lists: [CollectionList]
     @Binding var selectionID: PersistentIdentifier?
     @State private var editorState: EditorState?
+    @State private var expandedLists: Set<PersistentIdentifier> = []
+    @State private var setBeingRenamed: BrickSet?
+    let onSetSelected: (BrickSet) -> Void
+    let selectedSetID: PersistentIdentifier?
 
     private var listCountDescription: String {
         "\(lists.count) list\(lists.count == 1 ? "" : "s")"
@@ -13,46 +17,62 @@ struct ListSidebarView: View {
 
     var body: some View {
         List(selection: $selectionID) {
-            Section(listCountDescription) {
-                ForEach(lists) { list in
-                    Label {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(list.name)
-                                .font(.headline)
-                            Text("\(list.sets.count) sets")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "square.stack.3d.up")
-                    }
-                    .tag(list.persistentModelID)
-                    .contextMenu {
-                        Button("Rename", systemImage: "pencil") {
-                            editorState = .rename(list)
-                        }
-                        Button(role: .destructive) {
-                            delete(list)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button("Rename") {
-                            editorState = .rename(list)
-                        }
-                        .tint(.blue)
+            if !lists.isEmpty {
+                Section {
+                    Text(listCountDescription)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
-                        Button(role: .destructive) {
-                            delete(list)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+            ForEach(lists) { list in
+                Section(isExpanded: binding(for: list)) {
+                    let sets = sortedSets(for: list)
+                    if sets.isEmpty {
+                        Label("No sets yet", systemImage: "tray")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 32)
+                    } else {
+                        ForEach(sets) { set in
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Image(systemName: "shippingbox")
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(set.name)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                    Text(set.setNumber)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(.leading, 28)
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
+                            .background(selectionHighlight(for: set))
+                            .onTapGesture {
+                                handleSetSelection(set, in: list)
+                            }
+                            .contextMenu {
+                                Button("Rename", systemImage: "pencil") {
+                                    setBeingRenamed = set
+                                }
+                                Button(role: .destructive) {
+                                    deleteSet(set)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                         }
                     }
+                } header: {
+                    listHeader(for: list)
                 }
-                .onDelete { indexSet in
-                    indexSet.map { lists[$0] }.forEach(delete)
-                }
+            }
+            .onDelete { indexSet in
+                indexSet.map { lists[$0] }.forEach(delete)
             }
         }
         .listStyle(.sidebar)
@@ -78,6 +98,9 @@ struct ListSidebarView: View {
         .onChange(of: lists.count) { _, _ in
             ensureSelection()
         }
+        .onChange(of: lists.map(\.persistentModelID)) { _, newIDs in
+            expandedLists = expandedLists.filter { newIDs.contains($0) }
+        }
         .sheet(item: $editorState) { state in
             ListEditorView(
                 mode: state,
@@ -85,12 +108,16 @@ struct ListSidebarView: View {
                 onDelete: { list in delete(list) }
             )
         }
+        .sheet(item: $setBeingRenamed) { set in
+            RenameSetView(set: set)
+        }
     }
 
     private func delete(_ list: CollectionList) {
         if selectionID == list.persistentModelID {
             selectionID = nil
         }
+        expandedLists.remove(list.persistentModelID)
         modelContext.delete(list)
         try? modelContext.save()
         ensureSelection()
@@ -118,6 +145,107 @@ struct ListSidebarView: View {
 
         if selectionID == nil {
             selectionID = lists.first?.persistentModelID
+        }
+    }
+
+    private func binding(for list: CollectionList) -> Binding<Bool> {
+        let id = list.persistentModelID
+        return Binding(
+            get: { expandedLists.contains(id) },
+            set: { newValue in
+                if newValue {
+                    expandedLists.insert(id)
+                } else {
+                    expandedLists.remove(id)
+                }
+            }
+        )
+    }
+
+    private func sortedSets(for list: CollectionList) -> [BrickSet] {
+        list.sets.sorted { lhs, rhs in
+            if lhs.setNumber == rhs.setNumber {
+                return lhs.name < rhs.name
+            }
+            return lhs.setNumber < rhs.setNumber
+        }
+    }
+
+    private func listHeader(for list: CollectionList) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(list.name)
+                    .font(.headline)
+                Text("\(list.sets.count) sets")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } icon: {
+            Image(systemName: "square.stack.3d.up")
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(listSelectionHighlight(for: list))
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                selectionID = list.persistentModelID
+            }
+        )
+        .contextMenu {
+            Button("Rename", systemImage: "pencil") {
+                editorState = .rename(list)
+            }
+            Button(role: .destructive) {
+                delete(list)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button("Rename") {
+                editorState = .rename(list)
+            }
+            .tint(.blue)
+
+            Button(role: .destructive) {
+                delete(list)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    private func handleSetSelection(_ set: BrickSet, in list: CollectionList) {
+        selectionID = list.persistentModelID
+        onSetSelected(set)
+    }
+
+    private func deleteSet(_ set: BrickSet) {
+        modelContext.delete(set)
+        try? modelContext.save()
+    }
+
+    @ViewBuilder
+    private func listSelectionHighlight(for list: CollectionList) -> some View {
+        if selectionID == list.persistentModelID {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.accentColor.opacity(0.12))
+                .padding(.horizontal, -8)
+        } else {
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private func selectionHighlight(for set: BrickSet) -> some View {
+        if let selectedSetID, set.persistentModelID == selectedSetID {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.accentColor.opacity(0.12))
+                .padding(.leading, -12)
+        } else {
+            EmptyView()
         }
     }
 }

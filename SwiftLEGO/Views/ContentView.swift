@@ -9,7 +9,11 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.automatic)) {
-            ListSidebarView(selectionID: bindingSelectedListID)
+            ListSidebarView(
+                selectionID: bindingSelectedListID,
+                onSetSelected: handleSidebarSetSelection(_:),
+                selectedSetID: currentSelectedSetID
+            )
                 .background(Color(uiColor: .systemGroupedBackground))
         } detail: {
             NavigationStack(path: $path) {
@@ -35,7 +39,7 @@ struct ContentView: View {
                 .navigationDestination(for: Destination.self, destination: makeDestination)
             }
         }
-        .onChange(of: lists.count) { _ in
+        .onChange(of: lists.count) { _, _ in
             ensureSelection()
         }
         .task {
@@ -64,6 +68,23 @@ struct ContentView: View {
     
     private func setSelectedList(_ list: CollectionList?) {
         selectedListID = list?.persistentModelID
+    }
+
+    private var currentSelectedSetID: PersistentIdentifier? {
+        switch path.last {
+        case .set(let id):
+            return id
+        case .filteredSet(let id, _):
+            return id
+        case .none:
+            return nil
+        }
+    }
+
+    private func handleSidebarSetSelection(_ set: BrickSet) {
+        guard let list = set.collection else { return }
+        setSelectedList(list)
+        path = [.set(set.persistentModelID)]
     }
     
     @ViewBuilder

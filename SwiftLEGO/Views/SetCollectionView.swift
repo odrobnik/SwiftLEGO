@@ -9,6 +9,8 @@ struct SetCollectionView: View {
     @State private var showingBulkAddSheet = false
     @State private var setBeingRenamed: BrickSet?
     @State private var searchText: String = ""
+    @State private var debouncedSearchText: String = ""
+    @State private var searchTask: Task<Void, Never>?
 
     init(list: CollectionList, onNavigate: @escaping (ContentView.Destination) -> Void = { _ in }) {
         self._list = Bindable(list)
@@ -57,6 +59,19 @@ struct SetCollectionView: View {
                 }
             }
 
+        }
+        .onChange(of: searchText) { _, newValue in
+            searchTask?.cancel()
+
+            searchTask = Task { @MainActor in
+                do {
+                    try await Task.sleep(nanoseconds: 500_000_000)
+                } catch {
+                    return
+                }
+
+                debouncedSearchText = newValue
+            }
         }
         .sheet(isPresented: $showingAddSetSheet) {
             AddSetView(list: list) { result in
@@ -152,43 +167,24 @@ struct SetCollectionView: View {
                         }
                         .padding(.horizontal)
                     }
-                }
+                } else if !groupedSearchEntries.isEmpty {
+                    ForEach(groupedSearchEntries, id: \.colorName) { group in
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text(group.colorName)
+                                .font(.title2.weight(.semibold))
+                                .padding(.horizontal)
 
-                if !setsMissingPart.isEmpty {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Sets Missing Copies")
-                        .font(.title2.weight(.semibold))
-                        .padding(.horizontal)
-
-                    VStack(spacing: 16) {
-                        ForEach(setsMissingPart) { entry in
-                            SearchResultRow(entry: entry) {
-                                onNavigate(.filteredSet(entry.set.persistentModelID, partID: trimmedSearchText))
+                            VStack(spacing: 16) {
+                                ForEach(group.entries) { entry in
+                                    SearchResultRow(entry: entry) {
+                                        onNavigate(.filteredSet(entry.set.persistentModelID, partID: trimmedSearchText))
+                                    }
+                                }
                             }
+                            .padding(.horizontal)
                         }
                     }
-                    .padding(.horizontal)
-                }
-            }
-
-            if !setsCompletePart.isEmpty {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Sets Complete")
-                        .font(.title2.weight(.semibold))
-                        .padding(.horizontal)
-
-                    VStack(spacing: 16) {
-                        ForEach(setsCompletePart) { entry in
-                            SearchResultRow(entry: entry, highlightMissing: false) {
-                                onNavigate(.set(entry.set.persistentModelID))
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-            }
-
-                if matchingSets.isEmpty && setsMissingPart.isEmpty && setsCompletePart.isEmpty {
+                } else {
                     ContentUnavailableView.search(text: trimmedSearchText)
                         .padding()
                 }
@@ -204,7 +200,7 @@ struct SetCollectionView: View {
     }
 
     private var trimmedSearchText: String {
-        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        debouncedSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var isSearching: Bool {
@@ -238,9 +234,13 @@ struct SetCollectionView: View {
 
     private var matchingParts: [Part] {
         guard isSearching else { return [] }
+        guard matchingSets.isEmpty else { return [] }
+        let rawQuery = trimmedSearchText.lowercased()
+        guard !rawQuery.isEmpty else { return [] }
+
         return list.sets.flatMap { set in
             set.parts.filter { part in
-                part.partID.compare(trimmedSearchText, options: .caseInsensitive) == .orderedSame
+                part.partID.lowercased() == rawQuery
             }
         }
     }
@@ -252,34 +252,35 @@ struct SetCollectionView: View {
         }
     }
 
-    private var setsMissingPart: [SearchEntry] {
-        searchEntries.filter { $0.missingCount > 0 }
-            .sorted { lhs, rhs in
-                if lhs.missingCount == rhs.missingCount {
-                    return lhs.set.name < rhs.set.name
-                }
-                return lhs.missingCount < rhs.missingCount
-            }
-    }
+    private var groupedSearchEntries: [ColorGroup] {
+        let grouped = Dictionary(grouping: searchEntries) { entry in
+            entry.part.colorName.isEmpty ? "Unknown Color" : entry.part.colorName
+        }
 
-    private var setsCompletePart: [SearchEntry] {
-        searchEntries.filter { $0.missingCount == 0 }
-            .sorted { lhs, rhs in
-                lhs.set.name < rhs.set.name
-            }
+        return grouped.map { key, value in
+            ColorGroup(
+                colorName: key,
+                entries: value.sorted { lhs, rhs in
+                    if lhs.missingCount != rhs.missingCount {
+                        return lhs.missingCount < rhs.missingCount
+                    }
+                    return lhs.set.setNumber.localizedCaseInsensitiveCompare(rhs.set.setNumber) == .orderedAscending
+                }
+            )
+        }
+        .sorted { lhs, rhs in
+            lhs.colorName.localizedCaseInsensitiveCompare(rhs.colorName) == .orderedAscending
+        }
     }
 
     private func missingCount(for part: Part) -> Int {
         max(part.quantityNeeded - part.quantityHave, 0)
     }
 
-    private func setName(for part: Part) -> String {
-        part.set?.name ?? "Unknown Set"
-    }
-
     private func normalizeSetNumber(_ number: String) -> String {
         number.split(separator: "-").first.map(String.init) ?? number
     }
+
 
     private struct SearchEntry: Identifiable {
         let set: BrickSet
@@ -289,21 +290,8 @@ struct SetCollectionView: View {
         var id: PersistentIdentifier { part.persistentModelID }
     }
 
-    private struct SetSearchRow: View {
-        let set: BrickSet
-        let action: () -> Void
-
-        var body: some View {
-            Button(action: action) {
-                SetCardView(brickSet: set)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
     private struct SearchResultRow: View {
         let entry: SearchEntry
-        var highlightMissing: Bool = true
         let action: () -> Void
 
         var body: some View {
@@ -326,15 +314,10 @@ struct SetCollectionView: View {
                         }
                     }
 
-                    if highlightMissing {
-                        Text("Missing \(entry.missingCount) • Need \(entry.part.quantityNeeded), have \(entry.part.quantityHave)")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(entry.missingCount > 0 ? .orange : .green)
-                    } else {
-                        Text("Complete • Need \(entry.part.quantityNeeded), have \(entry.part.quantityHave)")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.green)
-                    }
+                    let missingCount = entry.missingCount
+                    Text(statusText(for: missingCount, part: entry.part))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(missingCount > 0 ? .orange : .green)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
@@ -346,6 +329,19 @@ struct SetCollectionView: View {
             }
             .buttonStyle(.plain)
         }
+
+        private func statusText(for missingCount: Int, part: Part) -> String {
+            if missingCount > 0 {
+                return "Missing \(missingCount) • Need \(part.quantityNeeded), have \(part.quantityHave)"
+            } else {
+                return "Complete • Need \(part.quantityNeeded), have \(part.quantityHave)"
+            }
+        }
+    }
+
+    private struct ColorGroup {
+        let colorName: String
+        let entries: [SearchEntry]
     }
 
     private struct PartThumbnail: View {

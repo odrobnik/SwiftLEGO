@@ -90,7 +90,7 @@ private struct PartRowView: View {
                     .labelsHidden()
             }
             .frame(minWidth: 80, idealWidth: 100)
-            .onChange(of: part.quantityHave) { _ in
+            .onChange(of: part.quantityHave) { _, _ in
                 try? modelContext.save()
             }
         }
