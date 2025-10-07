@@ -3,16 +3,21 @@ import SwiftData
 
 struct SetDetailView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismissAction
     @Bindable var brickSet: BrickSet
     let partFilter: ((Part) -> Bool)?
+    let onShowEntireSet: (() -> Void)?
 
-    init(brickSet: BrickSet, partFilter: ((Part) -> Bool)? = nil) {
+    init(
+        brickSet: BrickSet,
+        partFilter: ((Part) -> Bool)? = nil,
+        onShowEntireSet: (() -> Void)? = nil
+    ) {
         self._brickSet = Bindable(brickSet)
         self.partFilter = partFilter
+        self.onShowEntireSet = onShowEntireSet
     }
 
-    private var partsGroupedByColor: [(color: String, parts: [Part])] {
+    private var partsBySection: [(section: Part.InventorySection, parts: [Part])] {
         let filteredParts = brickSet.parts.filter { part in
             partFilter?(part) ?? true
         }
@@ -20,24 +25,26 @@ struct SetDetailView: View {
         guard !filteredParts.isEmpty else { return [] }
 
         let grouped = Dictionary(grouping: filteredParts) { part in
-            normalizeColorName(part.colorName)
+            part.inventorySection
         }
 
         return grouped
-            .map { (color: $0.key, parts: $0.value.sorted(by: partSortComparator)) }
-            .sorted { $0.color < $1.color }
+            .map { (section: $0.key, parts: $0.value.sorted(by: sectionPartSortComparator)) }
+            .sorted { lhs, rhs in
+                lhs.section.sortOrder < rhs.section.sortOrder
+            }
     }
 
     var body: some View {
         List {
-            if partsGroupedByColor.isEmpty {
+            if partsBySection.isEmpty {
                 Section {
                     Text("No parts to display.")
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ForEach(partsGroupedByColor, id: \.color) { group in
-                    Section(group.color) {
+                ForEach(partsBySection, id: \.section) { group in
+                    Section(group.section.displayTitle) {
                         ForEach(group.parts) { part in
                             PartRowView(part: part)
                         }
@@ -47,6 +54,17 @@ struct SetDetailView: View {
         }
         .listStyle(.insetGrouped)
         .navigationTitle(brickSet.name)
+        .toolbar {
+            if partFilter != nil, let onShowEntireSet {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        onShowEntireSet()
+                    } label: {
+                        Label("Show Entire Set", systemImage: "rectangle.stack")
+                    }
+                }
+            }
+        }
     }
 
     private func normalizeColorName(_ name: String) -> String {
@@ -54,7 +72,14 @@ struct SetDetailView: View {
         return trimmed.isEmpty ? "Unknown Color" : trimmed
     }
 
-    private func partSortComparator(_ lhs: Part, _ rhs: Part) -> Bool {
+    private func sectionPartSortComparator(_ lhs: Part, _ rhs: Part) -> Bool {
+        let lhsColor = normalizeColorName(lhs.colorName)
+        let rhsColor = normalizeColorName(rhs.colorName)
+
+        if lhsColor != rhsColor {
+            return lhsColor < rhsColor
+        }
+
         if lhs.name != rhs.name {
             return lhs.name < rhs.name
         }
@@ -111,10 +136,6 @@ private struct PartRowView: View {
                         .scaledToFit()
                         .frame(width: 64, height: 64)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                        )
                 case .failure:
                     placeholder
                 @unknown default:

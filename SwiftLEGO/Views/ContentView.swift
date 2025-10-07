@@ -99,10 +99,14 @@ struct ContentView: View {
             }
         case .filteredSet(let setID, let partID, let colorID):
             if let set = fetchSet(with: setID) {
-                SetDetailView(brickSet: set) { part in
-                    part.partID.compare(partID, options: .caseInsensitive) == .orderedSame
-                        && part.colorID.compare(colorID, options: .caseInsensitive) == .orderedSame
-                }
+                SetDetailView(
+                    brickSet: set,
+                    partFilter: { part in
+                        part.partID.compare(partID, options: .caseInsensitive) == .orderedSame
+                            && part.colorID.compare(colorID, options: .caseInsensitive) == .orderedSame
+                    },
+                    onShowEntireSet: { showEntireSet(set) }
+                )
             } else {
                 Text("Set unavailable")
                     .foregroundStyle(.secondary)
@@ -117,6 +121,13 @@ struct ContentView: View {
             }
         }
         return nil
+    }
+
+    private func showEntireSet(_ set: BrickSet) {
+        if let list = set.collection {
+            setSelectedList(list)
+        }
+        path = [.set(set.persistentModelID)]
     }
 }
 

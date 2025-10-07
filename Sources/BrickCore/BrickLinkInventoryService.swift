@@ -32,7 +32,7 @@ public final class BrickLinkInventoryService {
 		var parts: [BrickLinkPart] = []
 		var index = tableHeaderIndex + 2 // skip header and separator lines
 
-		var skippingExtras = false
+		var currentSection: BrickLinkPartSection = .regular
 
 		while index < lines.count {
 			let line = lines[index].trimmingCharacters(in: .whitespaces)
@@ -47,13 +47,24 @@ public final class BrickLinkInventoryService {
 			}
 
 			if line.contains("**Extra Items:**") {
-				skippingExtras = true
+				currentSection = .extra
+				index += 1
+				continue
+			}
+
+			if line.contains("**Alternate Items:**") {
+				currentSection = .alternate
 				index += 1
 				continue
 			}
 
 			if line.contains("**Regular Items:**") {
-				skippingExtras = false
+				currentSection = .regular
+				index += 1
+				continue
+			}
+
+			if line.localizedCaseInsensitiveContains("Parts:") {
 				index += 1
 				continue
 			}
@@ -75,13 +86,8 @@ public final class BrickLinkInventoryService {
 				continue
 			}
 
-			if skippingExtras {
-				index += 1
-				continue
-			}
-
 			do {
-				let part = try parsePartRow(columns: columns, baseURL: baseURL)
+				let part = try parsePartRow(columns: columns, baseURL: baseURL, section: currentSection)
 				parts.append(part)
 			} catch {
 				throw InventoryError.malformedRow(line)
@@ -99,7 +105,11 @@ public final class BrickLinkInventoryService {
 		)
 	}
 
-	private func parsePartRow(columns: [String], baseURL: URL) throws -> BrickLinkPart {
+	private func parsePartRow(
+		columns: [String],
+		baseURL: URL,
+		section: BrickLinkPartSection
+	) throws -> BrickLinkPart {
 		let imageColumn = columns.first(where: { $0.contains("catalogItemPic.asp") })
 		let partLinkColumn = columns.first(where: { $0.contains("catalog/catalogitem.page?P=") })
 		let descriptionColumn = columns.first(where: { $0.contains("**") && !$0.contains("Part No:") })
@@ -142,7 +152,8 @@ public final class BrickLinkInventoryService {
 			colorName: colorName,
 			colorID: colorID,
 			imageURL: imageURL,
-			quantity: quantity
+			quantity: quantity,
+			section: section
 		)
 	}
 

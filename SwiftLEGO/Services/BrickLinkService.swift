@@ -15,6 +15,7 @@ struct BrickLinkPartPayload: Sendable {
     let quantityNeeded: Int
     let imageURL: URL?
     let partURL: URL?
+    let inventorySection: Part.InventorySection
 }
 
 actor BrickLinkService {
@@ -31,7 +32,8 @@ actor BrickLinkService {
                 colorName: part.colorName,
                 quantityNeeded: part.quantity,
                 imageURL: part.imageURL,
-                partURL: part.partURL
+                partURL: part.partURL,
+                inventorySection: Part.InventorySection(brickLinkSection: part.section)
             )
         }
 
@@ -41,5 +43,18 @@ actor BrickLinkService {
             thumbnailURL: inventory.thumbnailURL,
             parts: parts
         )
+    }
+}
+
+private extension Part.InventorySection {
+    init(brickLinkSection: BrickLinkPartSection) {
+        switch brickLinkSection {
+        case .regular:
+            self = .regular
+        case .extra:
+            self = .extra
+        case .alternate:
+            self = .alternate
+        }
     }
 }

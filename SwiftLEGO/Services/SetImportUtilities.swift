@@ -20,9 +20,10 @@ enum SetImportUtilities {
         struct PartGroupKey: Hashable {
             let partID: String
             let colorID: String
+            let inventorySection: Part.InventorySection
         }
 
-        let grouped = Dictionary(grouping: parts) { PartGroupKey(partID: $0.partID, colorID: $0.colorID) }
+        let grouped = Dictionary(grouping: parts) { PartGroupKey(partID: $0.partID, colorID: $0.colorID, inventorySection: $0.inventorySection) }
 
         return grouped.map { (_, group) in
             guard let sample = group.first else { fatalError("Unexpected empty group") }
@@ -35,10 +36,15 @@ enum SetImportUtilities {
                 colorName: sample.colorName,
                 quantityNeeded: totalNeeded,
                 imageURL: sample.imageURL,
-                partURL: sample.partURL
+                partURL: sample.partURL,
+                inventorySection: sample.inventorySection
             )
         }
         .sorted { lhs, rhs in
+            if lhs.inventorySection != rhs.inventorySection {
+                return lhs.inventorySection.sortOrder < rhs.inventorySection.sortOrder
+            }
+
             if lhs.colorName != rhs.colorName {
                 return lhs.colorName < rhs.colorName
             }
@@ -60,7 +66,8 @@ enum SetImportUtilities {
                 colorName: $0.colorName,
                 quantityNeeded: $0.quantityNeeded,
                 imageURL: $0.imageURL,
-                partURL: $0.partURL
+                partURL: $0.partURL,
+                inventorySection: $0.inventorySection
             )
         }
     }
@@ -96,6 +103,7 @@ enum SetImportUtilities {
                 quantityHave: 0,
                 imageURLString: part.imageURL?.absoluteString,
                 partURLString: part.partURL?.absoluteString,
+                inventorySection: part.inventorySection,
                 set: newSet
             )
         }

@@ -3,6 +3,34 @@ import SwiftData
 
 @Model
 final class Part: Identifiable {
+    enum InventorySection: String, Codable, CaseIterable, Sendable {
+        case regular
+        case extra
+        case alternate
+
+        var displayTitle: String {
+            switch self {
+            case .regular:
+                return "Regular Items"
+            case .extra:
+                return "Extra Items"
+            case .alternate:
+                return "Alternate Items"
+            }
+        }
+
+        var sortOrder: Int {
+            switch self {
+            case .regular:
+                return 0
+            case .extra:
+                return 1
+            case .alternate:
+                return 2
+            }
+        }
+    }
+
     @Attribute(.unique) var id: UUID
     var partID: String
     var name: String
@@ -12,6 +40,7 @@ final class Part: Identifiable {
     var quantityHave: Int
     var imageURLString: String?
     var partURLString: String?
+    var inventorySectionRawValue: String = InventorySection.regular.rawValue
     var set: BrickSet?
 
     init(
@@ -24,6 +53,7 @@ final class Part: Identifiable {
         quantityHave: Int = 0,
         imageURLString: String? = nil,
         partURLString: String? = nil,
+        inventorySection: InventorySection = .regular,
         set: BrickSet? = nil
     ) {
         self.id = id
@@ -35,6 +65,7 @@ final class Part: Identifiable {
         self.quantityHave = quantityHave
         self.imageURLString = imageURLString
         self.partURLString = partURLString
+        self.inventorySectionRawValue = inventorySection.rawValue
         self.set = set
     }
 }
@@ -48,5 +79,10 @@ extension Part {
     var partURL: URL? {
         guard let partURLString else { return nil }
         return URL(string: partURLString)
+    }
+
+    var inventorySection: InventorySection {
+        get { InventorySection(rawValue: inventorySectionRawValue) ?? .regular }
+        set { inventorySectionRawValue = newValue.rawValue }
     }
 }

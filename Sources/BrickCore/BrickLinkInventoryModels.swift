@@ -14,6 +14,12 @@ public struct BrickLinkInventory: Sendable, Equatable {
 	}
 }
 
+public enum BrickLinkPartSection: String, Sendable, Equatable, CaseIterable {
+	case regular
+	case extra
+	case alternate
+}
+
 public struct BrickLinkPart: Sendable, Equatable {
 	public let partID: String
 	public let partURL: URL?
@@ -22,6 +28,7 @@ public struct BrickLinkPart: Sendable, Equatable {
 	public let colorID: String
 	public let imageURL: URL?
 	public let quantity: Int
+	public let section: BrickLinkPartSection
 
 	public init(
 		partID: String,
@@ -30,7 +37,8 @@ public struct BrickLinkPart: Sendable, Equatable {
 		colorName: String,
 		colorID: String,
 		imageURL: URL?,
-		quantity: Int
+		quantity: Int,
+		section: BrickLinkPartSection
 	) {
 		self.partID = partID
 		self.partURL = partURL
@@ -39,5 +47,6 @@ public struct BrickLinkPart: Sendable, Equatable {
 		self.colorID = colorID
 		self.imageURL = imageURL
 		self.quantity = quantity
+		self.section = section
 	}
 }
