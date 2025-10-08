@@ -2,10 +2,18 @@ import SwiftUI
 import SwiftData
 
 struct SetDetailView: View {
+    private static let segmentedSections: [Part.InventorySection] = [
+        .regular,
+        .counterpart,
+        .alternate,
+        .extra
+    ]
+
     @Environment(\.modelContext) private var modelContext
     @Bindable var brickSet: BrickSet
     let partFilter: ((Part) -> Bool)?
     let onShowEntireSet: (() -> Void)?
+    @State private var selectedSection: Part.InventorySection
 
     init(
         brickSet: BrickSet,
@@ -15,36 +23,50 @@ struct SetDetailView: View {
         self._brickSet = Bindable(brickSet)
         self.partFilter = partFilter
         self.onShowEntireSet = onShowEntireSet
+        self._selectedSection = State(
+            initialValue: Self.initialSection(
+                for: brickSet,
+                partFilter: partFilter
+            )
+        )
     }
 
-    private var partsBySection: [(section: Part.InventorySection, parts: [Part])] {
+    private var partsByColor: [(color: String, parts: [Part])] {
         let filteredParts = brickSet.parts.filter { part in
-            partFilter?(part) ?? true
+            let matchesFilter = partFilter?(part) ?? true
+            return matchesFilter && part.inventorySection == selectedSection
         }
 
         guard !filteredParts.isEmpty else { return [] }
 
         let grouped = Dictionary(grouping: filteredParts) { part in
-            part.inventorySection
+            normalizeColorName(part.colorName)
         }
 
         return grouped
-            .map { (section: $0.key, parts: $0.value.sorted(by: sectionPartSortComparator)) }
-            .sorted { lhs, rhs in
-                lhs.section.sortOrder < rhs.section.sortOrder
-            }
+            .map { (color: $0.key, parts: $0.value.sorted(by: colorPartSortComparator)) }
+            .sorted { lhs, rhs in lhs.color < rhs.color }
     }
 
     var body: some View {
         List {
-            if partsBySection.isEmpty {
+            Section {
+                Picker("Inventory Section", selection: $selectedSection) {
+                    ForEach(Self.segmentedSections, id: \.self) { section in
+                        Text(segmentedTitle(for: section)).tag(section)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            if partsByColor.isEmpty {
                 Section {
                     Text("No parts to display.")
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ForEach(partsBySection, id: \.section) { group in
-                    Section(group.section.displayTitle) {
+                ForEach(partsByColor, id: \.color) { group in
+                    Section(group.color) {
                         ForEach(group.parts) { part in
                             PartRowView(part: part)
                         }
@@ -75,19 +97,42 @@ struct SetDetailView: View {
         return trimmed.isEmpty ? "Unknown Color" : trimmed
     }
 
-    private func sectionPartSortComparator(_ lhs: Part, _ rhs: Part) -> Bool {
-        let lhsColor = normalizeColorName(lhs.colorName)
-        let rhsColor = normalizeColorName(rhs.colorName)
-
-        if lhsColor != rhsColor {
-            return lhsColor < rhsColor
-        }
-
+    private func colorPartSortComparator(_ lhs: Part, _ rhs: Part) -> Bool {
         if lhs.name != rhs.name {
             return lhs.name < rhs.name
         }
 
         return lhs.partID < rhs.partID
+    }
+
+    private func segmentedTitle(for section: Part.InventorySection) -> String {
+        switch section {
+        case .regular:
+            return "Regular"
+        case .counterpart:
+            return "Counterpart"
+        case .alternate:
+            return "Alternate"
+        case .extra:
+            return "Extras"
+        }
+    }
+
+    private static func initialSection(
+        for brickSet: BrickSet,
+        partFilter: ((Part) -> Bool)?
+    ) -> Part.InventorySection {
+        let filteredParts = brickSet.parts.filter { part in
+            partFilter?(part) ?? true
+        }
+
+        for section in segmentedSections {
+            if filteredParts.contains(where: { $0.inventorySection == section }) {
+                return section
+            }
+        }
+
+        return .regular
     }
 }
 

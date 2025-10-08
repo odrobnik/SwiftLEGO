@@ -11,12 +11,15 @@ public final class BrickLinkInventoryService {
 
 	public init() {}
 
-	public func fetchInventory(for setNumber: String) async throws -> BrickLinkInventory {
-		let url = inventoryURL(for: setNumber)
-		let converter = HTML💡Markdown(url: url)
-		let markdown = try await converter.markdown()
-		return try parse(markdown: markdown, setNumber: setNumber, baseURL: url)
-	}
+		public func fetchInventory(for setNumber: String) async throws -> BrickLinkInventory {
+			let url = inventoryURL(for: setNumber)
+			let converter = HTML💡Markdown(url: url)
+			let markdown = try await converter.markdown()
+			print("=== BrickLink Inventory Markdown: \(setNumber) ===")
+			print(markdown)
+			print("=== End Markdown ===")
+			return try parse(markdown: markdown, setNumber: setNumber, baseURL: url)
+		}
 
 	// MARK: - Parsing
 
@@ -46,29 +49,11 @@ public final class BrickLinkInventoryService {
 				continue
 			}
 
-		if line.contains("**Extra Items:**") {
-			currentSection = .extra
-			index += 1
-			continue
-		}
-
-		if line.contains("**Counterpart Items:**") {
-			currentSection = .counterpart
-			index += 1
-			continue
-		}
-
-		if line.contains("**Alternate Items:**") {
-			currentSection = .alternate
-			index += 1
-			continue
-		}
-
-		if line.contains("**Regular Items:**") {
-			currentSection = .regular
-			index += 1
-			continue
-		}
+			if let detectedSection = detectSection(from: line) {
+				currentSection = detectedSection
+				index += 1
+				continue
+			}
 
 			if line.localizedCaseInsensitiveContains("Parts:") {
 				index += 1
@@ -110,6 +95,40 @@ public final class BrickLinkInventoryService {
 			parts: parts
 		)
 	}
+
+		private func detectSection(from line: String) -> BrickLinkPartSection? {
+			let sanitizedColumns = line
+				.replacingOccurrences(of: "**", with: "")
+				.split(separator: "|", omittingEmptySubsequences: false)
+				.map {
+					$0
+						.trimmingCharacters(in: .whitespacesAndNewlines)
+						.lowercased()
+				}
+				.filter { !$0.isEmpty }
+
+			for column in sanitizedColumns {
+				let normalized = column
+					.replacingOccurrences(of: ":", with: "")
+					.replacingOccurrences(of: ".", with: "")
+					.trimmingCharacters(in: .whitespacesAndNewlines)
+
+				switch normalized {
+				case "regular", "regular items", "regular item":
+					return .regular
+				case "extra", "extras", "extra items", "extra item":
+					return .extra
+				case "counterpart", "counterparts", "counterpart items", "counterparts items":
+					return .counterpart
+				case "alternate", "alternate items", "alternates":
+					return .alternate
+				default:
+					continue
+				}
+			}
+
+			return nil
+		}
 
 	private func parsePartRow(
 		columns: [String],
@@ -290,12 +309,12 @@ public final class BrickLinkInventoryService {
 
 }
 
-private extension Array where Element == String {
-	subscript(safe index: Int) -> String? {
-		guard indices.contains(index) else { return nil }
-		return self[index]
+	private extension Array where Element == String {
+		subscript(safe index: Int) -> String? {
+			guard indices.contains(index) else { return nil }
+			return self[index]
+		}
 	}
-}
 
 private func normalizeWhitespace(_ string: String) -> String {
 	string

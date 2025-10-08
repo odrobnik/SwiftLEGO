@@ -98,7 +98,7 @@ struct BulkAddSetsView: View {
                         Button("Cancel", role: .cancel) {
                             cancelImport()
                         }
-                    } else {
+                    } else if !didCompleteImport {
                         Button("Close", role: .cancel) {
                             dismiss()
                         }
