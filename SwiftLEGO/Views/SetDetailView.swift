@@ -53,8 +53,11 @@ struct SetDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(brickSet.name)
+        .toolbarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                NavigationTitleContent(brickSet: brickSet)
+            }
             if partFilter != nil, let onShowEntireSet {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -85,6 +88,64 @@ struct SetDetailView: View {
         }
 
         return lhs.partID < rhs.partID
+    }
+}
+
+private struct NavigationTitleContent: View {
+    let brickSet: BrickSet
+
+    var body: some View {
+        HStack(spacing: 12) {
+            thumbnail
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(brickSet.setNumber)
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+
+                Text(brickSet.name)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let url = brickSet.thumbnailURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(width: 44, height: 44)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                case .failure:
+                    placeholder
+                @unknown default:
+                    placeholder
+                }
+            }
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color(uiColor: .tertiarySystemFill))
+            .frame(width: 44, height: 44)
+            .overlay {
+                Image(systemName: "cube.transparent")
+                    .foregroundStyle(.secondary)
+            }
     }
 }
 
