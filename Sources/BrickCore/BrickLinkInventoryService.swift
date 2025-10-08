@@ -46,23 +46,29 @@ public final class BrickLinkInventoryService {
 				continue
 			}
 
-			if line.contains("**Extra Items:**") {
-				currentSection = .extra
-				index += 1
-				continue
-			}
+		if line.contains("**Extra Items:**") {
+			currentSection = .extra
+			index += 1
+			continue
+		}
 
-			if line.contains("**Alternate Items:**") {
-				currentSection = .alternate
-				index += 1
-				continue
-			}
+		if line.contains("**Counterpart Items:**") {
+			currentSection = .counterpart
+			index += 1
+			continue
+		}
 
-			if line.contains("**Regular Items:**") {
-				currentSection = .regular
-				index += 1
-				continue
-			}
+		if line.contains("**Alternate Items:**") {
+			currentSection = .alternate
+			index += 1
+			continue
+		}
+
+		if line.contains("**Regular Items:**") {
+			currentSection = .regular
+			index += 1
+			continue
+		}
 
 			if line.localizedCaseInsensitiveContains("Parts:") {
 				index += 1

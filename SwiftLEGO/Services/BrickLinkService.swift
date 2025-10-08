@@ -51,6 +51,8 @@ private extension Part.InventorySection {
         switch brickLinkSection {
         case .regular:
             self = .regular
+        case .counterpart:
+            self = .counterpart
         case .extra:
             self = .extra
         case .alternate:

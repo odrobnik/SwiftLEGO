@@ -5,6 +5,7 @@ import SwiftData
 final class Part: Identifiable {
     enum InventorySection: String, Codable, CaseIterable, Sendable {
         case regular
+        case counterpart
         case extra
         case alternate
 
@@ -12,6 +13,8 @@ final class Part: Identifiable {
             switch self {
             case .regular:
                 return "Regular Items"
+            case .counterpart:
+                return "Counterpart Items"
             case .extra:
                 return "Extra Items"
             case .alternate:
@@ -23,10 +26,12 @@ final class Part: Identifiable {
             switch self {
             case .regular:
                 return 0
-            case .extra:
+            case .counterpart:
                 return 1
-            case .alternate:
+            case .extra:
                 return 2
+            case .alternate:
+                return 3
             }
         }
     }

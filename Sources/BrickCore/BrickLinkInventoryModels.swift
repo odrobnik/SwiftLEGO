@@ -16,6 +16,7 @@ public struct BrickLinkInventory: Sendable, Equatable {
 
 public enum BrickLinkPartSection: String, Sendable, Equatable, CaseIterable {
 	case regular
+	case counterpart
 	case extra
 	case alternate
 }
