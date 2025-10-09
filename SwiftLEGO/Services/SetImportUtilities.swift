@@ -72,6 +72,17 @@ enum SetImportUtilities {
         }
     }
 
+    static func categoryPayloads(from categories: [SetCategory]) -> [SetCategoryPayload] {
+        categories
+            .sortedByOrder()
+            .map { category in
+                SetCategoryPayload(
+                    id: category.categoryID,
+                    name: category.name
+                )
+            }
+    }
+
     @MainActor
     static func persistSet(
         list: CollectionList,
@@ -80,7 +91,8 @@ enum SetImportUtilities {
         defaultName: String,
         customName: String?,
         thumbnailURLString: String?,
-        parts: [BrickLinkPartPayload]
+        parts: [BrickLinkPartPayload],
+        categories: [SetCategoryPayload]
     ) -> BrickSet {
         let trimmedCustomName = customName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalName = (trimmedCustomName?.isEmpty == false ? trimmedCustomName! : defaultName)
@@ -108,7 +120,17 @@ enum SetImportUtilities {
             )
         }
 
+        let categoryModels = categories.enumerated().map { index, category in
+            SetCategory(
+                categoryID: category.id,
+                name: category.name,
+                sortOrder: index,
+                set: newSet
+            )
+        }
+
         newSet.parts = partModels
+        newSet.categories = categoryModels
         newSet.collection = list
         list.sets.append(newSet)
         modelContext.insert(newSet)

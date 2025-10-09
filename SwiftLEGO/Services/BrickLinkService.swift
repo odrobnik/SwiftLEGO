@@ -5,6 +5,7 @@ struct BrickLinkSetPayload: Sendable {
     let name: String
     let thumbnailURL: URL?
     let parts: [BrickLinkPartPayload]
+    let categories: [SetCategoryPayload]
 }
 
 struct BrickLinkPartPayload: Sendable {
@@ -16,6 +17,11 @@ struct BrickLinkPartPayload: Sendable {
     let imageURL: URL?
     let partURL: URL?
     let inventorySection: Part.InventorySection
+}
+
+struct SetCategoryPayload: Sendable, Equatable {
+    let id: String?
+    let name: String
 }
 
 actor BrickLinkService {
@@ -41,7 +47,8 @@ actor BrickLinkService {
             setNumber: inventory.setNumber,
             name: inventory.name,
             thumbnailURL: inventory.thumbnailURL,
-            parts: parts
+            parts: parts,
+            categories: inventory.categories.map { SetCategoryPayload(id: $0.id, name: $0.name) }
         )
     }
 }

@@ -30,7 +30,7 @@ public final class BrickLinkInventoryService {
 			throw InventoryError.partsTableNotFound
 		}
 
-		let metadata = parseMetadata(from: lines)
+		let metadata = parseMetadata(from: lines, baseURL: baseURL)
 
 		var parts: [BrickLinkPart] = []
 		var index = tableHeaderIndex + 2 // skip header and separator lines
@@ -92,7 +92,8 @@ public final class BrickLinkInventoryService {
 			setNumber: setNumber,
 			name: name,
 			thumbnailURL: metadata.thumbnailURL,
-			parts: parts
+			parts: parts,
+			categories: metadata.categories
 		)
 	}
 
@@ -239,6 +240,54 @@ public final class BrickLinkInventoryService {
 		return (text, url?.absoluteURL)
 	}
 
+	private func extractCategories(from line: String, baseURL: URL) -> [BrickLinkCategory] {
+		let nsRange = NSRange(line.startIndex..<line.endIndex, in: line)
+		let matches = linkRegex.matches(in: line, options: [], range: nsRange)
+
+		var categories: [BrickLinkCategory] = []
+
+		for match in matches {
+			guard
+				let textRange = Range(match.range(at: 1), in: line),
+				let urlRange = Range(match.range(at: 2), in: line)
+			else {
+				continue
+			}
+
+			let text = normalizeWhitespace(String(line[textRange]))
+			let rawURLString = String(line[urlRange])
+			guard let url = URL(string: rawURLString, relativeTo: baseURL)?.absoluteURL else {
+				continue
+			}
+
+			let lowercasedURL = url.absoluteString.lowercased()
+
+			if lowercasedURL.contains("catalogitem.page?s=") {
+				break
+			}
+
+			if lowercasedURL.contains("catalogiteminv.asp?s=") {
+				break
+			}
+
+			if text.caseInsensitiveCompare("Catalog") == .orderedSame {
+				continue
+			}
+
+			let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+				.queryItems?
+				.first(where: { item in
+					let name = item.name.lowercased()
+					return name == "catstring" || name == "catid"
+				})?
+				.value
+
+			categories.append(BrickLinkCategory(id: id, name: text))
+		}
+
+		return categories
+	}
+
 	private func extractSetName(from line: String) -> String? {
 		guard line.contains("catalogItemPic.asp?S=") else { return nil }
 
@@ -261,13 +310,21 @@ public final class BrickLinkInventoryService {
 		return nil
 	}
 
-	private func parseMetadata(from lines: [String]) -> (name: String?, thumbnailURL: URL?) {
+	private func parseMetadata(
+		from lines: [String],
+		baseURL: URL
+	) -> (name: String?, thumbnailURL: URL?, categories: [BrickLinkCategory]) {
 		var name: String?
 		var thumbnailURL: URL?
+		var categories: [BrickLinkCategory] = []
 
 		for line in lines {
 			if name == nil, let extracted = extractSetName(from: line) {
 				name = extracted
+			}
+
+			if categories.isEmpty, line.contains("[Catalog]") {
+				categories = extractCategories(from: line, baseURL: baseURL)
 			}
 
 			if line.contains("catalogItemPic.asp?S="),
@@ -279,12 +336,12 @@ public final class BrickLinkInventoryService {
 				thumbnailURL = promoteToHighResolution(candidate)
 			}
 
-			if name != nil, thumbnailURL != nil {
+			if name != nil, thumbnailURL != nil, !categories.isEmpty {
 				break
 			}
 		}
 
-		return (name, thumbnailURL)
+		return (name, thumbnailURL, categories)
 	}
 
 	// MARK: - Helpers

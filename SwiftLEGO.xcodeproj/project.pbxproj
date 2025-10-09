@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		003b71505824429e8f563e5a /* Part.swift in Sources */ = {isa = PBXBuildFile; fileRef = a6784f013ddf499db8bdabcf /* Part.swift */; };
+		0147f5a9b2c34d8e9f0a1b2c /* SetCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9c8d7e6f5a4b3c2d1e0f9a8b /* SetCategory.swift */; };
 		05c24418ed434579b51dfe52 /* SwiftLEGOApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69821dc787e1438d9dbca1f2 /* SwiftLEGOApp.swift */; };
 		0abc1234def56789abcd0123 /* SetDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5e4d3c2b1a0f4987bcde6543 /* SetDetailView.swift */; };
 		11aa22bb33cc44dd55ee66ff /* BrickLinkInventoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = c1e2d3f4a5b6409897654321 /* BrickLinkInventoryModels.swift */; };
@@ -42,6 +43,7 @@
 
 /* Begin PBXFileReference section */
 		1f2e3d4c5b6a79808796a5b4 /* BulkAddSetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BulkAddSetsView.swift; sourceTree = "<group>"; };
+		9c8d7e6f5a4b3c2d1e0f9a8b /* SetCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCategory.swift; sourceTree = "<group>"; };
 		22f3a692b1b448c58de41adb /* SetCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCollectionView.swift; sourceTree = "<group>"; };
 		35386ab795c64cfe8821d271 /* AddSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSetView.swift; sourceTree = "<group>"; };
 		3c4d5e6f708192a3b4c5d6e7 /* SetImportUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetImportUtilities.swift; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@
 			children = (
 				46ad3394cab847e4b893b19f /* CollectionList.swift */,
 				5dc696c200de4abbadd5dc07 /* BrickSet.swift */,
+				9c8d7e6f5a4b3c2d1e0f9a8b /* SetCategory.swift */,
 				a6784f013ddf499db8bdabcf /* Part.swift */,
 			);
 			path = Models;
@@ -301,6 +304,7 @@
 				78b83b4b7a6f4f549f1d6945 /* SetCardView.swift in Sources */,
 				aa759d4131464a139628de43 /* CollectionList.swift in Sources */,
 				360f6b44ed3545d98f309e88 /* BrickSet.swift in Sources */,
+				0147f5a9b2c34d8e9f0a1b2c /* SetCategory.swift in Sources */,
 				003b71505824429e8f563e5a /* Part.swift in Sources */,
 				f49698ea079a443d975c54c3 /* SwiftLEGOModelContainer.swift in Sources */,
 				77f04ea713e442e682ca6680 /* BrickLinkService.swift in Sources */,

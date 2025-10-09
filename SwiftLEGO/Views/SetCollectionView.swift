@@ -41,6 +41,7 @@ struct SetCollectionView: View {
     private let adaptiveColumns = [
         GridItem(.adaptive(minimum: 220), spacing: 16)
     ]
+    private let uncategorizedSectionTitle = "Uncategorized"
 
     var body: some View {
         Group {
@@ -155,47 +156,58 @@ struct SetCollectionView: View {
 
     private var gridView: some View {
         ScrollView {
-            LazyVGrid(columns: adaptiveColumns, spacing: 16) {
-                ForEach(sortedSets) { set in
-                    Button {
-                        onNavigate(.set(set.persistentModelID))
-                    } label: {
-                        SetCardView(brickSet: set)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button("Rename", systemImage: "pencil") {
-                            setBeingRenamed = set
-                        }
-                        Button(role: .destructive) {
-                            delete(set)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .swipeActions {
-                        Button("Rename") {
-                            setBeingRenamed = set
-                        }
-                        .tint(.blue)
-
-                        Button(role: .destructive) {
-                            delete(set)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-            .padding()
-
-            if sortedSets.isEmpty {
+            if groupedSets.isEmpty {
                 EmptyStateView(
                     icon: "shippingbox",
                     title: "No Sets Yet",
                     message: "Add a BrickLink set to this list to start tracking its parts."
                 )
                 .padding(.top, 80)
+            } else {
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    ForEach(groupedSets, id: \.path) { group in
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(sectionTitle(for: group.path))
+                                .font(.title3.weight(.semibold))
+                                .padding(.horizontal)
+
+                            LazyVGrid(columns: adaptiveColumns, spacing: 16) {
+                                ForEach(group.sets) { set in
+                                    Button {
+                                        onNavigate(.set(set.persistentModelID))
+                                    } label: {
+                                        SetCardView(brickSet: set)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .contextMenu {
+                                        Button("Rename", systemImage: "pencil") {
+                                            setBeingRenamed = set
+                                        }
+                                        Button(role: .destructive) {
+                                            delete(set)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
+                                    .swipeActions {
+                                        Button("Rename") {
+                                            setBeingRenamed = set
+                                        }
+                                        .tint(.blue)
+
+                                        Button(role: .destructive) {
+                                            delete(set)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                }
+                .padding(.vertical)
             }
         }
         .background(Color(uiColor: .systemGroupedBackground))
@@ -253,6 +265,52 @@ struct SetCollectionView: View {
             .padding(.top, 16)
         }
         .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    private var groupedSets: [(path: [String], sets: [BrickSet])] {
+        guard !sortedSets.isEmpty else { return [] }
+
+        let groups = Dictionary(grouping: sortedSets) { set in
+            categoryPath(for: set)
+        }
+
+        return groups
+            .map { key, value in
+                let orderedSets = value.sorted { lhs, rhs in
+                    if lhs.setNumber != rhs.setNumber {
+                        return lhs.setNumber < rhs.setNumber
+                    }
+                    return lhs.name < rhs.name
+                }
+                return (path: key, sets: orderedSets)
+            }
+            .sorted { lhs, rhs in
+                let lhsIsUncategorized = lhs.path == [uncategorizedSectionTitle]
+                let rhsIsUncategorized = rhs.path == [uncategorizedSectionTitle]
+
+                if lhsIsUncategorized && !rhsIsUncategorized {
+                    return false
+                }
+
+                if !lhsIsUncategorized && rhsIsUncategorized {
+                    return true
+                }
+
+                return lhs.path.lexicographicallyPrecedes(rhs.path)
+            }
+    }
+
+    private func categoryPath(for set: BrickSet) -> [String] {
+        let names = set.categories
+            .sortedByOrder()
+            .map { $0.name }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        return names.isEmpty ? [uncategorizedSectionTitle] : names
+    }
+
+    private func sectionTitle(for path: [String]) -> String {
+        path.joined(separator: " / ")
     }
 
     private func delete(_ set: BrickSet) {

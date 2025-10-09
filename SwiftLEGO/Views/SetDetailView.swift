@@ -263,6 +263,16 @@ private struct PartRowView: View {
             }
         }
         .padding(.vertical, 4)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button {
+                part.quantityHave = part.quantityNeeded
+                try? modelContext.save()
+            } label: {
+                Label("Have All", systemImage: "checkmark.circle.fill")
+            }
+            .tint(.green)
+            .disabled(part.quantityHave >= part.quantityNeeded)
+        }
     }
 
     @ViewBuilder
