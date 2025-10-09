@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		003b71505824429e8f563e5a /* Part.swift in Sources */ = {isa = PBXBuildFile; fileRef = a6784f013ddf499db8bdabcf /* Part.swift */; };
 		0147f5a9b2c34d8e9f0a1b2c /* SetCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9c8d7e6f5a4b3c2d1e0f9a8b /* SetCategory.swift */; };
+		028ab47ef91b4ad18c3f6a70 /* CategorySetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5a9c8b7d6e5f4a3b2c1d0e9f /* CategorySetsView.swift */; };
 		05c24418ed434579b51dfe52 /* SwiftLEGOApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69821dc787e1438d9dbca1f2 /* SwiftLEGOApp.swift */; };
 		0abc1234def56789abcd0123 /* SetDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5e4d3c2b1a0f4987bcde6543 /* SetDetailView.swift */; };
 		11aa22bb33cc44dd55ee66ff /* BrickLinkInventoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = c1e2d3f4a5b6409897654321 /* BrickLinkInventoryModels.swift */; };
@@ -44,6 +45,7 @@
 /* Begin PBXFileReference section */
 		1f2e3d4c5b6a79808796a5b4 /* BulkAddSetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BulkAddSetsView.swift; sourceTree = "<group>"; };
 		9c8d7e6f5a4b3c2d1e0f9a8b /* SetCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCategory.swift; sourceTree = "<group>"; };
+		5a9c8b7d6e5f4a3b2c1d0e9f /* CategorySetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategorySetsView.swift; sourceTree = "<group>"; };
 		22f3a692b1b448c58de41adb /* SetCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCollectionView.swift; sourceTree = "<group>"; };
 		35386ab795c64cfe8821d271 /* AddSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSetView.swift; sourceTree = "<group>"; };
 		3c4d5e6f708192a3b4c5d6e7 /* SetImportUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetImportUtilities.swift; sourceTree = "<group>"; };
@@ -133,6 +135,7 @@
 				f4399a533a6241e3a32c327d /* ListSidebarView.swift */,
 				22f3a692b1b448c58de41adb /* SetCollectionView.swift */,
 				5e4d3c2b1a0f4987bcde6543 /* SetDetailView.swift */,
+				5a9c8b7d6e5f4a3b2c1d0e9f /* CategorySetsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -294,6 +297,7 @@
 			files = (
 				05c24418ed434579b51dfe52 /* SwiftLEGOApp.swift in Sources */,
 				7fb8e185242b4dbf99b33cec /* ContentView.swift in Sources */,
+				028ab47ef91b4ad18c3f6a70 /* CategorySetsView.swift in Sources */,
 				e361b9b9b52e4e1ab05cbab4 /* ListSidebarView.swift in Sources */,
 				1292bfd2f98e4dafa738882f /* SetCollectionView.swift in Sources */,
 				f65bf9d1471e4ab1932a557b /* EmptyStateView.swift in Sources */,

@@ -301,12 +301,7 @@ struct SetCollectionView: View {
     }
 
     private func categoryPath(for set: BrickSet) -> [String] {
-        let names = set.categories
-            .sortedByOrder()
-            .map { $0.name }
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
-        return names.isEmpty ? [uncategorizedSectionTitle] : names
+        set.normalizedCategoryPath(uncategorizedTitle: uncategorizedSectionTitle)
     }
 
     private func sectionTitle(for path: [String]) -> String {

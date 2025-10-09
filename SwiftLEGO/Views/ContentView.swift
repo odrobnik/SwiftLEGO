@@ -6,19 +6,32 @@ struct ContentView: View {
     @Query(sort: \CollectionList.name, animation: .default) private var lists: [CollectionList]
     @State private var path: [Destination] = []
     @State private var selectedListID: PersistentIdentifier?
+    @State private var selectedCategoryPath: [String]?
+    private let uncategorizedCategoryTitle = "Uncategorized"
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.automatic)) {
             ListSidebarView(
                 selectionID: bindingSelectedListID,
+                selectedCategoryPath: $selectedCategoryPath,
                 onSetSelected: handleSidebarSetSelection(_:),
+                onCategorySelected: handleSidebarCategorySelection(_:),
                 selectedSetID: currentSelectedSetID
             )
                 .background(Color(uiColor: .systemGroupedBackground))
         } detail: {
             NavigationStack(path: $path) {
                 Group {
-                    if let list = selectedList {
+                    if let categoryPath = selectedCategoryPath {
+                        CategorySetsView(
+                            categoryPath: categoryPath,
+                            sets: setsMatchingCategory(path: categoryPath),
+                            selectedSetID: currentSelectedSetID
+                        ) { destination in
+                            path.append(destination)
+                        }
+                        .id(categoryPath.joined(separator: "|"))
+                    } else if let list = selectedList {
                         SetCollectionView(list: list, allLists: lists) { destination in
                             path.append(destination)
                         }
@@ -50,6 +63,9 @@ struct ContentView: View {
     private var bindingSelectedListID: Binding<PersistentIdentifier?> {
         Binding(get: { selectedListID }, set: { newID in
             selectedListID = newID
+            if newID != nil {
+                selectedCategoryPath = nil
+            }
         })
     }
     
@@ -59,6 +75,8 @@ struct ContentView: View {
     }
     
     private func ensureSelection() {
+        if selectedCategoryPath != nil { return }
+
         if selectedListID == nil {
             setSelectedList(lists.first)
         } else if selectedList == nil {
@@ -67,6 +85,9 @@ struct ContentView: View {
     }
     
     private func setSelectedList(_ list: CollectionList?) {
+        if list != nil {
+            selectedCategoryPath = nil
+        }
         selectedListID = list?.persistentModelID
     }
 
@@ -85,6 +106,16 @@ struct ContentView: View {
         guard let list = set.collection else { return }
         setSelectedList(list)
         path = [.set(set.persistentModelID)]
+    }
+
+    private func handleSidebarCategorySelection(_ pathComponents: [String]?) {
+        selectedCategoryPath = pathComponents
+        if pathComponents != nil {
+            selectedListID = nil
+        } else {
+            ensureSelection()
+        }
+        path.removeAll()
     }
     
     @ViewBuilder
@@ -112,6 +143,22 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func setsMatchingCategory(path: [String]) -> [BrickSet] {
+        lists
+            .flatMap { $0.sets }
+            .filter { categoryMatches($0, path: path) }
+    }
+
+    private func categoryMatches(_ set: BrickSet, path: [String]) -> Bool {
+        let normalized = set.normalizedCategoryPath(uncategorizedTitle: uncategorizedCategoryTitle)
+
+        if path == [uncategorizedCategoryTitle] {
+            return normalized == [uncategorizedCategoryTitle]
+        }
+
+        return normalized.starts(with: path)
     }
 
     private func fetchSet(with id: PersistentIdentifier) -> BrickSet? {

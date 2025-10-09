@@ -40,3 +40,19 @@ extension Array where Element == SetCategory {
         }
     }
 }
+
+extension BrickSet {
+    func normalizedCategoryPath(uncategorizedTitle: String) -> [String] {
+        var names = categories
+            .sortedByOrder()
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if let first = names.first,
+           first.compare("Catalog", options: .caseInsensitive) == .orderedSame {
+            names.removeFirst()
+        }
+
+        return names.isEmpty ? [uncategorizedTitle] : names
+    }
+}
