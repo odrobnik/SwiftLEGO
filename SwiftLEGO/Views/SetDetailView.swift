@@ -217,6 +217,7 @@ struct SetDetailView: View {
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
             .map { $0.lowercased() }
     }
+
 }
 
 private struct HeaderThumbnail: View {
@@ -296,6 +297,7 @@ private struct PartRowView: View {
             VStack(alignment: .center, spacing: 4) {
                 Text("\(part.quantityHave) of \(part.quantityNeeded)")
                     .font(.title3.bold())
+                    .contentTransition(.numericText())
 
                 Stepper("", value: quantityBinding, in: 0...part.quantityNeeded)
                     .labelsHidden()
@@ -306,17 +308,17 @@ private struct PartRowView: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button {
                 let shouldAnimate = isFilteringMissing && part.quantityHave < part.quantityNeeded
-                let performUpdate = {
+                let update = {
                     part.quantityHave = part.quantityNeeded
                     try? modelContext.save()
                 }
 
                 if shouldAnimate {
                     withAnimation(.easeInOut) {
-                        performUpdate()
+                        update()
                     }
                 } else {
-                    performUpdate()
+                    update()
                 }
             } label: {
                 Label("Have All", systemImage: "checkmark.circle.fill")
@@ -368,19 +370,22 @@ private struct PartRowView: View {
         guard clampedValue != oldValue else { return }
 
         let shouldAnimate = isFilteringMissing && oldValue < part.quantityNeeded && clampedValue >= part.quantityNeeded
-
-        let performUpdate = {
+        let update = {
             part.quantityHave = clampedValue
             try? modelContext.save()
         }
 
-        if shouldAnimate {
-            withAnimation(.easeInOut) {
-                performUpdate()
-            }
-        } else {
-            performUpdate()
+        withAnimation {
+            update()
         }
+//
+//        if shouldAnimate && isFilteringMissing {
+//            withAnimation(.easeInOut) {
+//                update()
+//            }
+//        } else {
+//            update()
+//        }
     }
 }
 
