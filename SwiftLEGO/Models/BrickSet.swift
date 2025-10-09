@@ -10,6 +10,7 @@ final class BrickSet: Identifiable {
     @Relationship(deleteRule: .cascade, inverse: \Part.set) var parts: [Part]
     var collection: CollectionList?
     @Relationship(deleteRule: .cascade, inverse: \SetCategory.set) var categories: [SetCategory]
+    @Relationship(deleteRule: .cascade, inverse: \Minifigure.set) var minifigures: [Minifigure]
 
     init(
         id: UUID = UUID(),
@@ -18,7 +19,8 @@ final class BrickSet: Identifiable {
         thumbnailURLString: String? = nil,
         parts: [Part] = [],
         collection: CollectionList? = nil,
-        categories: [SetCategory] = []
+        categories: [SetCategory] = [],
+        minifigures: [Minifigure] = []
     ) {
         self.id = id
         self.setNumber = setNumber
@@ -27,6 +29,7 @@ final class BrickSet: Identifiable {
         self.parts = parts
         self.collection = collection
         self.categories = categories
+        self.minifigures = minifigures
     }
 }
 

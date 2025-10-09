@@ -47,6 +47,7 @@ final class Part: Identifiable {
     var partURLString: String?
     var inventorySectionRawValue: String = InventorySection.regular.rawValue
     var set: BrickSet?
+    var minifigure: Minifigure?
 
     init(
         id: UUID = UUID(),
@@ -59,7 +60,8 @@ final class Part: Identifiable {
         imageURLString: String? = nil,
         partURLString: String? = nil,
         inventorySection: InventorySection = .regular,
-        set: BrickSet? = nil
+        set: BrickSet? = nil,
+        minifigure: Minifigure? = nil
     ) {
         self.id = id
         self.partID = partID
@@ -72,6 +74,7 @@ final class Part: Identifiable {
         self.partURLString = partURLString
         self.inventorySectionRawValue = inventorySection.rawValue
         self.set = set
+        self.minifigure = minifigure
     }
 }
 

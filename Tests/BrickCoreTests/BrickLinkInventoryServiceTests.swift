@@ -32,4 +32,15 @@ final class BrickLinkInventoryServiceTests: XCTestCase {
 		XCTAssertEqual(targetPart?.colorName, "Black")
 		XCTAssertEqual(targetPart?.name, "Bar 3L (Bar Arrow)")
 	}
+
+	func testFetchInventoryParsesMinifigures() async throws {
+		let service = BrickLinkInventoryService()
+		let inventory = try await service.fetchInventory(for: "41050-1")
+
+		let minifigure = inventory.minifigures.first { $0.identifier.lowercased() == "dp001" }
+		XCTAssertNotNil(minifigure)
+		XCTAssertEqual(minifigure?.quantity, 1)
+		XCTAssertTrue(minifigure?.name.hasPrefix("Ariel, Mermaid (Light Nougat)") ?? false)
+		XCTAssertFalse(minifigure?.parts.isEmpty ?? true)
+	}
 }

@@ -33,6 +33,15 @@ struct SetDetailView: View {
         )
     }
 
+    private var minifigures: [Minifigure] {
+        brickSet.minifigures.sorted { lhs, rhs in
+            if lhs.name != rhs.name {
+                return lhs.name < rhs.name
+            }
+            return lhs.identifier < rhs.identifier
+        }
+    }
+
     private var partsByColor: [(color: String, parts: [Part])] {
         let grouped = Dictionary(grouping: filteredParts) { part in
             normalizeColorName(part.colorName)
@@ -68,6 +77,10 @@ struct SetDetailView: View {
     var body: some View {
         List {
             headerSection
+
+            if !minifigures.isEmpty {
+                minifigureSection
+            }
 
             Section {
                 Picker("Inventory Section", selection: $selectedSection) {
@@ -121,6 +134,14 @@ struct SetDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Toggle missing parts filter")
+            }
+        }
+    }
+
+    private var minifigureSection: some View {
+        Section("Minifigures") {
+            ForEach(minifigures) { minifigure in
+                MinifigureRowView(minifigure: minifigure)
             }
         }
     }
@@ -262,6 +283,162 @@ private struct HeaderThumbnail: View {
                 Image(systemName: "cube.transparent")
                     .foregroundStyle(.secondary)
             }
+    }
+}
+
+private struct MinifigureRowView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Bindable var minifigure: Minifigure
+    @State private var isExpanded: Bool = false
+
+    private var quantityBinding: Binding<Int> {
+        Binding(
+            get: { minifigure.quantityHave },
+            set: { updateQuantity(to: $0) }
+        )
+    }
+
+    private var componentParts: [Part] {
+        minifigure.parts.sorted { lhs, rhs in
+            if lhs.inventorySection != rhs.inventorySection {
+                return lhs.inventorySection.sortOrder < rhs.inventorySection.sortOrder
+            }
+
+            if lhs.colorName != rhs.colorName {
+                return lhs.colorName < rhs.colorName
+            }
+
+            if lhs.name != rhs.name {
+                return lhs.name < rhs.name
+            }
+
+            return lhs.partID < rhs.partID
+        }
+    }
+
+    private var categoryDescription: String {
+        minifigure
+            .normalizedCategoryPath(uncategorizedTitle: "Uncategorized")
+            .joined(separator: " / ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 16) {
+                thumbnail
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(minifigure.name)
+                        .font(.headline)
+
+                    Text("\(minifigure.identifier)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    if !categoryDescription.isEmpty {
+                        Text(categoryDescription)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                VStack(alignment: .center, spacing: 4) {
+                    Text("\(minifigure.quantityHave) of \(minifigure.quantityNeeded)")
+                        .font(.title3.bold())
+                        .contentTransition(.numericText())
+
+                    Stepper("", value: quantityBinding, in: 0...max(0, minifigure.quantityNeeded))
+                        .labelsHidden()
+                }
+                .frame(minWidth: 80, idealWidth: 100)
+            }
+
+            if !componentParts.isEmpty {
+                DisclosureGroup(isExpanded: $isExpanded) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(componentParts) { part in
+                            MinifigureComponentRow(part: part)
+                        }
+                    }
+                    .padding(.top, 6)
+                } label: {
+                    Label("Component Parts (\(componentParts.count))", systemImage: "cube.box")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let url = minifigure.imageURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(width: 64, height: 64)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                case .failure:
+                    placeholder
+                @unknown default:
+                    placeholder
+                }
+            }
+            .background(.white)
+        } else {
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color(uiColor: .tertiarySystemFill))
+            .frame(width: 64, height: 64)
+            .overlay {
+                Image(systemName: "person.fill")
+                    .foregroundStyle(.secondary)
+            }
+    }
+
+    private func updateQuantity(to newValue: Int) {
+        let clamped = max(0, min(newValue, minifigure.quantityNeeded))
+        guard clamped != minifigure.quantityHave else { return }
+
+        minifigure.quantityHave = clamped
+        try? modelContext.save()
+    }
+}
+
+private struct MinifigureComponentRow: View {
+    let part: Part
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(part.name)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+
+                Text("\(part.partID) • \(part.colorName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text("x\(part.quantityNeeded)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

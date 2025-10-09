@@ -76,7 +76,8 @@ struct AddSetView: View {
                         defaultName: existingSet.name,
                         thumbnailURLString: existingSet.thumbnailURLString,
                         parts: SetImportUtilities.partPayloads(from: existingSet.parts),
-                        categories: SetImportUtilities.categoryPayloads(from: existingSet.categories)
+                        categories: SetImportUtilities.categoryPayloads(from: existingSet.categories),
+                        minifigures: SetImportUtilities.minifigurePayloads(from: existingSet.minifigures)
                     )
                 } else {
                     let payload = try await brickLinkService.fetchSetDetails(for: inputSetNumber)
@@ -85,7 +86,8 @@ struct AddSetView: View {
                         defaultName: payload.name,
                         thumbnailURLString: payload.thumbnailURL?.absoluteString,
                         parts: payload.parts,
-                        categories: payload.categories
+                        categories: payload.categories,
+                        minifigures: payload.minifigures
                     )
                 }
             } catch {
@@ -113,7 +115,8 @@ struct AddSetView: View {
         defaultName: String,
         thumbnailURLString: String?,
         parts: [BrickLinkPartPayload],
-        categories: [SetCategoryPayload]
+        categories: [SetCategoryPayload],
+        minifigures: [BrickLinkMinifigurePayload]
     ) {
         let newSet = SetImportUtilities.persistSet(
             list: list,
@@ -123,7 +126,8 @@ struct AddSetView: View {
             customName: customName.isEmpty ? nil : customName,
             thumbnailURLString: thumbnailURLString,
             parts: parts,
-            categories: categories
+            categories: categories,
+            minifigures: minifigures
         )
 
         completion(.success(newSet))

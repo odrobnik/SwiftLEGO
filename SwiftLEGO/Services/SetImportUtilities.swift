@@ -83,6 +83,26 @@ enum SetImportUtilities {
             }
     }
 
+    static func minifigurePayloads(from minifigures: [Minifigure]) -> [BrickLinkMinifigurePayload] {
+        minifigures.map { minifigure in
+            BrickLinkMinifigurePayload(
+                identifier: minifigure.identifier,
+                name: minifigure.name,
+                quantityNeeded: minifigure.quantityNeeded,
+                imageURL: minifigure.imageURL,
+                catalogURL: minifigure.catalogURL,
+                inventoryURL: minifigure.inventoryURL,
+                categories: minifigure.categories.sortedByOrder().map { category in
+                    MinifigCategoryPayload(
+                        id: category.categoryID,
+                        name: category.name
+                    )
+                },
+                parts: partPayloads(from: minifigure.parts)
+            )
+        }
+    }
+
     @MainActor
     static func persistSet(
         list: CollectionList,
@@ -92,7 +112,8 @@ enum SetImportUtilities {
         customName: String?,
         thumbnailURLString: String?,
         parts: [BrickLinkPartPayload],
-        categories: [SetCategoryPayload]
+        categories: [SetCategoryPayload],
+        minifigures: [BrickLinkMinifigurePayload]
     ) -> BrickSet {
         let trimmedCustomName = customName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalName = (trimmedCustomName?.isEmpty == false ? trimmedCustomName! : defaultName)
@@ -138,12 +159,75 @@ enum SetImportUtilities {
             previousCategory = categoryModel
         }
 
+        let minifigureModels = makeMinifigureModels(
+            from: minifigures,
+            set: newSet
+        )
+
         newSet.parts = partModels
         newSet.categories = categoryModels
+        newSet.minifigures = minifigureModels
         newSet.collection = list
         list.sets.append(newSet)
         modelContext.insert(newSet)
         try? modelContext.save()
         return newSet
+    }
+
+    private static func makeMinifigureModels(
+        from payloads: [BrickLinkMinifigurePayload],
+        set: BrickSet
+    ) -> [Minifigure] {
+        payloads.enumerated().map { _, payload in
+            let minifigure = Minifigure(
+                identifier: payload.identifier,
+                name: payload.name,
+                quantityNeeded: payload.quantityNeeded,
+                quantityHave: 0,
+                imageURLString: payload.imageURL?.absoluteString,
+                catalogURLString: payload.catalogURL?.absoluteString,
+                inventoryURLString: payload.inventoryURL?.absoluteString,
+                set: set
+            )
+
+            var categoryModels: [MinifigCategory] = []
+            var previousCategory: MinifigCategory?
+
+            for (index, category) in payload.categories.enumerated() {
+                let categoryModel = MinifigCategory(
+                    categoryID: category.id,
+                    name: category.name,
+                    sortOrder: index,
+                    minifigure: minifigure,
+                    parent: previousCategory
+                )
+
+                previousCategory?.children.append(categoryModel)
+                categoryModels.append(categoryModel)
+                previousCategory = categoryModel
+            }
+
+            minifigure.categories = categoryModels
+
+            let aggregatedParts = aggregateParts(payload.parts)
+            let partModels = aggregatedParts.map { part in
+                Part(
+                    partID: part.partID,
+                    name: part.name,
+                    colorID: part.colorID,
+                    colorName: part.colorName,
+                    quantityNeeded: part.quantityNeeded,
+                    quantityHave: 0,
+                    imageURLString: part.imageURL?.absoluteString,
+                    partURLString: part.partURL?.absoluteString,
+                    inventorySection: part.inventorySection,
+                    set: nil,
+                    minifigure: minifigure
+                )
+            }
+
+            minifigure.parts = partModels
+            return minifigure
+        }
     }
 }

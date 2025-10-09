@@ -305,7 +305,8 @@ private extension BulkAddSetsView {
                             customName: entry.customName,
                             thumbnailURLString: existingSet.thumbnailURLString,
                             parts: SetImportUtilities.partPayloads(from: existingSet.parts),
-                            categories: SetImportUtilities.categoryPayloads(from: existingSet.categories)
+                            categories: SetImportUtilities.categoryPayloads(from: existingSet.categories),
+                            minifigures: SetImportUtilities.minifigurePayloads(from: existingSet.minifigures)
                         )
                     } else {
                         let payload = try await brickLinkService.fetchSetDetails(for: normalizedNumber)
@@ -318,7 +319,8 @@ private extension BulkAddSetsView {
                             customName: entry.customName,
                             thumbnailURLString: payload.thumbnailURL?.absoluteString,
                             parts: payload.parts,
-                            categories: payload.categories
+                            categories: payload.categories,
+                            minifigures: payload.minifigures
                         )
                     }
 

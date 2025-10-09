@@ -6,19 +6,53 @@ public struct BrickLinkInventory: Sendable, Equatable {
 	public let thumbnailURL: URL?
 	public let parts: [BrickLinkPart]
 	public let categories: [BrickLinkCategory]
+	public let minifigures: [BrickLinkMinifigure]
 
 	public init(
 		setNumber: String,
 		name: String,
 		thumbnailURL: URL?,
 		parts: [BrickLinkPart],
-		categories: [BrickLinkCategory]
+		categories: [BrickLinkCategory],
+		minifigures: [BrickLinkMinifigure]
 	) {
 		self.setNumber = setNumber
 		self.name = name
 		self.thumbnailURL = thumbnailURL
 		self.parts = parts
 		self.categories = categories
+		self.minifigures = minifigures
+	}
+}
+
+public struct BrickLinkMinifigure: Sendable, Equatable {
+	public let identifier: String
+	public let name: String
+	public let quantity: Int
+	public let imageURL: URL?
+	public let catalogURL: URL?
+	public let inventoryURL: URL?
+	public let categories: [BrickLinkCategory]
+	public let parts: [BrickLinkPart]
+
+	public init(
+		identifier: String,
+		name: String,
+		quantity: Int,
+		imageURL: URL?,
+		catalogURL: URL?,
+		inventoryURL: URL?,
+		categories: [BrickLinkCategory],
+		parts: [BrickLinkPart]
+	) {
+		self.identifier = identifier
+		self.name = name
+		self.quantity = quantity
+		self.imageURL = imageURL
+		self.catalogURL = catalogURL
+		self.inventoryURL = inventoryURL
+		self.categories = categories
+		self.parts = parts
 	}
 }
 

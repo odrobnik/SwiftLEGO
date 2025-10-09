@@ -1,6 +1,23 @@
 import Foundation
 
 public final class BrickLinkInventoryService {
+	private struct ParsedInventory {
+		let name: String?
+		let thumbnailURL: URL?
+		let categories: [BrickLinkCategory]
+		let parts: [BrickLinkPart]
+		let minifigures: [ParsedMinifigure]
+	}
+
+	private struct ParsedMinifigure {
+		let identifier: String
+		let name: String
+		let quantity: Int
+		let imageURL: URL?
+		let catalogURL: URL?
+		let inventoryURL: URL?
+		let categories: [BrickLinkCategory]
+	}
 
 	public enum InventoryError: Error {
 		case invalidResponse
@@ -11,19 +28,30 @@ public final class BrickLinkInventoryService {
 
 	public init() {}
 
-		public func fetchInventory(for setNumber: String) async throws -> BrickLinkInventory {
-			let url = inventoryURL(for: setNumber)
-			let converter = HTML💡Markdown(url: url)
-			let markdown = try await converter.markdown()
-			print("=== BrickLink Inventory Markdown: \(setNumber) ===")
-			print(markdown)
-			print("=== End Markdown ===")
-			return try parse(markdown: markdown, setNumber: setNumber, baseURL: url)
-		}
+	public func fetchInventory(for setNumber: String) async throws -> BrickLinkInventory {
+		let url = inventoryURL(for: setNumber)
+		let converter = HTML💡Markdown(url: url)
+		let markdown = try await converter.markdown()
+		print("=== BrickLink Inventory Markdown: \(setNumber) ===")
+		print(markdown)
+		print("=== End Markdown ===")
+
+		let parsed = try parse(markdown: markdown, setNumber: setNumber, baseURL: url)
+		let minifigures = try await enrichMinifigures(parsed.minifigures)
+
+		return BrickLinkInventory(
+			setNumber: setNumber,
+			name: parsed.name ?? "Set \(setNumber)",
+			thumbnailURL: parsed.thumbnailURL,
+			parts: parsed.parts,
+			categories: parsed.categories,
+			minifigures: minifigures
+		)
+	}
 
 	// MARK: - Parsing
 
-	private func parse(markdown: String, setNumber: String, baseURL: URL) throws -> BrickLinkInventory {
+	private func parse(markdown: String, setNumber: String, baseURL: URL) throws -> ParsedInventory {
 		let lines = markdown.components(separatedBy: .newlines)
 
 		guard let tableHeaderIndex = lines.firstIndex(where: { $0.contains("| **Image**") }) else {
@@ -32,10 +60,38 @@ public final class BrickLinkInventoryService {
 
 		let metadata = parseMetadata(from: lines, baseURL: baseURL)
 
-		var parts: [BrickLinkPart] = []
-		var index = tableHeaderIndex + 2 // skip header and separator lines
+		let (parts, minifigures) = try parseInventoryItems(
+			lines: lines,
+			startIndex: tableHeaderIndex + 2,
+			baseURL: baseURL,
+			allowMinifigures: true
+		)
 
+		return ParsedInventory(
+			name: metadata.name,
+			thumbnailURL: metadata.thumbnailURL,
+			categories: metadata.categories,
+			parts: parts,
+			minifigures: minifigures
+		)
+	}
+
+	private enum InventoryItemType {
+		case parts
+		case minifigures
+	}
+
+	private func parseInventoryItems(
+		lines: [String],
+		startIndex: Int,
+		baseURL: URL,
+		allowMinifigures: Bool
+	) throws -> ([BrickLinkPart], [ParsedMinifigure]) {
+		var parts: [BrickLinkPart] = []
+		var minifigures: [ParsedMinifigure] = []
+		var index = startIndex
 		var currentSection: BrickLinkPartSection = .regular
+		var currentItemType: InventoryItemType = .parts
 
 		while index < lines.count {
 			let line = lines[index].trimmingCharacters(in: .whitespaces)
@@ -55,7 +111,8 @@ public final class BrickLinkInventoryService {
 				continue
 			}
 
-			if line.localizedCaseInsensitiveContains("Parts:") {
+			if allowMinifigures, let detectedItemType = detectItemType(from: line) {
+				currentItemType = detectedItemType
 				index += 1
 				continue
 			}
@@ -72,14 +129,23 @@ public final class BrickLinkInventoryService {
 				columns.removeLast()
 			}
 
-			if !columns.contains(where: { $0.contains("catalog/catalogitem.page?P=") }) {
-				index += 1
-				continue
-			}
-
 			do {
-				let part = try parsePartRow(columns: columns, baseURL: baseURL, section: currentSection)
-				parts.append(part)
+				switch currentItemType {
+				case .parts:
+					guard columns.contains(where: { $0.contains("catalog/catalogitem.page?P=") }) else {
+						index += 1
+						continue
+					}
+					let part = try parsePartRow(columns: columns, baseURL: baseURL, section: currentSection)
+					parts.append(part)
+				case .minifigures:
+					guard columns.contains(where: { $0.contains("catalogitem.page?M=") }) else {
+						index += 1
+						continue
+					}
+					let minifigure = try parseMinifigureRow(columns: columns, baseURL: baseURL)
+					minifigures.append(minifigure)
+				}
 			} catch {
 				throw InventoryError.malformedRow(line)
 			}
@@ -87,22 +153,67 @@ public final class BrickLinkInventoryService {
 			index += 1
 		}
 
-		let name = metadata.name ?? "Set \(setNumber)"
-		return BrickLinkInventory(
-			setNumber: setNumber,
-			name: name,
-			thumbnailURL: metadata.thumbnailURL,
-			parts: parts,
-			categories: metadata.categories
-		)
+		return (parts, minifigures)
 	}
 
-		private func detectSection(from line: String) -> BrickLinkPartSection? {
-			let sanitizedColumns = line
-				.replacingOccurrences(of: "**", with: "")
-				.split(separator: "|", omittingEmptySubsequences: false)
-				.map {
-					$0
+	private func enrichMinifigures(_ minifigures: [ParsedMinifigure]) async throws -> [BrickLinkMinifigure] {
+		guard !minifigures.isEmpty else { return [] }
+
+		return try await withThrowingTaskGroup(of: (Int, BrickLinkMinifigure).self) { group in
+			for (index, minifigure) in minifigures.enumerated() {
+				group.addTask {
+					let parts = try await self.fetchMinifigureParts(for: minifigure)
+					return (
+						index,
+						BrickLinkMinifigure(
+							identifier: minifigure.identifier,
+							name: minifigure.name,
+							quantity: minifigure.quantity,
+							imageURL: minifigure.imageURL,
+							catalogURL: minifigure.catalogURL,
+							inventoryURL: minifigure.inventoryURL,
+							categories: minifigure.categories,
+							parts: parts
+						)
+					)
+				}
+			}
+
+			var ordered: [BrickLinkMinifigure?] = Array(repeating: nil, count: minifigures.count)
+			for try await (index, minifigure) in group {
+				ordered[index] = minifigure
+			}
+
+			return ordered.compactMap { $0 }
+		}
+	}
+
+	private func fetchMinifigureParts(for minifigure: ParsedMinifigure) async throws -> [BrickLinkPart] {
+		let url = minifigure.inventoryURL ?? inventoryURL(forMinifigure: minifigure.identifier)
+		let converter = HTML💡Markdown(url: url)
+		let markdown = try await converter.markdown()
+
+		let lines = markdown.components(separatedBy: .newlines)
+		guard let tableHeaderIndex = lines.firstIndex(where: { $0.contains("| **Image**") }) else {
+			throw InventoryError.partsTableNotFound
+		}
+
+		let (parts, _) = try parseInventoryItems(
+			lines: lines,
+			startIndex: tableHeaderIndex + 2,
+			baseURL: url,
+			allowMinifigures: false
+		)
+
+		return parts
+	}
+
+	private func detectSection(from line: String) -> BrickLinkPartSection? {
+		let sanitizedColumns = line
+			.replacingOccurrences(of: "**", with: "")
+			.split(separator: "|", omittingEmptySubsequences: false)
+			.map {
+				$0
 						.trimmingCharacters(in: .whitespacesAndNewlines)
 						.lowercased()
 				}
@@ -183,6 +294,53 @@ public final class BrickLinkInventoryService {
 		)
 	}
 
+	private func parseMinifigureRow(
+		columns: [String],
+		baseURL: URL
+	) throws -> ParsedMinifigure {
+		let imageColumn = columns.first(where: { $0.contains("catalogItemPic.asp?M=") })
+		let minifigLinkColumn = columns.first(where: { $0.contains("catalogitem.page?M=") })
+		let descriptionColumn = columns.first(where: { $0.contains("Catalog") })
+
+		let imageURL = extractImageURL(from: imageColumn)
+		let quantity = columns
+			.compactMap { Int($0) }
+			.first ?? 0
+
+		let rawName = normalizeWhitespace(extractPartName(from: imageColumn))
+		let (identifier, catalogURL) = extractLink(from: minifigLinkColumn, baseURL: baseURL)
+		guard !identifier.isEmpty else {
+			throw InventoryError.malformedRow(columns.joined(separator: "|"))
+		}
+		let inventoryURL = extractInventoryURL(from: minifigLinkColumn, baseURL: baseURL)
+
+		var categories: [BrickLinkCategory] = []
+		if let descriptionColumn {
+			categories = extractCategories(from: descriptionColumn, baseURL: baseURL)
+		}
+
+		var resolvedName = rawName
+		if resolvedName.isEmpty, let descriptionColumn {
+			let sanitized = descriptionColumn
+				.replacingOccurrences(of: "**", with: "")
+				.replacingOccurrences(of: "[Catalog]", with: "")
+			let components = sanitized.split(separator: "\n")
+			if let first = components.first {
+				resolvedName = normalizeWhitespace(String(first))
+			}
+		}
+
+		return ParsedMinifigure(
+			identifier: identifier,
+			name: resolvedName,
+			quantity: quantity,
+			imageURL: imageURL,
+			catalogURL: catalogURL,
+			inventoryURL: inventoryURL,
+			categories: categories
+		)
+	}
+
 	private func extractImageURL(from column: String?) -> URL? {
 		guard let column else { return nil }
 		let nsRange = NSRange(column.startIndex..<column.endIndex, in: column)
@@ -238,6 +396,21 @@ public final class BrickLinkInventoryService {
 		let urlString = String(column[urlRange])
 		let url = URL(string: urlString, relativeTo: baseURL)
 		return (text, url?.absoluteURL)
+	}
+
+	private func extractInventoryURL(from column: String?, baseURL: URL) -> URL? {
+		guard let column else { return nil }
+		let nsRange = NSRange(column.startIndex..<column.endIndex, in: column)
+		let matches = linkRegex.matches(in: column, options: [], range: nsRange)
+		guard matches.count >= 2 else { return nil }
+
+		let inventoryMatch = matches[1]
+		guard let urlRange = Range(inventoryMatch.range(at: 2), in: column) else {
+			return nil
+		}
+
+		let urlString = String(column[urlRange])
+		return URL(string: urlString, relativeTo: baseURL)?.absoluteURL
 	}
 
 	private func extractCategories(from line: String, baseURL: URL) -> [BrickLinkCategory] {
@@ -310,6 +483,22 @@ public final class BrickLinkInventoryService {
 		return nil
 	}
 
+	private func detectItemType(from line: String) -> InventoryItemType? {
+		let lowercased = line.lowercased()
+		let isMetadataRow = lowercased.contains("[catalog]")
+		guard !isMetadataRow else { return nil }
+
+		if lowercased.contains("minifigures:") {
+			return .minifigures
+		}
+
+		if lowercased.contains("parts:") {
+			return .parts
+		}
+
+		return nil
+	}
+
 	private func parseMetadata(
 		from lines: [String],
 		baseURL: URL
@@ -353,6 +542,19 @@ public final class BrickLinkInventoryService {
 		components.path = "/catalogItemInv.asp"
 		components.queryItems = [
 			URLQueryItem(name: "S", value: setNumber),
+			URLQueryItem(name: "viewType", value: "R")
+		]
+
+		return components.url!
+	}
+
+	private func inventoryURL(forMinifigure identifier: String) -> URL {
+		var components = URLComponents()
+		components.scheme = "https"
+		components.host = "www.bricklink.com"
+		components.path = "/catalogItemInv.asp"
+		components.queryItems = [
+			URLQueryItem(name: "M", value: identifier),
 			URLQueryItem(name: "viewType", value: "R")
 		]
 
