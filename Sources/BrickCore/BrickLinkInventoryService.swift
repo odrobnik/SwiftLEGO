@@ -210,17 +210,21 @@ public final class BrickLinkInventoryService {
 
 		let lines = markdown.components(separatedBy: .newlines)
 		guard let tableHeaderIndex = lines.firstIndex(where: { $0.contains("| **Image**") }) else {
-			throw InventoryError.partsTableNotFound
+			return []
 		}
 
-		let (parts, _) = try parseInventoryItems(
-			lines: lines,
-			startIndex: tableHeaderIndex + 2,
-			baseURL: url,
-			allowMinifigures: false
-		)
+		do {
+			let (parts, _) = try parseInventoryItems(
+				lines: lines,
+				startIndex: tableHeaderIndex + 2,
+				baseURL: url,
+				allowMinifigures: false
+			)
 
-		return parts
+			return parts
+		} catch InventoryError.partsTableNotFound {
+			return []
+		}
 	}
 
 	private func detectSection(from line: String) -> BrickLinkPartSection? {

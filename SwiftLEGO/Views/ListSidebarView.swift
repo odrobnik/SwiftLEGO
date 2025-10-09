@@ -161,7 +161,7 @@ struct ListSidebarView: View {
         var rootNodes: [MutableCategoryNode] = []
 
         for set in allSets {
-            let path = set.normalizedCategoryPath(uncategorizedTitle: uncategorizedCategoryTitle)
+            let path = categoryPath(for: set)
             guard !path.isEmpty else { continue }
 
             var parentNode: MutableCategoryNode?
@@ -206,6 +206,16 @@ struct ListSidebarView: View {
         return rootNodes
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             .map(convert)
+    }
+
+    private func categoryPath(for set: BrickSet) -> [String] {
+        var path = set.normalizedCategoryPath(uncategorizedTitle: uncategorizedCategoryTitle)
+
+        if path.isEmpty {
+            path = [uncategorizedCategoryTitle]
+        }
+
+        return path
     }
 
     @ViewBuilder

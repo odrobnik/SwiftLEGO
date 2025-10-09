@@ -53,6 +53,11 @@ extension BrickSet {
             names.removeFirst()
         }
 
+        while let first = names.first,
+              first.compare("Sets", options: .caseInsensitive) == .orderedSame {
+            names.removeFirst()
+        }
+
         return names.isEmpty ? [uncategorizedTitle] : names
     }
 }

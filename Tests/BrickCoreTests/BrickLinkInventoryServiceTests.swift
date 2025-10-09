@@ -47,4 +47,12 @@ final class BrickLinkInventoryServiceTests: XCTestCase {
 			["Minifigures", "Disney", "Disney Princess", "The Little Mermaid"]
 		)
 	}
+
+	func testFetchInventoryFor75965() async throws {
+		let service = BrickLinkInventoryService()
+		let inventory = try await service.fetchInventory(for: "75965-1")
+
+		XCTAssertEqual(inventory.setNumber.lowercased(), "75965-1")
+		XCTAssertFalse(inventory.parts.isEmpty)
+	}
 }

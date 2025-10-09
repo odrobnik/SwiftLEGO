@@ -4,7 +4,6 @@ import SwiftData
 struct MinifigureDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var minifigure: Minifigure
-    @State private var searchText: String = ""
     @State private var showMissingOnly: Bool = false
 
     init(minifigure: Minifigure) {
@@ -22,22 +21,9 @@ struct MinifigureDetailView: View {
     }
 
     private var filteredParts: [Part] {
-        var parts = minifigure.parts
-
-        if showMissingOnly {
-            parts = parts.filter { $0.quantityHave < $0.quantityNeeded }
-        }
-
-        if let searchQuery = normalizedSearchQuery {
-            parts = parts.filter { matchesSearch($0, query: searchQuery) }
-        }
-
-        return parts
-    }
-
-    private var normalizedSearchQuery: String? {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed.lowercased()
+        showMissingOnly
+            ? minifigure.parts.filter { $0.quantityHave < $0.quantityNeeded }
+            : minifigure.parts
     }
 
     var body: some View {
@@ -46,7 +32,7 @@ struct MinifigureDetailView: View {
 
             if partsByColor.isEmpty {
                 Section {
-                    Text(normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search.")
+                    Text("No parts to display.")
                         .foregroundStyle(.secondary)
                 }
             } else {
@@ -60,7 +46,6 @@ struct MinifigureDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search parts")
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(minifigure.identifier) \(minifigure.name)")
         .toolbar {
@@ -127,28 +112,6 @@ struct MinifigureDetailView: View {
         let path = minifigure.normalizedCategoryPath(uncategorizedTitle: "Uncategorized")
         guard !(path.count == 1 && path.first == "Uncategorized") else { return nil }
         return path.joined(separator: " / ")
-    }
-
-    private func matchesSearch(_ part: Part, query: String) -> Bool {
-        if part.partID.lowercased() == query {
-            return true
-        }
-
-        if wordPrefixes(in: part.colorName).contains(where: { $0.hasPrefix(query) }) {
-            return true
-        }
-
-        if wordPrefixes(in: part.name).contains(where: { $0.hasPrefix(query) }) {
-            return true
-        }
-
-        return false
-    }
-
-    private func wordPrefixes(in text: String) -> [String] {
-        text
-            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-            .map { $0.lowercased() }
     }
 
     private func updateQuantity(to newValue: Int) {

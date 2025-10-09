@@ -488,7 +488,6 @@ struct PartRowView: View {
         let oldValue = part.quantityHave
         guard clampedValue != oldValue else { return }
 
-        let shouldAnimate = isFilteringMissing && oldValue < part.quantityNeeded && clampedValue >= part.quantityNeeded
         let update = {
             part.quantityHave = clampedValue
             try? modelContext.save()
@@ -497,14 +496,6 @@ struct PartRowView: View {
         withAnimation {
             update()
         }
-//
-//        if shouldAnimate && isFilteringMissing {
-//            withAnimation(.easeInOut) {
-//                update()
-//            }
-//        } else {
-//            update()
-//        }
     }
 }
 

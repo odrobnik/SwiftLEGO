@@ -152,13 +152,23 @@ struct ContentView: View {
     }
 
     private func categoryMatches(_ set: BrickSet, path: [String]) -> Bool {
-        let normalized = set.normalizedCategoryPath(uncategorizedTitle: uncategorizedCategoryTitle)
+        let normalized = categoryPath(for: set)
 
         if path == [uncategorizedCategoryTitle] {
             return normalized == [uncategorizedCategoryTitle]
         }
 
         return normalized.starts(with: path)
+    }
+
+    private func categoryPath(for set: BrickSet) -> [String] {
+        var path = set.normalizedCategoryPath(uncategorizedTitle: uncategorizedCategoryTitle)
+
+        if path.isEmpty {
+            path = [uncategorizedCategoryTitle]
+        }
+
+        return path
     }
 
     private func fetchSet(with id: PersistentIdentifier) -> BrickSet? {
