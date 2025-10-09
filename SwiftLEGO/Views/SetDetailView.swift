@@ -14,6 +14,7 @@ struct SetDetailView: View {
     let partFilter: ((Part) -> Bool)?
     let onShowEntireSet: (() -> Void)?
     @State private var selectedSection: Part.InventorySection
+    @State private var searchText: String = ""
 
     init(
         brickSet: BrickSet,
@@ -32,13 +33,6 @@ struct SetDetailView: View {
     }
 
     private var partsByColor: [(color: String, parts: [Part])] {
-        let filteredParts = brickSet.parts.filter { part in
-            let matchesFilter = partFilter?(part) ?? true
-            return matchesFilter && part.inventorySection == selectedSection
-        }
-
-        guard !filteredParts.isEmpty else { return [] }
-
         let grouped = Dictionary(grouping: filteredParts) { part in
             normalizeColorName(part.colorName)
         }
@@ -46,6 +40,26 @@ struct SetDetailView: View {
         return grouped
             .map { (color: $0.key, parts: $0.value.sorted(by: colorPartSortComparator)) }
             .sorted { lhs, rhs in lhs.color < rhs.color }
+    }
+
+    private var filteredParts: [Part] {
+        let partsMatchingSection = brickSet.parts.filter { part in
+            let matchesFilter = partFilter?(part) ?? true
+            return matchesFilter && part.inventorySection == selectedSection
+        }
+
+        guard let searchQuery = normalizedSearchQuery else {
+            return partsMatchingSection
+        }
+
+        return partsMatchingSection.filter { part in
+            matchesSearch(part, query: searchQuery)
+        }
+    }
+
+    private var normalizedSearchQuery: String? {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed.lowercased()
     }
 
     var body: some View {
@@ -61,7 +75,7 @@ struct SetDetailView: View {
 
             if partsByColor.isEmpty {
                 Section {
-                    Text("No parts to display.")
+                    Text(normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search.")
                         .foregroundStyle(.secondary)
                 }
             } else {
@@ -75,6 +89,7 @@ struct SetDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search parts")
         .toolbarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -133,6 +148,28 @@ struct SetDetailView: View {
         }
 
         return .regular
+    }
+
+    private func matchesSearch(_ part: Part, query: String) -> Bool {
+        if part.partID.lowercased() == query {
+            return true
+        }
+
+        if wordPrefixes(in: part.colorName).contains(where: { $0.hasPrefix(query) }) {
+            return true
+        }
+
+        if wordPrefixes(in: part.name).contains(where: { $0.hasPrefix(query) }) {
+            return true
+        }
+
+        return false
+    }
+
+    private func wordPrefixes(in text: String) -> [String] {
+        text
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map { $0.lowercased() }
     }
 }
 
