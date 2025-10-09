@@ -302,22 +302,42 @@ struct SetCollectionView: View {
         let startsWithNumber = rawQuery.first?.isNumber == true
         let components = rawQuery.split(whereSeparator: { $0.isWhitespace })
         let primaryToken = components.first.map(String.init) ?? rawQuery
-        let secondaryToken = components.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        let normalizedQueryTokens = queryTokens(from: rawQuery)
+        let secondaryTokens = normalizedQueryTokens.dropFirst()
 
         return list.sets.flatMap { set in
             set.parts.filter { part in
                 let partIDLower = part.partID.lowercased()
                 let colorLower = part.colorName.lowercased()
+                let nameLower = part.name.lowercased()
 
                 if startsWithNumber {
                     guard partIDLower == primaryToken else { return false }
-                    if secondaryToken.isEmpty { return true }
-                    return colorLower.contains(secondaryToken)
+                    if secondaryTokens.isEmpty { return true }
+                    let colorTokens = queryTokens(from: colorLower)
+                    return secondaryTokens.allSatisfy { token in
+                        colorTokens.contains(where: { $0.hasPrefix(token) })
+                    }
                 } else {
-                    return colorLower.contains(rawQuery)
+                    if colorLower.contains(rawQuery) { return true }
+                    if nameLower.contains(rawQuery) { return true }
+
+                    let colorTokens = queryTokens(from: part.colorName)
+                    let nameTokens = queryTokens(from: part.name)
+
+                    return normalizedQueryTokens.allSatisfy { token in
+                        colorTokens.contains(where: { $0.hasPrefix(token) }) ||
+                        nameTokens.contains(where: { $0.hasPrefix(token) })
+                    }
                 }
             }
         }
+    }
+
+    private func queryTokens(from text: String) -> [String] {
+        text
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map { $0.lowercased() }
     }
 
     private var searchEntries: [SearchEntry] {
