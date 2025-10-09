@@ -24,6 +24,7 @@
 		341d57700e1e4afe84023d72 /* Preview Content.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4e644b8d22b54a309c76e5d3 /* Preview Content.xcassets */; };
 		360f6b44ed3545d98f309e88 /* BrickSet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5dc696c200de4abbadd5dc07 /* BrickSet.swift */; };
 		44dd55ee66ff77aa88bb99cc /* DomElement.swift in Sources */ = {isa = PBXBuildFile; fileRef = d1c2b3a4e5f6401298765433 /* DomElement.swift */; };
+		3671588ADAB94985A2605BFF /* MinifigureDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3507EF5EC63421CB6946630 /* MinifigureDetailView.swift */; };
 		4d5e6f708192a3b4c5d6e7f8 /* SetImportUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3c4d5e6f708192a3b4c5d6e7 /* SetImportUtilities.swift */; };
 		55ee66ff77aa88bb99cc00dd /* DomNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = e1f2a3b4c5d6401298765434 /* DomNode.swift */; };
 		5b1023cd80a2408b832e1582 /* RenameSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = cbff937e47d941a48c5de551 /* RenameSetView.swift */; };
@@ -72,6 +73,7 @@
 		b7f25c9f025b48bfbb5e7b71 /* SetCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCardView.swift; sourceTree = "<group>"; };
 		bca132def5468790fedcba97 /* String+Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Markdown.swift"; sourceTree = "<group>"; };
 		c1e2d3f4a5b6409897654321 /* BrickLinkInventoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickLinkInventoryModels.swift; sourceTree = "<group>"; };
+		C3507EF5EC63421CB6946630 /* MinifigureDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinifigureDetailView.swift; sourceTree = "<group>"; };
 		cab231edf6547890fedcba96 /* WebKitBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebKitBrowser.swift; sourceTree = "<group>"; };
 		cbff937e47d941a48c5de551 /* RenameSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameSetView.swift; sourceTree = "<group>"; };
 		d1c2b3a4e5f6401298765433 /* DomElement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomElement.swift; sourceTree = "<group>"; };
@@ -139,6 +141,7 @@
 				f4399a533a6241e3a32c327d /* ListSidebarView.swift */,
 				22f3a692b1b448c58de41adb /* SetCollectionView.swift */,
 				5e4d3c2b1a0f4987bcde6543 /* SetDetailView.swift */,
+				C3507EF5EC63421CB6946630 /* MinifigureDetailView.swift */,
 				5a9c8b7d6e5f4a3b2c1d0e9f /* CategorySetsView.swift */,
 			);
 			path = Views;
@@ -306,6 +309,7 @@
 				028ab47ef91b4ad18c3f6a70 /* CategorySetsView.swift in Sources */,
 				e361b9b9b52e4e1ab05cbab4 /* ListSidebarView.swift in Sources */,
 				1292bfd2f98e4dafa738882f /* SetCollectionView.swift in Sources */,
+				3671588ADAB94985A2605BFF /* MinifigureDetailView.swift in Sources */,
 				f65bf9d1471e4ab1932a557b /* EmptyStateView.swift in Sources */,
 				d2a6d403f42b4da69a1e084d /* ListEditorView.swift in Sources */,
 				67f46c450fed42189ee3b2e0 /* AddSetView.swift in Sources */,

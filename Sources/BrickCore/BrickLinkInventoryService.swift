@@ -82,19 +82,19 @@ public final class BrickLinkInventoryService {
 	}
 
 	private func parseInventoryItems(
-		lines: [String],
-		startIndex: Int,
-		baseURL: URL,
-		allowMinifigures: Bool
-	) throws -> ([BrickLinkPart], [ParsedMinifigure]) {
+			lines: [String],
+			startIndex: Int,
+			baseURL: URL,
+			allowMinifigures: Bool
+		) throws -> ([BrickLinkPart], [ParsedMinifigure]) {
 		var parts: [BrickLinkPart] = []
 		var minifigures: [ParsedMinifigure] = []
-		var index = startIndex
-		var currentSection: BrickLinkPartSection = .regular
-		var currentItemType: InventoryItemType = .parts
+			var index = startIndex
+			var currentSection: BrickLinkPartSection = .regular
+			var currentItemType: InventoryItemType = .parts
 
-		while index < lines.count {
-			let line = lines[index].trimmingCharacters(in: .whitespaces)
+			while index < lines.count {
+				let line = lines[index].trimmingCharacters(in: .whitespaces)
 			if line.isEmpty {
 				index += 1
 				continue
@@ -129,32 +129,44 @@ public final class BrickLinkInventoryService {
 				columns.removeLast()
 			}
 
-			do {
-				switch currentItemType {
-				case .parts:
-					guard columns.contains(where: { $0.contains("catalog/catalogitem.page?P=") }) else {
-						index += 1
-						continue
+				var didConsumeNextLine = false
+
+				do {
+					switch currentItemType {
+					case .parts:
+						guard columns.contains(where: { $0.contains("catalog/catalogitem.page?P=") }) else {
+							index += 1
+							continue
+						}
+						let part = try parsePartRow(columns: columns, baseURL: baseURL, section: currentSection)
+						parts.append(part)
+					case .minifigures:
+						guard columns.contains(where: { $0.contains("catalogitem.page?M=") }) else {
+							index += 1
+							continue
+						}
+						let nextLine = lines[safe: index + 1]?.trimmingCharacters(in: .whitespacesAndNewlines)
+						let minifigure = try parseMinifigureRow(
+							columns: columns,
+							nextLine: nextLine,
+							baseURL: baseURL,
+							consumedNextLine: &didConsumeNextLine
+						)
+						minifigures.append(minifigure)
 					}
-					let part = try parsePartRow(columns: columns, baseURL: baseURL, section: currentSection)
-					parts.append(part)
-				case .minifigures:
-					guard columns.contains(where: { $0.contains("catalogitem.page?M=") }) else {
-						index += 1
-						continue
-					}
-					let minifigure = try parseMinifigureRow(columns: columns, baseURL: baseURL)
-					minifigures.append(minifigure)
+				} catch {
+					throw InventoryError.malformedRow(line)
 				}
-			} catch {
-				throw InventoryError.malformedRow(line)
+
+				if didConsumeNextLine {
+					index += 1
+				}
+
+				index += 1
 			}
 
-			index += 1
+			return (parts, minifigures)
 		}
-
-		return (parts, minifigures)
-	}
 
 	private func enrichMinifigures(_ minifigures: [ParsedMinifigure]) async throws -> [BrickLinkMinifigure] {
 		guard !minifigures.isEmpty else { return [] }
@@ -169,7 +181,10 @@ public final class BrickLinkInventoryService {
 							identifier: minifigure.identifier,
 							name: minifigure.name,
 							quantity: minifigure.quantity,
-							imageURL: minifigure.imageURL,
+							imageURL: self.preferredMinifigureImageURL(
+								for: minifigure.identifier,
+								fallback: minifigure.imageURL
+							),
 							catalogURL: minifigure.catalogURL,
 							inventoryURL: minifigure.inventoryURL,
 							categories: minifigure.categories,
@@ -296,7 +311,9 @@ public final class BrickLinkInventoryService {
 
 	private func parseMinifigureRow(
 		columns: [String],
-		baseURL: URL
+		nextLine: String?,
+		baseURL: URL,
+		consumedNextLine: inout Bool
 	) throws -> ParsedMinifigure {
 		let imageColumn = columns.first(where: { $0.contains("catalogItemPic.asp?M=") })
 		let minifigLinkColumn = columns.first(where: { $0.contains("catalogitem.page?M=") })
@@ -317,6 +334,10 @@ public final class BrickLinkInventoryService {
 		var categories: [BrickLinkCategory] = []
 		if let descriptionColumn {
 			categories = extractCategories(from: descriptionColumn, baseURL: baseURL)
+		} else if let nextLine,
+				  let categoriesColumn = categoriesColumn(from: nextLine) {
+			categories = extractCategories(from: categoriesColumn, baseURL: baseURL)
+			consumedNextLine = true
 		}
 
 		var resolvedName = rawName
@@ -411,6 +432,42 @@ public final class BrickLinkInventoryService {
 
 		let urlString = String(column[urlRange])
 		return URL(string: urlString, relativeTo: baseURL)?.absoluteURL
+	}
+
+	private func categoriesColumn(from line: String) -> String? {
+		var columns = line
+			.split(separator: "|", omittingEmptySubsequences: false)
+			.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+		while let first = columns.first, first.isEmpty {
+			columns.removeFirst()
+		}
+
+		while let last = columns.last, last.isEmpty {
+			columns.removeLast()
+		}
+
+		return columns.first(where: { $0.contains("Catalog") })
+	}
+
+	private func preferredMinifigureImageURL(for identifier: String, fallback: URL?) -> URL? {
+		let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else { return fallback }
+
+		let candidates = [trimmed.lowercased(), trimmed.uppercased(), trimmed]
+
+		for candidate in candidates {
+			var components = URLComponents()
+			components.scheme = "https"
+			components.host = "img.bricklink.com"
+			components.path = "/ItemImage/MN/0/\(candidate).png"
+
+			if let url = components.url {
+				return url
+			}
+		}
+
+		return fallback
 	}
 
 	private func extractCategories(from line: String, baseURL: URL) -> [BrickLinkCategory] {

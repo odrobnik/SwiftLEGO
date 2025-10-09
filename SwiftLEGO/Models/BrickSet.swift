@@ -11,6 +11,7 @@ final class BrickSet: Identifiable {
     var collection: CollectionList?
     @Relationship(deleteRule: .cascade, inverse: \SetCategory.set) var categories: [SetCategory]
     @Relationship(deleteRule: .cascade, inverse: \Minifigure.set) var minifigures: [Minifigure]
+    @Relationship(deleteRule: .cascade, inverse: \MinifigCategory.set) var minifigureCategories: [MinifigCategory]
 
     init(
         id: UUID = UUID(),

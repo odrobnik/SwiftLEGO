@@ -42,5 +42,9 @@ final class BrickLinkInventoryServiceTests: XCTestCase {
 		XCTAssertEqual(minifigure?.quantity, 1)
 		XCTAssertTrue(minifigure?.name.hasPrefix("Ariel, Mermaid (Light Nougat)") ?? false)
 		XCTAssertFalse(minifigure?.parts.isEmpty ?? true)
+		XCTAssertEqual(
+			minifigure?.categories.map(\.name),
+			["Minifigures", "Disney", "Disney Princess", "The Little Mermaid"]
+		)
 	}
 }
