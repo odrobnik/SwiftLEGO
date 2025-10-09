@@ -8,19 +8,25 @@ final class SetCategory: Identifiable {
     var name: String
     var sortOrder: Int
     var set: BrickSet?
+    @Relationship(deleteRule: .nullify) var parent: SetCategory?
+    @Relationship(deleteRule: .cascade, inverse: \SetCategory.parent) var children: [SetCategory]
 
     init(
         id: UUID = UUID(),
         categoryID: String? = nil,
         name: String,
         sortOrder: Int,
-        set: BrickSet? = nil
+        set: BrickSet? = nil,
+        parent: SetCategory? = nil,
+        children: [SetCategory] = []
     ) {
         self.id = id
         self.categoryID = categoryID
         self.name = name
         self.sortOrder = sortOrder
         self.set = set
+        self.parent = parent
+        self.children = children
     }
 }
 

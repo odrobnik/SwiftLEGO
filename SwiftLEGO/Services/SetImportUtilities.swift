@@ -120,13 +120,22 @@ enum SetImportUtilities {
             )
         }
 
-        let categoryModels = categories.enumerated().map { index, category in
-            SetCategory(
+        var categoryModels: [SetCategory] = []
+        var previousCategory: SetCategory?
+
+        for (index, category) in categories.enumerated() {
+            let categoryModel = SetCategory(
                 categoryID: category.id,
                 name: category.name,
                 sortOrder: index,
-                set: newSet
+                set: newSet,
+                parent: previousCategory
             )
+
+            previousCategory?.children.append(categoryModel)
+
+            categoryModels.append(categoryModel)
+            previousCategory = categoryModel
         }
 
         newSet.parts = partModels
