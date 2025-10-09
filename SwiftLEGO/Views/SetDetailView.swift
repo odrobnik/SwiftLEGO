@@ -15,6 +15,7 @@ struct SetDetailView: View {
     let onShowEntireSet: (() -> Void)?
     @State private var selectedSection: Part.InventorySection
     @State private var searchText: String = ""
+    @State private var showMissingOnly: Bool = false
 
     init(
         brickSet: BrickSet,
@@ -45,7 +46,9 @@ struct SetDetailView: View {
     private var filteredParts: [Part] {
         let partsMatchingSection = brickSet.parts.filter { part in
             let matchesFilter = partFilter?(part) ?? true
-            return matchesFilter && part.inventorySection == selectedSection
+            let matchesSection = part.inventorySection == selectedSection
+            let matchesMissingToggle = !showMissingOnly || part.quantityHave < part.quantityNeeded
+            return matchesFilter && matchesSection && matchesMissingToggle
         }
 
         guard let searchQuery = normalizedSearchQuery else {
@@ -64,6 +67,8 @@ struct SetDetailView: View {
 
     var body: some View {
         List {
+            headerSection
+
             Section {
                 Picker("Inventory Section", selection: $selectedSection) {
                     ForEach(Self.segmentedSections, id: \.self) { section in
@@ -82,7 +87,7 @@ struct SetDetailView: View {
                 ForEach(partsByColor, id: \.color) { group in
                     Section(group.color) {
                         ForEach(group.parts) { part in
-                            PartRowView(part: part)
+                            PartRowView(part: part, isFilteringMissing: showMissingOnly)
                         }
                     }
                 }
@@ -91,10 +96,8 @@ struct SetDetailView: View {
         .listStyle(.insetGrouped)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search parts")
         .toolbarTitleDisplayMode(.inline)
+        .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                NavigationTitleContent(brickSet: brickSet)
-            }
             if partFilter != nil, let onShowEntireSet {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -104,6 +107,49 @@ struct SetDetailView: View {
                     }
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    withAnimation {
+                        showMissingOnly.toggle()
+                    }
+                } label: {
+                    Image(systemName: showMissingOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(showMissingOnly ? Color.accentColor : Color.secondary)
+                        .imageScale(.large)
+                        .accessibilityLabel(showMissingOnly ? "Showing missing parts" : "Show only missing parts")
+                }
+                .buttonStyle(.plain)
+                .help("Toggle missing parts filter")
+            }
+        }
+    }
+
+    private var headerSection: some View {
+        Section {
+            HStack(alignment: .top, spacing: 16) {
+                HeaderThumbnail(brickSet: brickSet)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(brickSet.setNumber)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(brickSet.name)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.primary)
+
+                    let categories = brickSet.normalizedCategoryPath(uncategorizedTitle: "Uncategorized")
+                    if !categories.isEmpty {
+                        Text(categories.joined(separator: " / "))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(.vertical, 8)
         }
     }
 
@@ -173,24 +219,11 @@ struct SetDetailView: View {
     }
 }
 
-private struct NavigationTitleContent: View {
+private struct HeaderThumbnail: View {
     let brickSet: BrickSet
 
     var body: some View {
-        HStack(spacing: 12) {
-            thumbnail
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(brickSet.setNumber)
-                    .font(.callout)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-
-                Text(brickSet.name)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-            }
-        }
+        thumbnail
     }
 
     @ViewBuilder
@@ -205,7 +238,7 @@ private struct NavigationTitleContent: View {
                     image
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 44, height: 44)
+                        .frame(width: 96, height: 96)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 case .failure:
                     placeholder
@@ -223,7 +256,7 @@ private struct NavigationTitleContent: View {
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color(uiColor: .tertiarySystemFill))
-            .frame(width: 44, height: 44)
+            .frame(width: 96, height: 96)
             .overlay {
                 Image(systemName: "cube.transparent")
                     .foregroundStyle(.secondary)
@@ -234,6 +267,16 @@ private struct NavigationTitleContent: View {
 private struct PartRowView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var part: Part
+    let isFilteringMissing: Bool
+
+    private var quantityBinding: Binding<Int> {
+        Binding(
+            get: { part.quantityHave },
+            set: { newValue in
+                updateQuantity(to: newValue)
+            }
+        )
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
@@ -254,19 +297,27 @@ private struct PartRowView: View {
                 Text("\(part.quantityHave) of \(part.quantityNeeded)")
                     .font(.title3.bold())
 
-                Stepper("", value: $part.quantityHave, in: 0...part.quantityNeeded)
+                Stepper("", value: quantityBinding, in: 0...part.quantityNeeded)
                     .labelsHidden()
             }
             .frame(minWidth: 80, idealWidth: 100)
-            .onChange(of: part.quantityHave) { _, _ in
-                try? modelContext.save()
-            }
         }
         .padding(.vertical, 4)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button {
-                part.quantityHave = part.quantityNeeded
-                try? modelContext.save()
+                let shouldAnimate = isFilteringMissing && part.quantityHave < part.quantityNeeded
+                let performUpdate = {
+                    part.quantityHave = part.quantityNeeded
+                    try? modelContext.save()
+                }
+
+                if shouldAnimate {
+                    withAnimation(.easeInOut) {
+                        performUpdate()
+                    }
+                } else {
+                    performUpdate()
+                }
             } label: {
                 Label("Have All", systemImage: "checkmark.circle.fill")
             }
@@ -309,6 +360,27 @@ private struct PartRowView: View {
                 Image(systemName: "cube.transparent")
                     .foregroundStyle(.secondary)
             }
+    }
+
+    private func updateQuantity(to newValue: Int) {
+        let clampedValue = max(0, min(newValue, part.quantityNeeded))
+        let oldValue = part.quantityHave
+        guard clampedValue != oldValue else { return }
+
+        let shouldAnimate = isFilteringMissing && oldValue < part.quantityNeeded && clampedValue >= part.quantityNeeded
+
+        let performUpdate = {
+            part.quantityHave = clampedValue
+            try? modelContext.save()
+        }
+
+        if shouldAnimate {
+            withAnimation(.easeInOut) {
+                performUpdate()
+            }
+        } else {
+            performUpdate()
+        }
     }
 }
 
