@@ -78,10 +78,6 @@ struct SetDetailView: View {
         List {
             headerSection
 
-            if !minifigures.isEmpty {
-                minifigureSection
-            }
-
             Section {
                 Picker("Inventory Section", selection: $selectedSection) {
                     ForEach(Self.segmentedSections, id: \.self) { section in
@@ -104,6 +100,10 @@ struct SetDetailView: View {
                         }
                     }
                 }
+            }
+
+            if !minifigures.isEmpty {
+                minifigureSection
             }
         }
         .listStyle(.insetGrouped)
