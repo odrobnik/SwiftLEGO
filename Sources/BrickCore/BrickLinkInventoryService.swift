@@ -32,9 +32,6 @@ public final class BrickLinkInventoryService {
 		let url = inventoryURL(for: setNumber)
 		let converter = HTML💡Markdown(url: url)
 		let markdown = try await converter.markdown()
-		print("=== BrickLink Inventory Markdown: \(setNumber) ===")
-		print(markdown)
-		print("=== End Markdown ===")
 
 		let parsed = try parse(markdown: markdown, setNumber: setNumber, baseURL: url)
 		let enrichedParts = try await enrichParts(parsed.parts)
