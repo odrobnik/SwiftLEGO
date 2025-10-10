@@ -363,25 +363,22 @@ struct SetCollectionView: View {
                 let partIDLower = part.partID.lowercased()
                 let colorLower = part.colorName.lowercased()
                 let nameLower = part.name.lowercased()
+                let partTokens = partSearchTokens(for: part)
 
                 if startsWithNumber {
-                    guard partIDLower == primaryToken else { return false }
+                    guard partIDLower.hasPrefix(primaryToken) else { return false }
                     if secondaryTokens.isEmpty { return true }
-                    let colorTokens = queryTokens(from: colorLower)
                     return secondaryTokens.allSatisfy { token in
-                        colorTokens.contains(where: { $0.hasPrefix(token) })
+                        partTokens.contains(where: { $0.hasPrefix(token) || $0.contains(token) })
                     }
-                } else {
-                    if colorLower.contains(rawQuery) { return true }
-                    if nameLower.contains(rawQuery) { return true }
+                }
 
-                    let colorTokens = queryTokens(from: part.colorName)
-                    let nameTokens = queryTokens(from: part.name)
+                if colorLower.contains(rawQuery) || nameLower.contains(rawQuery) {
+                    return true
+                }
 
-                    return normalizedQueryTokens.allSatisfy { token in
-                        colorTokens.contains(where: { $0.hasPrefix(token) }) ||
-                        nameTokens.contains(where: { $0.hasPrefix(token) })
-                    }
+                return normalizedQueryTokens.allSatisfy { token in
+                    partTokens.contains(where: { $0.hasPrefix(token) || $0.contains(token) })
                 }
             }
         }
@@ -391,6 +388,15 @@ struct SetCollectionView: View {
         text
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
             .map { $0.lowercased() }
+    }
+
+    private func partSearchTokens(for part: Part) -> [String] {
+        let combined = "\(part.partID) \(part.colorName) \(part.name)"
+        return Array(
+            Set(
+                queryTokens(from: combined)
+            )
+        )
     }
 
     private var searchEntries: [SearchEntry] {

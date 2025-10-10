@@ -34,7 +34,7 @@ struct SetDetailView: View {
     }
 
     private var minifigures: [Minifigure] {
-        brickSet.minifigures.sorted { lhs, rhs in
+        filteredMinifigures.sorted { lhs, rhs in
             if lhs.name != rhs.name {
                 return lhs.name < rhs.name
             }
@@ -66,6 +66,16 @@ struct SetDetailView: View {
 
         return partsMatchingSection.filter { part in
             matchesSearch(part, query: searchQuery)
+        }
+    }
+
+    private var filteredMinifigures: [Minifigure] {
+        guard let query = normalizedSearchQuery else {
+            return brickSet.minifigures
+        }
+
+        return brickSet.minifigures.filter { minifigure in
+            matchesMinifigure(minifigure, query: query)
         }
     }
 
@@ -223,19 +233,25 @@ struct SetDetailView: View {
     }
 
     private func matchesSearch(_ part: Part, query: String) -> Bool {
-        if part.partID.lowercased() == query {
-            return true
-        }
+        let queryTokens = wordPrefixes(in: query)
+        guard !queryTokens.isEmpty else { return true }
 
-        if wordPrefixes(in: part.colorName).contains(where: { $0.hasPrefix(query) }) {
-            return true
-        }
+        let partTokens = Set(wordPrefixes(in: "\(part.partID) \(part.colorName) \(part.name)"))
 
-        if wordPrefixes(in: part.name).contains(where: { $0.hasPrefix(query) }) {
-            return true
+        return queryTokens.allSatisfy { token in
+            partTokens.contains(where: { $0.contains(token) || $0.hasPrefix(token) })
         }
+    }
 
-        return false
+    private func matchesMinifigure(_ minifigure: Minifigure, query: String) -> Bool {
+        let queryTokens = wordPrefixes(in: query)
+        guard !queryTokens.isEmpty else { return true }
+
+        let figureTokens = Set(wordPrefixes(in: "\(minifigure.identifier) \(minifigure.name)"))
+
+        return queryTokens.allSatisfy { token in
+            figureTokens.contains(where: { $0.contains(token) || $0.hasPrefix(token) })
+        }
     }
 
     private func wordPrefixes(in text: String) -> [String] {

@@ -18,8 +18,43 @@ struct InventorySnapshot: Codable, Sendable {
             }
         }
 
+        struct MinifigureSnapshot: Codable, Sendable {
+            let identifier: String
+            let quantityHave: Int
+            let parts: [PartSnapshot]
+        }
+
         let setNumber: String
         let parts: [PartSnapshot]
+        let minifigures: [MinifigureSnapshot]
+
+        private enum CodingKeys: String, CodingKey {
+            case setNumber
+            case parts
+            case minifigures
+        }
+
+        init(setNumber: String, parts: [PartSnapshot], minifigures: [MinifigureSnapshot] = []) {
+            self.setNumber = setNumber
+            self.parts = parts
+            self.minifigures = minifigures
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            setNumber = try container.decode(String.self, forKey: .setNumber)
+            parts = try container.decode([PartSnapshot].self, forKey: .parts)
+            minifigures = try container.decodeIfPresent([MinifigureSnapshot].self, forKey: .minifigures) ?? []
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(setNumber, forKey: .setNumber)
+            try container.encode(parts, forKey: .parts)
+            if !minifigures.isEmpty {
+                try container.encode(minifigures, forKey: .minifigures)
+            }
+        }
     }
 
     struct ApplyResult: Sendable {
@@ -57,22 +92,50 @@ extension InventorySnapshot {
             .flatMap { $0.sets }
             .sorted { $0.setNumber.localizedCaseInsensitiveCompare($1.setNumber) == .orderedAscending }
             .map { set in
-                SetSnapshot(
-                    setNumber: set.setNumber,
-                    parts: set.parts.map { part in
-                        SetSnapshot.PartSnapshot(
-                            partID: part.partID,
-                            colorID: part.colorID,
-                            quantityHave: part.quantityHave,
-                            inventorySection: part.inventorySection.rawValue
+                let partSnapshots = set.parts.map { part in
+                    SetSnapshot.PartSnapshot(
+                        partID: part.partID,
+                        colorID: part.colorID,
+                        quantityHave: part.quantityHave,
+                        inventorySection: part.inventorySection.rawValue
+                    )
+                }
+                .sorted { lhs, rhs in
+                    if lhs.partID != rhs.partID {
+                        return lhs.partID.localizedCaseInsensitiveCompare(rhs.partID) == .orderedAscending
+                    }
+                    return lhs.colorID.localizedCaseInsensitiveCompare(rhs.colorID) == .orderedAscending
+                }
+
+                let minifigureSnapshots = set.minifigures
+                    .sorted { $0.identifier.localizedCaseInsensitiveCompare($1.identifier) == .orderedAscending }
+                    .map { minifigure in
+                        let componentParts = minifigure.parts.map { part in
+                            SetSnapshot.PartSnapshot(
+                                partID: part.partID,
+                                colorID: part.colorID,
+                                quantityHave: part.quantityHave,
+                                inventorySection: part.inventorySection.rawValue
+                            )
+                        }
+                        .sorted { lhs, rhs in
+                            if lhs.partID != rhs.partID {
+                                return lhs.partID.localizedCaseInsensitiveCompare(rhs.partID) == .orderedAscending
+                            }
+                            return lhs.colorID.localizedCaseInsensitiveCompare(rhs.colorID) == .orderedAscending
+                        }
+
+                        return SetSnapshot.MinifigureSnapshot(
+                            identifier: minifigure.identifier,
+                            quantityHave: minifigure.quantityHave,
+                            parts: componentParts
                         )
                     }
-                    .sorted { lhs, rhs in
-                        if lhs.partID != rhs.partID {
-                            return lhs.partID.localizedCaseInsensitiveCompare(rhs.partID) == .orderedAscending
-                        }
-                        return lhs.colorID.localizedCaseInsensitiveCompare(rhs.colorID) == .orderedAscending
-                    }
+
+                return SetSnapshot(
+                    setNumber: set.setNumber,
+                    parts: partSnapshots,
+                    minifigures: minifigureSnapshots
                 )
             }
 
@@ -129,6 +192,60 @@ extension InventorySnapshot {
                 if part.quantityHave != clampedValue {
                     part.quantityHave = clampedValue
                     updatedPartCount += 1
+                }
+            }
+
+            if !setSnapshot.minifigures.isEmpty {
+                var minifigureLookup: [String: Minifigure] = [:]
+                for minifigure in set.minifigures {
+                    let key = minifigure.identifier.lowercased()
+                    if minifigureLookup[key] == nil {
+                        minifigureLookup[key] = minifigure
+                    }
+                }
+
+                for minifigureSnapshot in setSnapshot.minifigures {
+                    let identifierKey = minifigureSnapshot.identifier.lowercased()
+                    guard let minifigure = minifigureLookup[identifierKey] else {
+                        unmatchedPartCount += 1
+                        continue
+                    }
+
+                    let clampedQuantity = max(0, min(minifigureSnapshot.quantityHave, minifigure.quantityNeeded))
+                    if minifigure.quantityHave != clampedQuantity {
+                        minifigure.quantityHave = clampedQuantity
+                        updatedPartCount += 1
+                    }
+
+                    var minifigurePartsLookup: [String: Part] = [:]
+                    for part in minifigure.parts {
+                        let baseKey = "\(part.partID.lowercased())|\(part.colorID.lowercased())"
+                        let sectionKey = "\(baseKey)|\(part.inventorySection.rawValue.lowercased())"
+
+                        if minifigurePartsLookup[sectionKey] == nil {
+                            minifigurePartsLookup[sectionKey] = part
+                        }
+
+                        if minifigurePartsLookup[baseKey] == nil {
+                            minifigurePartsLookup[baseKey] = part
+                        }
+                    }
+
+                    for partSnapshot in minifigureSnapshot.parts {
+                        guard
+                            let key = partSnapshot.lookupKeys.first(where: { minifigurePartsLookup[$0] != nil }),
+                            let part = minifigurePartsLookup[key]
+                        else {
+                            unmatchedPartCount += 1
+                            continue
+                        }
+
+                        let clampedValue = max(0, min(partSnapshot.quantityHave, part.quantityNeeded))
+                        if part.quantityHave != clampedValue {
+                            part.quantityHave = clampedValue
+                            updatedPartCount += 1
+                        }
+                    }
                 }
             }
         }
