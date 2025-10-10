@@ -1,18 +1,17 @@
 import SwiftUI
 import SwiftData
 
-struct MinifigureDetailView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Bindable var minifigure: Minifigure
+struct PartDetailView: View {
+    @Bindable var part: Part
     @State private var showMissingOnly: Bool = false
 
-    init(minifigure: Minifigure) {
-        self._minifigure = Bindable(minifigure)
+    init(part: Part) {
+        self._part = Bindable(part)
     }
 
     private var partsByColor: [(color: String, parts: [Part])] {
-        let grouped = Dictionary(grouping: filteredParts) { part in
-            normalizeColorName(part.colorName)
+        let grouped = Dictionary(grouping: filteredSubparts) { subpart in
+            normalizeColorName(subpart.colorName)
         }
 
         return grouped
@@ -20,10 +19,10 @@ struct MinifigureDetailView: View {
             .sorted { lhs, rhs in lhs.color < rhs.color }
     }
 
-    private var filteredParts: [Part] {
+    private var filteredSubparts: [Part] {
         showMissingOnly
-            ? minifigure.parts.filter { $0.quantityHave < $0.quantityNeeded }
-            : minifigure.parts
+            ? part.subparts.filter { $0.quantityHave < $0.quantityNeeded }
+            : part.subparts
     }
 
     var body: some View {
@@ -32,15 +31,15 @@ struct MinifigureDetailView: View {
 
             if partsByColor.isEmpty {
                 Section {
-                    Text("No parts to display.")
+                    Text("No sub-parts to display.")
                         .foregroundStyle(.secondary)
                 }
             } else {
                 ForEach(partsByColor, id: \.color) { group in
                     Section(group.color) {
-                        ForEach(group.parts) { part in
+                        ForEach(group.parts) { subpart in
                             PartRowNavigationWrapper(
-                                part: part,
+                                part: subpart,
                                 isFilteringMissing: showMissingOnly
                             )
                         }
@@ -49,8 +48,8 @@ struct MinifigureDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .navigationTitle("\(part.partID) \(part.name)")
         .toolbarTitleDisplayMode(.inline)
-        .navigationTitle("\(minifigure.identifier) \(minifigure.name)")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -73,22 +72,24 @@ struct MinifigureDetailView: View {
     private var headerSection: some View {
         Section {
             HStack(alignment: .top, spacing: 16) {
-                MinifigureThumbnail(minifigure: minifigure)
+                PartThumbnailImage(part: part)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(minifigure.identifier)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    Text(minifigure.name)
+                    Text(part.name)
                         .font(.title2.weight(.bold))
                         .foregroundStyle(.primary)
 
-                    if let categoryDescription {
-                        Text(categoryDescription)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("\(part.partID) • \(part.colorName)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text(part.inventorySection.displayTitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Text("\(part.quantityHave) of \(part.quantityNeeded)")
+                        .font(.headline)
+                        .contentTransition(.numericText())
                 }
 
                 Spacer()
@@ -109,27 +110,10 @@ struct MinifigureDetailView: View {
 
         return lhs.partID < rhs.partID
     }
-
-    private var categoryDescription: String? {
-        guard !minifigure.categories.isEmpty else { return nil }
-        let path = minifigure.normalizedCategoryPath(uncategorizedTitle: "Uncategorized")
-        guard !(path.count == 1 && path.first == "Uncategorized") else { return nil }
-        return path.joined(separator: " / ")
-    }
-
-    private func updateQuantity(to newValue: Int) {
-        let clamped = max(0, min(newValue, minifigure.quantityNeeded))
-        guard clamped != minifigure.quantityHave else { return }
-
-        withAnimation {
-            minifigure.quantityHave = clamped
-            try? modelContext.save()
-        }
-    }
 }
 
-private struct MinifigureThumbnail: View {
-    let minifigure: Minifigure
+private struct PartThumbnailImage: View {
+    @Bindable var part: Part
 
     var body: some View {
         thumbnail
@@ -137,7 +121,7 @@ private struct MinifigureThumbnail: View {
 
     @ViewBuilder
     private var thumbnail: some View {
-        if let url = minifigure.imageURL {
+        if let url = part.imageURL {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:
@@ -146,8 +130,9 @@ private struct MinifigureThumbnail: View {
                 case .success(let image):
                     image
                         .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 120, maxHeight: 120)
+                        .scaledToFill()
+                        .frame(width: 96, height: 96)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 case .failure:
                     placeholder
                 @unknown default:
@@ -155,6 +140,7 @@ private struct MinifigureThumbnail: View {
                 }
             }
             .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         } else {
             placeholder
         }
@@ -163,50 +149,10 @@ private struct MinifigureThumbnail: View {
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color(uiColor: .tertiarySystemFill))
-            .frame(width: 120, height: 120)
+            .frame(width: 96, height: 96)
             .overlay {
-                Image(systemName: "person.fill")
+                Image(systemName: "cube.transparent")
                     .foregroundStyle(.secondary)
             }
     }
-}
-
-#Preview("Minifigure Detail") {
-    let container = SwiftLEGOModelContainer.preview
-    let context = ModelContext(container)
-    let descriptor = FetchDescriptor<Minifigure>()
-    let fetched = (try? context.fetch(descriptor)) ?? []
-    let minifigure: Minifigure
-
-    if let existing = fetched.first {
-        minifigure = existing
-    } else {
-        let sample = Minifigure(
-            identifier: "dp001",
-            name: "Ariel, Mermaid",
-            quantityNeeded: 1
-        )
-
-        sample.parts = [
-            Part(
-                partID: "15279",
-                name: "Plant Grass Stem",
-                colorID: "36",
-                colorName: "Bright Green",
-                quantityNeeded: 2,
-                quantityHave: 1,
-                inventorySection: .regular,
-                minifigure: sample
-            )
-        ]
-
-        context.insert(sample)
-        try? context.save()
-        minifigure = sample
-    }
-
-    return NavigationStack {
-        MinifigureDetailView(minifigure: minifigure)
-    }
-    .modelContainer(container)
 }

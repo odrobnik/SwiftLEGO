@@ -37,7 +37,8 @@ enum SetImportUtilities {
                 quantityNeeded: totalNeeded,
                 imageURL: sample.imageURL,
                 partURL: sample.partURL,
-                inventorySection: sample.inventorySection
+                inventorySection: sample.inventorySection,
+                subparts: sample.subparts
             )
         }
         .sorted { lhs, rhs in
@@ -57,6 +58,49 @@ enum SetImportUtilities {
         }
     }
 
+    private static func makePartModel(
+        from payload: BrickLinkPartPayload,
+        set: BrickSet?,
+        minifigure: Minifigure?,
+        parentPart: Part?,
+        multiplier: Int = 1
+    ) -> Part {
+        let totalNeeded = payload.quantityNeeded * multiplier
+        let owningSet = parentPart == nil ? set : nil
+        let owningMinifigure = parentPart == nil ? minifigure : nil
+
+        let part = Part(
+            partID: payload.partID,
+            name: payload.name,
+            colorID: payload.colorID,
+            colorName: payload.colorName,
+            quantityNeeded: totalNeeded,
+            quantityHave: 0,
+            imageURLString: payload.imageURL?.absoluteString,
+            partURLString: payload.partURL?.absoluteString,
+            inventorySection: payload.inventorySection,
+            set: owningSet,
+            minifigure: owningMinifigure,
+            subparts: [],
+            parentPart: parentPart
+        )
+
+        if !payload.subparts.isEmpty {
+            let childMultiplier = totalNeeded
+            part.subparts = payload.subparts.map {
+                makePartModel(
+                    from: $0,
+                    set: set,
+                    minifigure: minifigure,
+                    parentPart: part,
+                    multiplier: childMultiplier
+                )
+            }
+        }
+
+        return part
+    }
+
     static func partPayloads(from parts: [Part]) -> [BrickLinkPartPayload] {
         parts.map {
             BrickLinkPartPayload(
@@ -67,7 +111,8 @@ enum SetImportUtilities {
                 quantityNeeded: $0.quantityNeeded,
                 imageURL: $0.imageURL,
                 partURL: $0.partURL,
-                inventorySection: $0.inventorySection
+                inventorySection: $0.inventorySection,
+                subparts: partPayloads(from: $0.subparts)
             )
         }
     }
@@ -126,18 +171,12 @@ enum SetImportUtilities {
 
         let aggregatedParts = aggregateParts(parts)
 
-        let partModels = aggregatedParts.map { part in
-            Part(
-                partID: part.partID,
-                name: part.name,
-                colorID: part.colorID,
-                colorName: part.colorName,
-                quantityNeeded: part.quantityNeeded,
-                quantityHave: 0,
-                imageURLString: part.imageURL?.absoluteString,
-                partURLString: part.partURL?.absoluteString,
-                inventorySection: part.inventorySection,
-                set: newSet
+        let partModels = aggregatedParts.map { payload in
+            makePartModel(
+                from: payload,
+                set: newSet,
+                minifigure: nil,
+                parentPart: nil
             )
         }
 
@@ -210,19 +249,12 @@ enum SetImportUtilities {
             minifigure.categories = categoryModels
 
             let aggregatedParts = aggregateParts(payload.parts)
-            let partModels = aggregatedParts.map { part in
-                Part(
-                    partID: part.partID,
-                    name: part.name,
-                    colorID: part.colorID,
-                    colorName: part.colorName,
-                    quantityNeeded: part.quantityNeeded,
-                    quantityHave: 0,
-                    imageURLString: part.imageURL?.absoluteString,
-                    partURLString: part.partURL?.absoluteString,
-                    inventorySection: part.inventorySection,
+            let partModels = aggregatedParts.map { partPayload in
+                makePartModel(
+                    from: partPayload,
                     set: nil,
-                    minifigure: minifigure
+                    minifigure: minifigure,
+                    parentPart: nil
                 )
             }
 

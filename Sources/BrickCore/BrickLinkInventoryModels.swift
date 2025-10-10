@@ -82,6 +82,8 @@ public struct BrickLinkPart: Sendable, Equatable {
 	public let imageURL: URL?
 	public let quantity: Int
 	public let section: BrickLinkPartSection
+	public let inventoryURL: URL?
+	public let subparts: [BrickLinkPart]
 
 	public init(
 		partID: String,
@@ -91,7 +93,9 @@ public struct BrickLinkPart: Sendable, Equatable {
 		colorID: String,
 		imageURL: URL?,
 		quantity: Int,
-		section: BrickLinkPartSection
+		section: BrickLinkPartSection,
+		inventoryURL: URL? = nil,
+		subparts: [BrickLinkPart] = []
 	) {
 		self.partID = partID
 		self.partURL = partURL
@@ -101,5 +105,7 @@ public struct BrickLinkPart: Sendable, Equatable {
 		self.imageURL = imageURL
 		self.quantity = quantity
 		self.section = section
+		self.inventoryURL = inventoryURL
+		self.subparts = subparts
 	}
 }

@@ -55,4 +55,31 @@ final class BrickLinkInventoryServiceTests: XCTestCase {
 		XCTAssertEqual(inventory.setNumber.lowercased(), "75965-1")
 		XCTAssertFalse(inventory.parts.isEmpty)
 	}
+
+	func testFetchInventoryFor41314IncludesSubparts() async throws {
+		let service = BrickLinkInventoryService()
+		let inventory = try await service.fetchInventory(for: "41314-1")
+
+		let accessories = try XCTUnwrap(
+			inventory.parts.first { part in
+				part.partID == "93082" && part.colorID == "42"
+			}
+		)
+		XCTAssertEqual(accessories.quantity, 1)
+		XCTAssertNotNil(accessories.inventoryURL)
+		XCTAssertFalse(accessories.subparts.isEmpty)
+		XCTAssertEqual(
+			accessories.subparts.first { $0.partID == "93082g" }?.quantity,
+			3
+		)
+		XCTAssertEqual(
+			accessories.subparts.first { $0.partID == "93082i" }?.quantity,
+			3
+		)
+
+		let sprue = try XCTUnwrap(inventory.parts.first { $0.partID == "3742sprue" })
+		XCTAssertEqual(sprue.subparts.count, 1)
+		XCTAssertEqual(sprue.subparts.first?.partID, "3742")
+		XCTAssertEqual(sprue.subparts.first?.quantity, 4)
+	}
 }

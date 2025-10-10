@@ -105,9 +105,12 @@ struct SetDetailView: View {
             } else {
                 ForEach(partsByColor, id: \.color) { group in
                     Section(group.color) {
-                        ForEach(group.parts) { part in
-                            PartRowView(part: part, isFilteringMissing: showMissingOnly)
-                        }
+                ForEach(group.parts) { part in
+                    PartRowNavigationWrapper(
+                        part: part,
+                        isFilteringMissing: showMissingOnly
+                    )
+                }
                     }
                 }
             }
@@ -511,6 +514,23 @@ struct PartRowView: View {
 
         withAnimation {
             update()
+        }
+    }
+}
+
+struct PartRowNavigationWrapper: View {
+    @Bindable var part: Part
+    let isFilteringMissing: Bool
+
+    var body: some View {
+        if part.subparts.isEmpty {
+            PartRowView(part: part, isFilteringMissing: isFilteringMissing)
+        } else {
+            NavigationLink {
+                PartDetailView(part: part)
+            } label: {
+                PartRowView(part: part, isFilteringMissing: isFilteringMissing)
+            }
         }
     }
 }

@@ -18,6 +18,7 @@ struct BrickLinkPartPayload: Sendable {
     let imageURL: URL?
     let partURL: URL?
     let inventorySection: Part.InventorySection
+    let subparts: [BrickLinkPartPayload]
 }
 
 struct SetCategoryPayload: Sendable, Equatable {
@@ -48,16 +49,7 @@ actor BrickLinkService {
         let inventory = try await inventoryService.fetchInventory(for: setNumber)
 
         let parts = inventory.parts.map { part in
-            BrickLinkPartPayload(
-                partID: part.partID,
-                name: part.name,
-                colorID: part.colorID,
-                colorName: part.colorName,
-                quantityNeeded: part.quantity,
-                imageURL: part.imageURL,
-                partURL: part.partURL,
-                inventorySection: Part.InventorySection(brickLinkSection: part.section)
-            )
+            makePartPayload(from: part)
         }
 
         let minifigures = inventory.minifigures.map { minifigure in
@@ -70,16 +62,7 @@ actor BrickLinkService {
                 inventoryURL: minifigure.inventoryURL,
                 categories: minifigure.categories.map { MinifigCategoryPayload(id: $0.id, name: $0.name) },
                 parts: minifigure.parts.map { part in
-                    BrickLinkPartPayload(
-                        partID: part.partID,
-                        name: part.name,
-                        colorID: part.colorID,
-                        colorName: part.colorName,
-                        quantityNeeded: part.quantity,
-                        imageURL: part.imageURL,
-                        partURL: part.partURL,
-                        inventorySection: Part.InventorySection(brickLinkSection: part.section)
-                    )
+                    makePartPayload(from: part)
                 }
             )
         }
@@ -91,6 +74,20 @@ actor BrickLinkService {
             parts: parts,
             categories: inventory.categories.map { SetCategoryPayload(id: $0.id, name: $0.name) },
             minifigures: minifigures
+        )
+    }
+
+    private func makePartPayload(from part: BrickLinkPart) -> BrickLinkPartPayload {
+        BrickLinkPartPayload(
+            partID: part.partID,
+            name: part.name,
+            colorID: part.colorID,
+            colorName: part.colorName,
+            quantityNeeded: part.quantity,
+            imageURL: part.imageURL,
+            partURL: part.partURL,
+            inventorySection: Part.InventorySection(brickLinkSection: part.section),
+            subparts: part.subparts.map { makePartPayload(from: $0) }
         )
     }
 }

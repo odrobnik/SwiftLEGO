@@ -48,6 +48,8 @@ final class Part: Identifiable {
     var inventorySectionRawValue: String = InventorySection.regular.rawValue
     var set: BrickSet?
     var minifigure: Minifigure?
+    @Relationship(deleteRule: .cascade, inverse: \Part.parentPart) var subparts: [Part] = []
+    @Relationship(deleteRule: .nullify) var parentPart: Part?
 
     init(
         id: UUID = UUID(),
@@ -61,7 +63,9 @@ final class Part: Identifiable {
         partURLString: String? = nil,
         inventorySection: InventorySection = .regular,
         set: BrickSet? = nil,
-        minifigure: Minifigure? = nil
+        minifigure: Minifigure? = nil,
+        subparts: [Part] = [],
+        parentPart: Part? = nil
     ) {
         self.id = id
         self.partID = partID
@@ -75,6 +79,8 @@ final class Part: Identifiable {
         self.inventorySectionRawValue = inventorySection.rawValue
         self.set = set
         self.minifigure = minifigure
+        self.subparts = subparts
+        self.parentPart = parentPart
     }
 }
 

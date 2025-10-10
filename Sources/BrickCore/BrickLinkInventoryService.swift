@@ -37,13 +37,14 @@ public final class BrickLinkInventoryService {
 		print("=== End Markdown ===")
 
 		let parsed = try parse(markdown: markdown, setNumber: setNumber, baseURL: url)
+		let enrichedParts = try await enrichParts(parsed.parts)
 		let minifigures = try await enrichMinifigures(parsed.minifigures)
 
 		return BrickLinkInventory(
 			setNumber: setNumber,
 			name: parsed.name ?? "Set \(setNumber)",
 			thumbnailURL: parsed.thumbnailURL,
-			parts: parsed.parts,
+			parts: enrichedParts,
 			categories: parsed.categories,
 			minifigures: minifigures
 		)
@@ -168,6 +169,47 @@ public final class BrickLinkInventoryService {
 			return (parts, minifigures)
 		}
 
+	private func enrichParts(_ parts: [BrickLinkPart]) async throws -> [BrickLinkPart] {
+		guard parts.contains(where: { $0.inventoryURL != nil }) else {
+			return parts
+		}
+
+		return try await withThrowingTaskGroup(of: (Int, BrickLinkPart).self) { group in
+			for (index, part) in parts.enumerated() where part.inventoryURL != nil {
+				guard let inventoryURL = part.inventoryURL else {
+					continue
+				}
+
+				group.addTask {
+					let rawSubparts = try await self.fetchParts(from: inventoryURL)
+					let enrichedSubparts = try await self.enrichParts(rawSubparts)
+
+					let enrichedPart = BrickLinkPart(
+						partID: part.partID,
+						partURL: part.partURL,
+						name: part.name,
+						colorName: part.colorName,
+						colorID: part.colorID,
+						imageURL: part.imageURL,
+						quantity: part.quantity,
+						section: part.section,
+						inventoryURL: part.inventoryURL,
+						subparts: enrichedSubparts
+					)
+
+					return (index, enrichedPart)
+				}
+			}
+
+			var updatedParts = parts
+			for try await (index, enriched) in group {
+				updatedParts[index] = enriched
+			}
+
+			return updatedParts
+		}
+	}
+
 	private func enrichMinifigures(_ minifigures: [ParsedMinifigure]) async throws -> [BrickLinkMinifigure] {
 		guard !minifigures.isEmpty else { return [] }
 
@@ -205,7 +247,11 @@ public final class BrickLinkInventoryService {
 
 	private func fetchMinifigureParts(for minifigure: ParsedMinifigure) async throws -> [BrickLinkPart] {
 		let url = minifigure.inventoryURL ?? inventoryURL(forMinifigure: minifigure.identifier)
-		let converter = HTML💡Markdown(url: url)
+		return try await fetchParts(from: url)
+	}
+
+	private func fetchParts(from inventoryURL: URL) async throws -> [BrickLinkPart] {
+		let converter = HTML💡Markdown(url: inventoryURL)
 		let markdown = try await converter.markdown()
 
 		let lines = markdown.components(separatedBy: .newlines)
@@ -217,7 +263,7 @@ public final class BrickLinkInventoryService {
 			let (parts, _) = try parseInventoryItems(
 				lines: lines,
 				startIndex: tableHeaderIndex + 2,
-				baseURL: url,
+				baseURL: inventoryURL,
 				allowMinifigures: false
 			)
 
@@ -279,6 +325,7 @@ public final class BrickLinkInventoryService {
 		let partName = normalizeWhitespace(extractPartName(from: imageColumn))
 
 		let (partID, partURL) = extractLink(from: partLinkColumn, baseURL: baseURL)
+		let inventoryURL = extractInventoryURL(from: partLinkColumn, baseURL: baseURL)
 
 		let rawDescription = descriptionColumn?
 			.replacingOccurrences(of: "**", with: "")
@@ -309,7 +356,8 @@ public final class BrickLinkInventoryService {
 			colorID: colorID,
 			imageURL: imageURL,
 			quantity: quantity,
-			section: section
+			section: section,
+			inventoryURL: inventoryURL
 		)
 	}
 
