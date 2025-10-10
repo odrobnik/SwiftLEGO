@@ -342,6 +342,13 @@ struct SetCollectionView: View {
                 return true
             }
 
+            if set.minifigures.contains(where: { minifigure in
+                let identifierLower = minifigure.identifier.lowercased()
+                return identifierLower == normalizedQuery || identifierLower.contains(normalizedQuery)
+            }) {
+                return true
+            }
+
             return false
         }
     }
