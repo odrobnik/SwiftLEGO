@@ -79,7 +79,41 @@ final class BrickLinkInventoryServiceTests: XCTestCase {
 
 		let sprue = try XCTUnwrap(inventory.parts.first { $0.partID == "3742sprue" })
 		XCTAssertEqual(sprue.subparts.count, 1)
-		XCTAssertEqual(sprue.subparts.first?.partID, "3742")
-		XCTAssertEqual(sprue.subparts.first?.quantity, 4)
+			XCTAssertEqual(sprue.subparts.first?.partID, "3742")
+			XCTAssertEqual(sprue.subparts.first?.quantity, 4)
+		}
+
+	func testInventorySnapshotLegacyDecoding() throws {
+		struct LegacyInventorySnapshot: Codable {
+			struct SetSnapshot: Codable {
+				struct PartSnapshot: Codable {
+					let partID: String
+					let colorID: String
+					let quantityHave: Int
+					let inventorySection: String?
+					let subparts: [PartSnapshot]?
+				}
+
+				struct MinifigureSnapshot: Codable {
+					let identifier: String
+					let quantityHave: Int
+					let parts: [PartSnapshot]
+				}
+
+				let setNumber: String
+				let parts: [PartSnapshot]
+				let minifigures: [MinifigureSnapshot]?
+			}
+
+			let sets: [SetSnapshot]
+		}
+
+		let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+		let fixturesDirectory = testsDirectory.deletingLastPathComponent().appendingPathComponent("Fixtures")
+		let fileURL = fixturesDirectory.appendingPathComponent("inventory-snapshot.json")
+
+		let data = try Data(contentsOf: fileURL)
+
+		XCTAssertNoThrow(try JSONDecoder().decode(LegacyInventorySnapshot.self, from: data))
 	}
 }
