@@ -86,16 +86,9 @@ struct SetDetailView: View {
 
     var body: some View {
         List {
-            headerSection
+            // headerSection
 
-            Section {
-                Picker("Inventory Section", selection: $selectedSection) {
-                    ForEach(Self.segmentedSections, id: \.self) { section in
-                        Text(segmentedTitle(for: section)).tag(section)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
+           
 
             if partsByColor.isEmpty {
                 Section {
@@ -124,6 +117,16 @@ struct SetDetailView: View {
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
         .toolbar {
+            
+            ToolbarItemGroup(placement: .bottomBar) {
+                Picker("Inventory Section", selection: $selectedSection) {
+                    ForEach(Self.segmentedSections, id: \.self) { section in
+                        Text(segmentedTitle(for: section)).tag(section)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            
             if partFilter != nil, let onShowEntireSet {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -133,6 +136,7 @@ struct SetDetailView: View {
                     }
                 }
             }
+            
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     withAnimation {
@@ -473,12 +477,12 @@ struct PartRowView: View {
                 switch phase {
                 case .empty:
                     ProgressView()
-                        .frame(width: 64, height: 64)
+                        .frame(width: 80, height: 60)
                 case .success(let image):
                     image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 64, height: 64)
+//                        .resizable()
+//                        .scaledToFit()
+                        .frame(width: 80, height: 60)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 case .failure:
                     placeholder
