@@ -209,6 +209,7 @@ struct LabelPrintSheet: View {
         operation.showsPrintPanel = true
         operation.showsProgressPanel = false
         operation.showsPreview = true
+        operation.printPanel.options = [.showsOrientation]
         return operation
     }
 }
@@ -351,13 +352,17 @@ struct LabelPrintSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack {
+                Spacer(minLength: 12)
+
                 SetLabelPreviewView(
                     brickSet: brickSet,
                     labelSize: labelSize,
                     displayScale: LabelMetrics.previewScale
                 )
-                .frame(maxWidth: .infinity, alignment: .center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                Spacer(minLength: 24)
 
                 Button {
                     printLabel()
@@ -375,8 +380,10 @@ struct LabelPrintSheet: View {
 
                 PrintAnchorView(anchorView: $anchorView)
                     .frame(width: 0, height: 0)
+
+                Spacer(minLength: 12)
             }
-            .padding()
+            .padding(.horizontal)
             .navigationTitle("Print Label")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
