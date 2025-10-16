@@ -18,15 +18,7 @@ struct SetLabelPreviewView: View {
             scale: displayScale
         )
         .padding()
-        .background(previewBackgroundColor)
-    }
-
-    private var previewBackgroundColor: Color {
-        #if os(macOS)
-        Color(nsColor: .windowBackgroundColor)
-        #else
-        Color(uiColor: .systemGroupedBackground)
-        #endif
+        .background(.white)
     }
 }
 
@@ -57,8 +49,8 @@ private struct SetLabelCanvas: View {
                         .minimumScaleFactor(LabelMetrics.titleMultiLineMinimumScale)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-
             }
+            .foregroundStyle(.black)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, LabelMetrics.horizontalPadding)
             .padding(.vertical, LabelMetrics.verticalPadding)
