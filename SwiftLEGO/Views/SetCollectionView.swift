@@ -11,6 +11,7 @@ struct SetCollectionView: View {
     @State private var showingBulkAddSheet = false
     @State private var setBeingRenamed: BrickSet?
     @State private var searchText: String = ""
+    @State private var searchScope: SearchScope = .sets
     @State private var debouncedSearchText: String = ""
     @State private var searchTask: Task<Void, Never>?
     @State private var exportDocument = InventorySnapshotDocument(snapshot: .empty)
@@ -43,6 +44,36 @@ struct SetCollectionView: View {
     ]
     private let uncategorizedSectionTitle = "Uncategorized"
 
+    private enum SearchScope: String, CaseIterable, Identifiable {
+        case sets
+        case parts
+        case minifigures
+
+        var id: SearchScope { self }
+
+        var title: String {
+            switch self {
+            case .sets:
+                return "Sets"
+            case .parts:
+                return "Parts"
+            case .minifigures:
+                return "Minifigures"
+            }
+        }
+
+        var prompt: String {
+            switch self {
+            case .sets:
+                return "Search sets"
+            case .parts:
+                return "Search parts"
+            case .minifigures:
+                return "Search minifigures"
+            }
+        }
+    }
+
     var body: some View {
         Group {
             if isSearching {
@@ -52,7 +83,16 @@ struct SetCollectionView: View {
             }
         }
         .navigationTitle(list.name)
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search Part ID")
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: Text(searchScope.prompt)
+        )
+        .searchScopes($searchScope) {
+            ForEach(SearchScope.allCases) { scope in
+                Text(scope.title).tag(scope)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -99,6 +139,10 @@ struct SetCollectionView: View {
 
                 debouncedSearchText = newValue
             }
+        }
+        .onChange(of: searchScope) { _, _ in
+            searchTask?.cancel()
+            debouncedSearchText = searchText
         }
         .sheet(isPresented: $showingAddSetSheet) {
             AddSetView(list: list) { result in
@@ -216,61 +260,139 @@ struct SetCollectionView: View {
     private var searchResultsView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 32) {
-                if !matchingSets.isEmpty {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Sets")
-                            .font(.title2.weight(.semibold))
-                            .padding(.horizontal)
-
-                        LazyVGrid(columns: adaptiveColumns, spacing: 16) {
-                            ForEach(matchingSets, id: \.persistentModelID) { set in
-                                Button {
-                                    onNavigate(.set(set.persistentModelID))
-                                } label: {
-                                    SetCardView(brickSet: set)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                } else if !groupedSearchEntries.isEmpty {
-                    ForEach(groupedSearchEntries, id: \.colorName) { group in
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text(group.colorName)
-                                .font(.title2.weight(.semibold))
-                                .padding(.horizontal)
-
-                            VStack(spacing: 16) {
-                                ForEach(group.entries) { entry in
-                                    SearchResultRow(entry: entry) {
-                                        onNavigate(
-                                            .filteredSet(
-                                                entry.set.persistentModelID,
-                                                partID: entry.part.partID,
-                                                colorID: entry.part.colorID
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                } else {
-                    ContentUnavailableView.search(text: trimmedSearchText)
-                        .padding()
-                }
+                searchResultsContent
             }
             .padding(.top, 16)
         }
         .background(Color(uiColor: .systemGroupedBackground))
     }
 
+    @ViewBuilder
+    private var searchResultsContent: some View {
+        switch searchScope {
+        case .sets:
+            setsSearchResultsContent
+        case .parts:
+            partsSearchResultsContent
+        case .minifigures:
+            minifigureSearchResultsContent
+        }
+    }
+
+    @ViewBuilder
+    private var setsSearchResultsContent: some View {
+        if !matchingSetsByCategory.isEmpty {
+            ForEach(matchingSetsByCategory, id: \.path) { group in
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(sectionTitle(for: group.path))
+                        .font(.title3.weight(.semibold))
+                        .padding(.horizontal)
+
+                    LazyVGrid(columns: adaptiveColumns, spacing: 16) {
+                        ForEach(group.sets) { set in
+                            Button {
+                                onNavigate(.set(set.persistentModelID))
+                            } label: {
+                                SetCardView(brickSet: set)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        } else {
+            ContentUnavailableView.search(text: trimmedSearchText)
+                .padding()
+        }
+    }
+
+    @ViewBuilder
+    private var partsSearchResultsContent: some View {
+        if !groupedPartEntries.isEmpty {
+            ForEach(groupedPartEntries, id: \.colorName) { group in
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(group.colorName)
+                        .font(.title2.weight(.semibold))
+                        .padding(.horizontal)
+
+                    VStack(spacing: 16) {
+                        ForEach(group.entries) { entry in
+                            PartSearchResultRow(entry: entry) {
+                                onNavigate(
+                                    .filteredSet(
+                                        entry.set.persistentModelID,
+                                        partID: entry.part.partID,
+                                        colorID: entry.part.colorID
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        } else {
+            ContentUnavailableView.search(text: trimmedSearchText)
+                .padding()
+        }
+    }
+
+    @ViewBuilder
+    private var minifigureSearchResultsContent: some View {
+        if !minifigureEntries.isEmpty {
+            VStack(spacing: 16) {
+                ForEach(minifigureEntries) { entry in
+                    MinifigureSearchResultRow(entry: entry) {
+                        onNavigate(.set(entry.set.persistentModelID))
+                    }
+                }
+            }
+            .padding(.horizontal)
+        } else {
+            ContentUnavailableView.search(text: trimmedSearchText)
+                .padding()
+        }
+    }
+
     private var groupedSets: [(path: [String], sets: [BrickSet])] {
         guard !sortedSets.isEmpty else { return [] }
 
         let groups = Dictionary(grouping: sortedSets) { set in
+            categoryPath(for: set)
+        }
+
+        return groups
+            .map { key, value in
+                let orderedSets = value.sorted { lhs, rhs in
+                    if lhs.setNumber != rhs.setNumber {
+                        return lhs.setNumber < rhs.setNumber
+                    }
+                    return lhs.name < rhs.name
+                }
+                return (path: key, sets: orderedSets)
+            }
+            .sorted { lhs, rhs in
+                let lhsIsUncategorized = lhs.path == [uncategorizedSectionTitle]
+                let rhsIsUncategorized = rhs.path == [uncategorizedSectionTitle]
+
+                if lhsIsUncategorized && !rhsIsUncategorized {
+                    return false
+                }
+
+                if !lhsIsUncategorized && rhsIsUncategorized {
+                    return true
+                }
+
+                return lhs.path.lexicographicallyPrecedes(rhs.path)
+            }
+    }
+
+    private var matchingSetsByCategory: [(path: [String], sets: [BrickSet])] {
+        let matches = matchingSets
+        guard !matches.isEmpty else { return [] }
+
+        let groups = Dictionary(grouping: matches) { set in
             categoryPath(for: set)
         }
 
@@ -326,36 +448,30 @@ struct SetCollectionView: View {
     }
 
     private var matchingSets: [BrickSet] {
-        guard isSearching else { return [] }
+        guard searchScope == .sets, isSearching else { return [] }
         let normalizedQuery = normalizedSearchText
         let strippedQuery = normalizeSetNumber(normalizedQuery)
-        let queryHasHyphen = normalizedQuery.contains("-")
+        let tokens = queryTokens(from: trimmedSearchText)
 
         return sortedSets.filter { set in
             let setNumberLower = set.setNumber.lowercased()
-            if setNumberLower == normalizedQuery {
-                return true
+            if !normalizedQuery.isEmpty {
+                if setNumberLower == normalizedQuery {
+                    return true
+                }
+
+                let strippedSetNumber = normalizeSetNumber(setNumberLower)
+                if !strippedQuery.isEmpty && strippedSetNumber == strippedQuery {
+                    return true
+                }
             }
 
-            let strippedSetNumber = normalizeSetNumber(setNumberLower)
-            if !queryHasHyphen && !strippedQuery.isEmpty && strippedSetNumber == strippedQuery {
-                return true
-            }
-
-            if set.minifigures.contains(where: { minifigure in
-                let identifierLower = minifigure.identifier.lowercased()
-                return identifierLower == normalizedQuery || identifierLower.contains(normalizedQuery)
-            }) {
-                return true
-            }
-
-            return false
+            return matches(nameTokens: tokens, in: set.name)
         }
     }
 
     private var matchingParts: [Part] {
-        guard isSearching else { return [] }
-        guard matchingSets.isEmpty else { return [] }
+        guard searchScope == .parts, isSearching else { return [] }
         let rawQuery = trimmedSearchText.lowercased()
         guard !rawQuery.isEmpty else { return [] }
 
@@ -391,6 +507,31 @@ struct SetCollectionView: View {
         }
     }
 
+    private var matchingMinifigures: [Minifigure] {
+        guard searchScope == .minifigures, isSearching else { return [] }
+        let normalizedQuery = normalizedSearchText
+        let tokens = queryTokens(from: trimmedSearchText)
+
+        return list.sets
+            .flatMap { $0.minifigures }
+            .filter { minifigure in
+                let identifierLower = minifigure.identifier.lowercased()
+                if !normalizedQuery.isEmpty && identifierLower == normalizedQuery {
+                    return true
+                }
+
+                return matches(nameTokens: tokens, in: minifigure.name)
+            }
+    }
+
+    private func matches(nameTokens tokenizedQuery: [String], in name: String) -> Bool {
+        guard !tokenizedQuery.isEmpty else { return false }
+        let nameTokens = queryTokens(from: name)
+        return tokenizedQuery.allSatisfy { token in
+            nameTokens.contains(where: { $0.hasPrefix(token) })
+        }
+    }
+
     private func queryTokens(from text: String) -> [String] {
         text
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
@@ -406,15 +547,19 @@ struct SetCollectionView: View {
         )
     }
 
-    private var searchEntries: [SearchEntry] {
-        matchingParts.compactMap { part in
+    private var partSearchEntries: [PartSearchEntry] {
+        guard searchScope == .parts else { return [] }
+        return matchingParts.compactMap { part in
             guard let set = part.set else { return nil }
-            return SearchEntry(set: set, part: part, missingCount: missingCount(for: part))
+            return PartSearchEntry(set: set, part: part, missingCount: missingCount(for: part))
         }
     }
 
-    private var groupedSearchEntries: [ColorGroup] {
-        let grouped = Dictionary(grouping: searchEntries) { entry in
+    private var groupedPartEntries: [ColorGroup] {
+        let entries = partSearchEntries
+        guard !entries.isEmpty else { return [] }
+
+        let grouped = Dictionary(grouping: entries) { entry in
             entry.part.colorName.isEmpty ? "Unknown Color" : entry.part.colorName
         }
 
@@ -434,16 +579,39 @@ struct SetCollectionView: View {
         }
     }
 
+    private var minifigureEntries: [MinifigureSearchEntry] {
+        guard searchScope == .minifigures else { return [] }
+
+        return matchingMinifigures
+            .compactMap { minifigure in
+                guard let set = minifigure.set else { return nil }
+                return MinifigureSearchEntry(
+                    set: set,
+                    minifigure: minifigure,
+                    missingCount: missingCount(for: minifigure)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.missingCount != rhs.missingCount {
+                    return lhs.missingCount < rhs.missingCount
+                }
+                return lhs.minifigure.identifier.localizedCaseInsensitiveCompare(rhs.minifigure.identifier) == .orderedAscending
+            }
+    }
+
     private func missingCount(for part: Part) -> Int {
         max(part.quantityNeeded - part.quantityHave, 0)
+    }
+
+    private func missingCount(for minifigure: Minifigure) -> Int {
+        max(minifigure.quantityNeeded - minifigure.quantityHave, 0)
     }
 
     private func normalizeSetNumber(_ number: String) -> String {
         number.split(separator: "-").first.map(String.init) ?? number
     }
 
-
-    private struct SearchEntry: Identifiable {
+    private struct PartSearchEntry: Identifiable {
         let set: BrickSet
         let part: Part
         let missingCount: Int
@@ -451,8 +619,8 @@ struct SetCollectionView: View {
         var id: PersistentIdentifier { part.persistentModelID }
     }
 
-    private struct SearchResultRow: View {
-        let entry: SearchEntry
+    private struct PartSearchResultRow: View {
+        let entry: PartSearchEntry
         let action: () -> Void
 
         var body: some View {
@@ -500,9 +668,66 @@ struct SetCollectionView: View {
         }
     }
 
+    private struct MinifigureSearchEntry: Identifiable {
+        let set: BrickSet
+        let minifigure: Minifigure
+        let missingCount: Int
+
+        var id: PersistentIdentifier { minifigure.persistentModelID }
+    }
+
+    private struct MinifigureSearchResultRow: View {
+        let entry: MinifigureSearchEntry
+        let action: () -> Void
+
+        var body: some View {
+            Button(action: action) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 16) {
+                        MinifigureThumbnail(url: entry.minifigure.imageURL)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(entry.minifigure.name)
+                                .font(.headline)
+
+                            Text(entry.minifigure.identifier)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+
+                            Text("\(entry.set.name) • \(entry.set.setNumber)")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    let missingCount = entry.missingCount
+                    Text(statusText(for: missingCount, minifigure: entry.minifigure))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(missingCount > 0 ? .orange : .green)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color(uiColor: .secondarySystemBackground))
+                        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+
+        private func statusText(for missingCount: Int, minifigure: Minifigure) -> String {
+            if missingCount > 0 {
+                return "Missing \(missingCount) • Need \(minifigure.quantityNeeded), have \(minifigure.quantityHave)"
+            } else {
+                return "Complete • Need \(minifigure.quantityNeeded), have \(minifigure.quantityHave)"
+            }
+        }
+    }
+
     private struct ColorGroup {
         let colorName: String
-        let entries: [SearchEntry]
+        let entries: [PartSearchEntry]
     }
 
     private struct PartThumbnail: View {
@@ -542,6 +767,48 @@ struct SetCollectionView: View {
                 .fill(Color(uiColor: .tertiarySystemFill))
                 .overlay {
                     Image(systemName: "cube.transparent")
+                        .foregroundStyle(.secondary)
+                }
+        }
+    }
+
+    private struct MinifigureThumbnail: View {
+        let url: URL?
+
+        var body: some View {
+            Group {
+                if let url {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                        case .failure:
+                            placeholder
+                        @unknown default:
+                            placeholder
+                        }
+                    }
+                } else {
+                    placeholder
+                }
+            }
+            .frame(width: 60, height: 60)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+            )
+        }
+
+        private var placeholder: some View {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(uiColor: .tertiarySystemFill))
+                .overlay {
+                    Image(systemName: "person.fill")
                         .foregroundStyle(.secondary)
                 }
         }

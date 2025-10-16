@@ -85,34 +85,43 @@ struct SetDetailView: View {
     }
 
     var body: some View {
-        List {
-            // headerSection
-
-           
-
+        
+        Group {
             if partsByColor.isEmpty {
-                Section {
-                    Text(normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search.")
-                        .foregroundStyle(.secondary)
-                }
+                
+                EmptyStateView(icon: "shippingbox", title: "No parts", message: normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search.")
             } else {
-                ForEach(partsByColor, id: \.color) { group in
-                    Section(group.color) {
-                ForEach(group.parts) { part in
-                    PartRowNavigationWrapper(
-                        part: part,
-                        isFilteringMissing: showMissingOnly
-                    )
-                }
+                
+                
+                
+                List {
+                    // headerSection
+                    
+                    
+                    
+                    if partsByColor.isEmpty {
+                        
+                        EmptyStateView(icon: "shippingbox", title: "No parts", message: normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search.")
+                    } else {
+                        ForEach(partsByColor, id: \.color) { group in
+                            Section(group.color) {
+                                ForEach(group.parts) { part in
+                                    PartRowNavigationWrapper(
+                                        part: part,
+                                        isFilteringMissing: showMissingOnly
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    if !minifigures.isEmpty {
+                        minifigureSection
                     }
                 }
-            }
-
-            if !minifigures.isEmpty {
-                minifigureSection
+                .listStyle(.insetGrouped)
             }
         }
-        .listStyle(.insetGrouped)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search parts")
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
