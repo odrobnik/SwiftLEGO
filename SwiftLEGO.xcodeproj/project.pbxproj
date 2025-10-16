@@ -38,6 +38,7 @@
 		7fb8e185242b4dbf99b33cec /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5711145d88b540d0805bbf42 /* ContentView.swift */; };
 		88bb99cc00ddeeff11aa22bb /* String+Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = bca132def5468790fedcba97 /* String+Markdown.swift */; };
 		99cc00ddeeff11aa22bb33cc /* WebKitBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = cab231edf6547890fedcba96 /* WebKitBrowser.swift */; };
+		D5E6F708192A3B4C5D6E7F80 /* SetLabelPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5C6D7E8F /* SetLabelPreviewView.swift */; };
 		A7AB6DDF2E945E6300C813E2 /* HTMLParser in Frameworks */ = {isa = PBXBuildFile; productRef = FEEDBEEFCAFEDADA12345678 /* HTMLParser */; };
 		aa759d4131464a139628de43 /* CollectionList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46ad3394cab847e4b893b19f /* CollectionList.swift */; };
 		d2a6d403f42b4da69a1e084d /* ListEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73dd9c1c1c804386b3c34afe /* ListEditorView.swift */; };
@@ -84,6 +85,7 @@
 		f18655541b944772b8a0b924 /* SwiftLEGOModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLEGOModelContainer.swift; sourceTree = "<group>"; };
 		f1e2d3c4b5a6401298765435 /* DomText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomText.swift; sourceTree = "<group>"; };
 		f4399a533a6241e3a32c327d /* ListSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListSidebarView.swift; sourceTree = "<group>"; };
+		D4E5F60718293A4B5C6D7E8F /* SetLabelPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetLabelPreviewView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,6 +134,7 @@
 				1f2e3d4c5b6a79808796a5b4 /* BulkAddSetsView.swift */,
 				cbff937e47d941a48c5de551 /* RenameSetView.swift */,
 				b7f25c9f025b48bfbb5e7b71 /* SetCardView.swift */,
+				D4E5F60718293A4B5C6D7E8F /* SetLabelPreviewView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -341,6 +344,7 @@
 				77aa88bb99cc00ddeeff11aa /* HTML💡Markdown.swift in Sources */,
 				88bb99cc00ddeeff11aa22bb /* String+Markdown.swift in Sources */,
 				99cc00ddeeff11aa22bb33cc /* WebKitBrowser.swift in Sources */,
+				D5E6F708192A3B4C5D6E7F80 /* SetLabelPreviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

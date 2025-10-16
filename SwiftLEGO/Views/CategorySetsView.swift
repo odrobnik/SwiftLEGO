@@ -9,6 +9,7 @@ struct CategorySetsView: View {
     let onNavigate: (ContentView.Destination) -> Void
 
     @State private var setBeingRenamed: BrickSet?
+    @State private var labelPrintTarget: BrickSet?
 
     private let adaptiveColumns = [
         GridItem(.adaptive(minimum: 220), spacing: 16)
@@ -71,6 +72,9 @@ struct CategorySetsView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .contextMenu {
+                                        Button("Print Label…", systemImage: "printer") {
+                                            labelPrintTarget = set
+                                        }
                                         Button("Rename", systemImage: "pencil") {
                                             setBeingRenamed = set
                                         }
@@ -93,6 +97,9 @@ struct CategorySetsView: View {
         .navigationTitle(title)
         .sheet(item: $setBeingRenamed) { set in
             RenameSetView(set: set)
+        }
+        .sheet(item: $labelPrintTarget) { set in
+            LabelPrintSheet(brickSet: set)
         }
     }
 

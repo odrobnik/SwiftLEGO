@@ -19,6 +19,7 @@ struct SetCollectionView: View {
     @State private var isExportingInventory = false
     @State private var isImportingInventory = false
     @State private var inventoryAlert: InventoryAlert?
+    @State private var labelPrintTarget: BrickSet?
 
     init(
         list: CollectionList,
@@ -167,6 +168,9 @@ struct SetCollectionView: View {
         .sheet(item: $setBeingRenamed) { set in
             RenameSetView(set: set)
         }
+        .sheet(item: $labelPrintTarget) { set in
+            LabelPrintSheet(brickSet: set)
+        }
         .fileExporter(
             isPresented: $isExportingInventory,
             document: exportDocument,
@@ -224,6 +228,9 @@ struct SetCollectionView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .contextMenu {
+                                        Button("Print Label…", systemImage: "printer") {
+                                            labelPrintTarget = set
+                                        }
                                         Button("Rename", systemImage: "pencil") {
                                             setBeingRenamed = set
                                         }
@@ -296,6 +303,19 @@ struct SetCollectionView: View {
                                 SetCardView(brickSet: set)
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Print Label…", systemImage: "printer") {
+                                    labelPrintTarget = set
+                                }
+                                Button("Rename", systemImage: "pencil") {
+                                    setBeingRenamed = set
+                                }
+                                Button(role: .destructive) {
+                                    delete(set)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal)
