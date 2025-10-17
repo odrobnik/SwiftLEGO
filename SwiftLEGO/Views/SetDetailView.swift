@@ -34,6 +34,7 @@ struct SetDetailView: View {
     }
 
     private var minifigures: [Minifigure] {
+        guard shouldShowMinifigures else { return [] }
         filteredMinifigures.sorted { lhs, rhs in
             if lhs.name != rhs.name {
                 return lhs.name < rhs.name
@@ -70,6 +71,7 @@ struct SetDetailView: View {
     }
 
     private var filteredMinifigures: [Minifigure] {
+        guard shouldShowMinifigures else { return [] }
         let minifiguresMatchingMissingToggle = brickSet.minifigures.filter { minifigure in
             !showMissingOnly || minifigure.quantityHave < minifigure.quantityNeeded
         }
@@ -173,7 +175,8 @@ struct SetDetailView: View {
             ForEach(minifigures) { minifigure in
                 NavigationLink {
                     MinifigureDetailView(minifigure: minifigure)
-                } label: {
+                }
+                label: {
                     MinifigureRowView(minifigure: minifigure)
                 }
                 .buttonStyle(.plain)
@@ -233,6 +236,10 @@ struct SetDetailView: View {
         case .extra:
             return "Extras"
         }
+    }
+
+    private var shouldShowMinifigures: Bool {
+        selectedSection == .regular
     }
 
     private static func initialSection(
