@@ -70,11 +70,15 @@ struct SetDetailView: View {
     }
 
     private var filteredMinifigures: [Minifigure] {
-        guard let query = normalizedSearchQuery else {
-            return brickSet.minifigures
+        let minifiguresMatchingMissingToggle = brickSet.minifigures.filter { minifigure in
+            !showMissingOnly || minifigure.quantityHave < minifigure.quantityNeeded
         }
 
-        return brickSet.minifigures.filter { minifigure in
+        guard let query = normalizedSearchQuery else {
+            return minifiguresMatchingMissingToggle
+        }
+
+        return minifiguresMatchingMissingToggle.filter { minifigure in
             matchesMinifigure(minifigure, query: query)
         }
     }
