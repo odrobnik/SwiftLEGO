@@ -1,22 +1,41 @@
+import Foundation
 import SwiftUI
 import SwiftData
 #if os(macOS)
-import AppKit
+  import AppKit
 #else
-import UIKit
+  import UIKit
+#endif
+
+#if os(macOS)
+  private extension NSFont {
+    var lineHeight: CGFloat {
+      ascender - descender + leading
+    }
+  }
+#endif
+
+#if os(macOS)
+  private typealias PlatformFont = NSFont
+#else
+  private typealias PlatformFont = UIFont
 #endif
 
 struct SetLabelPreviewView: View {
-    let brickSet: BrickSet
-    var labelSize: CGSize = LabelMetrics.printSize
-    var displayScale: CGFloat = LabelMetrics.previewScale
+  let brickSet: BrickSet
+  var labelSize: CGSize?
+  var displayScale: CGFloat = LabelMetrics.previewScale
 
-    var body: some View {
-        ScaledLabelCanvas(
-            brickSet: brickSet,
-            labelSize: labelSize,
-            scale: displayScale
-        )
+  private var resolvedLabelSize: CGSize {
+    labelSize ?? LabelMetrics.labelSize(for: brickSet)
+  }
+
+  var body: some View {
+    ScaledLabelCanvas(
+      brickSet: brickSet,
+      labelSize: resolvedLabelSize,
+      scale: displayScale
+    )
         .padding()
         .background(.white)
     }
@@ -89,32 +108,173 @@ private struct ScaledLabelCanvas: View {
 }
 
 private enum LabelMetrics {
-    static let labelWidthMillimeters: CGFloat = 62
-    static let labelHeightMillimeters: CGFloat = 20
+  static let labelWidthMillimeters: CGFloat = 62
+  static let fallbackHeightMillimeters: CGFloat = 20
+  static let previewScale: CGFloat = 2.0
 
-    static let printSize = CGSize(
-        width: points(fromMillimeters: labelWidthMillimeters),
-        height: points(fromMillimeters: labelHeightMillimeters)
+  static let horizontalPadding: CGFloat = 6
+  static let verticalPadding: CGFloat = 6
+  static let verticalSpacing: CGFloat = 4
+
+  private static let identifierFontSize: CGFloat = 14
+  private static let identifierFontWeight: Font.Weight = .semibold
+
+  private static let titleSingleLineFontSize: CGFloat = 16
+  private static let titleSingleLineFontWeight: Font.Weight = .regular
+
+  private static let titleMultiLineFontSize: CGFloat = 14
+  private static let titleMultiLineFontWeight: Font.Weight = .regular
+
+  static var identifierFont: Font {
+    swiftUIFont(size: identifierFontSize, weight: identifierFontWeight)
+  }
+
+  static var titleFont: Font {
+    swiftUIFont(size: titleSingleLineFontSize, weight: titleSingleLineFontWeight)
+  }
+
+  static var titleMultiLineFont: Font {
+    swiftUIFont(size: titleMultiLineFontSize, weight: titleMultiLineFontWeight)
+  }
+
+  static func labelSize(for brickSet: BrickSet) -> CGSize {
+    let width = labelWidthPoints
+    let contentWidth = max(1, width - (horizontalPadding * 2))
+
+    let numberHeight = textHeight(
+      for: brickSet.setNumber,
+      font: identifierNativeFont,
+      constrainedTo: contentWidth,
+      maxLines: 1
     )
-    static let previewScale: CGFloat = 2.0
-    static let uncategorizedTitle = "Uncategorized"
 
-    static let horizontalPadding: CGFloat = 6
-    static let verticalPadding: CGFloat = 6
-    static let verticalSpacing: CGFloat = 4
+    let nameHeight = nameHeight(for: brickSet.name, constrainedTo: contentWidth)
 
-    static let identifierFont = Font.system(size: 14, weight: .bold, design: .rounded)
-    static let identifierMinimumScale: CGFloat = 0.75
+    let spacing = brickSet.name.isEmpty ? 0 : verticalSpacing
+    let totalHeight = verticalPadding * 2 + numberHeight + spacing + nameHeight
+    let fallbackHeight = points(fromMillimeters: fallbackHeightMillimeters)
 
-    static let titleFont = Font.system(size: 16, weight: .regular, design: .rounded)
-    static let titleSingleLineMinimumScale: CGFloat = 0.8
+    return CGSize(width: width, height: max(totalHeight, fallbackHeight))
+  }
 
-    static let titleMultiLineFont = Font.system(size: 14, weight: .regular, design: .rounded)
-    static let titleMultiLineMinimumScale: CGFloat = 0.75
+  static let identifierMinimumScale: CGFloat = 0.75
+  static let titleSingleLineMinimumScale: CGFloat = 0.8
+  static let titleMultiLineMinimumScale: CGFloat = 0.75
 
-    static func points(fromMillimeters millimeters: CGFloat) -> CGFloat {
-        millimeters * 72.0 / 25.4
+  private static var identifierNativeFont: PlatformFont {
+    platformFont(size: identifierFontSize, weight: identifierFontWeight)
+  }
+
+  private static var titleSingleLineNativeFont: PlatformFont {
+    platformFont(size: titleSingleLineFontSize, weight: titleSingleLineFontWeight)
+  }
+
+  private static var titleMultiLineNativeFont: PlatformFont {
+    platformFont(size: titleMultiLineFontSize, weight: titleMultiLineFontWeight)
+  }
+
+  private static func nameHeight(for text: String, constrainedTo width: CGFloat) -> CGFloat {
+    guard !text.isEmpty else { return 0 }
+
+    let singleLineWidth = textWidth(for: text, font: titleSingleLineNativeFont)
+    if singleLineWidth <= width {
+      return titleSingleLineNativeFont.lineHeight
     }
+
+    return textHeight(
+      for: text,
+      font: titleMultiLineNativeFont,
+      constrainedTo: width,
+      maxLines: 2
+    )
+  }
+
+  private static var labelWidthPoints: CGFloat {
+    points(fromMillimeters: labelWidthMillimeters)
+  }
+
+  static func points(fromMillimeters millimeters: CGFloat) -> CGFloat {
+    millimeters * 72.0 / 25.4
+  }
+
+  private static func textHeight(
+    for text: String,
+    font: PlatformFont,
+    constrainedTo width: CGFloat,
+    maxLines: Int
+  ) -> CGFloat {
+    guard !text.isEmpty else { return 0 }
+    let boundingSize = CGSize(width: width, height: .greatestFiniteMagnitude)
+    let rect = attributedString(text, font: font).boundingRect(
+      with: boundingSize,
+      options: [.usesLineFragmentOrigin, .usesFontLeading],
+      context: nil
+    )
+    let measuredHeight = ceil(rect.height)
+    let maxHeight = ceil(font.lineHeight * CGFloat(maxLines))
+    return min(measuredHeight, maxHeight)
+  }
+
+  private static func textWidth(for text: String, font: PlatformFont) -> CGFloat {
+    guard !text.isEmpty else { return 0 }
+    let rect = attributedString(text, font: font).boundingRect(
+      with: CGSize(width: .greatestFiniteMagnitude, height: font.lineHeight),
+      options: [.usesLineFragmentOrigin, .usesFontLeading],
+      context: nil
+    )
+    return ceil(rect.width)
+  }
+
+  private static func attributedString(_ text: String, font: PlatformFont) -> NSAttributedString {
+    NSAttributedString(
+      string: text,
+      attributes: [.font: font]
+    )
+  }
+
+  private static func swiftUIFont(size: CGFloat, weight: Font.Weight) -> Font {
+    Font.system(size: size, weight: weight, design: .rounded)
+  }
+
+  private static func platformFont(size: CGFloat, weight: Font.Weight) -> PlatformFont {
+#if os(macOS)
+    return NSFont.systemFont(ofSize: size, weight: convertWeight(weight))
+#else
+    return UIFont.systemFont(ofSize: size, weight: convertWeight(weight))
+#endif
+  }
+
+#if os(macOS)
+  private static func convertWeight(_ weight: Font.Weight) -> NSFont.Weight {
+    switch weight {
+    case .ultraLight: return .ultraLight
+    case .thin: return .thin
+    case .light: return .light
+    case .regular: return .regular
+    case .medium: return .medium
+    case .semibold: return .semibold
+    case .bold: return .bold
+    case .heavy: return .heavy
+    case .black: return .black
+    default: return .regular
+    }
+  }
+#else
+  private static func convertWeight(_ weight: Font.Weight) -> UIFont.Weight {
+    switch weight {
+    case .ultraLight: return .ultraLight
+    case .thin: return .thin
+    case .light: return .light
+    case .regular: return .regular
+    case .medium: return .medium
+    case .semibold: return .semibold
+    case .bold: return .bold
+    case .heavy: return .heavy
+    case .black: return .black
+    default: return .regular
+    }
+  }
+#endif
 }
 
 #Preview {
@@ -131,9 +291,11 @@ struct LabelPrintSheet: View {
     @Environment(\.dismiss) private var dismiss
     let brickSet: BrickSet
     @State private var isPrinting = false
+    private let labelSize: CGSize
 
-    private var labelSize: CGSize {
-        LabelMetrics.printSize
+    init(brickSet: BrickSet) {
+        self.brickSet = brickSet
+        self.labelSize = LabelMetrics.labelSize(for: brickSet)
     }
 
     var body: some View {
@@ -197,7 +359,15 @@ struct LabelPrintSheet: View {
         let printInfo = NSPrintInfo()
         configurePrintInfo(printInfo, desiredSize: labelSize)
 
-        let operation = NSPrintOperation(view: AppKitLabelRenderingView(brickSet: brickSet, labelSize: labelSize), printInfo: printInfo)
+        let renderingView = NSHostingView(rootView:
+            SetLabelCanvas(brickSet: brickSet)
+                .frame(width: labelSize.width, height: labelSize.height)
+        )
+        let nsSize = NSSize(width: labelSize.width, height: labelSize.height)
+        renderingView.frame = NSRect(origin: .zero, size: nsSize)
+        renderingView.layoutSubtreeIfNeeded()
+
+        let operation = NSPrintOperation(view: renderingView, printInfo: printInfo)
         operation.showsPrintPanel = true
         operation.showsProgressPanel = false
         operation.showsPreview = true
@@ -336,10 +506,14 @@ struct LabelPrintSheet: View {
     let brickSet: BrickSet
     @State private var isPrinting = false
     @State private var anchorView: UIView?
-    @State private var printDelegate = LabelPrintDelegate(labelSize: LabelMetrics.printSize)
+    @State private var printDelegate: LabelPrintDelegate
+    private let labelSize: CGSize
 
-    private var labelSize: CGSize {
-        LabelMetrics.printSize
+    init(brickSet: BrickSet) {
+        self.brickSet = brickSet
+        let resolvedSize = LabelMetrics.labelSize(for: brickSet)
+        self._printDelegate = State(initialValue: LabelPrintDelegate(labelSize: resolvedSize))
+        self.labelSize = resolvedSize
     }
 
     var body: some View {
@@ -398,6 +572,7 @@ struct LabelPrintSheet: View {
         controller.printInfo?.orientation = .portrait
         controller.printPageRenderer = LabelPrintPageRenderer(brickSet: brickSet, labelSize: labelSize)
         controller.delegate = printDelegate
+        printDelegate.labelSize = labelSize
 
         isPrinting = true
         let completion: UIPrintInteractionController.CompletionHandler = { _, completed, error in
@@ -463,7 +638,7 @@ private final class LabelPrintPageRenderer: UIPrintPageRenderer {
 
 @available(iOS 16.0, *)
 private final class LabelPrintDelegate: NSObject, UIPrintInteractionControllerDelegate {
-    private let labelSize: CGSize
+    var labelSize: CGSize
 
     init(labelSize: CGSize) {
         self.labelSize = labelSize
