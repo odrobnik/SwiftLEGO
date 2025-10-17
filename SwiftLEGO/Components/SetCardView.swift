@@ -42,7 +42,8 @@ struct SetCardView: View {
                     PlaceholderArtworkView(symbol: "shippingbox.fill")
                 }
             }
-            .aspectRatio(1, contentMode: .fit)
+            .frame(height: 240)
+            .clipped()
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(brickSet.setNumber)
@@ -54,10 +55,6 @@ struct SetCardView: View {
                     .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
-
-                Text("\(brickSet.parts.count) parts configured")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
         .padding()
