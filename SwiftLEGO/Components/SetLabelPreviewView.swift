@@ -478,7 +478,7 @@ private final class LabelPrintDelegate: NSObject, UIPrintInteractionControllerDe
         let printable = paper.printableRect
         let topMargin = printable.origin.y
         let bottomMargin = paper.paperSize.height - printable.maxY
-        let targetLength = labelSize.height + topMargin + bottomMargin
+        let targetLength = labelSize.height
         return min(targetLength, paper.paperSize.height)
     }
 }
