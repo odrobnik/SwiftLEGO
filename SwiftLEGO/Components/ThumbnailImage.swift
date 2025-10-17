@@ -57,7 +57,7 @@ struct ThumbnailImage<Content: View>: View {
             .onAppear {
                 viewModel.startLoadingIfNeeded()
             }
-            .onChange(of: url) { newValue in
+            .onChange(of: url) { _, newValue in
                 viewModel.setURL(newValue)
             }
     }

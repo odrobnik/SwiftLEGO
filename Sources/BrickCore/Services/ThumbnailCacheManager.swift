@@ -76,7 +76,7 @@ actor ThumbnailCacheManager {
     }
 
     private func fetchData(for url: URL) async throws -> Data {
-        try await acquirePermit()
+        await acquirePermit()
         defer { releasePermit() }
 
         let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)

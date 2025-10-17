@@ -650,9 +650,6 @@ private final class LabelPrintDelegate: NSObject, UIPrintInteractionControllerDe
 
     @available(iOS 17.0, *)
     func printInteractionController(_ printInteractionController: UIPrintInteractionController, cutLengthFor paper: UIPrintPaper) -> CGFloat {
-        let printable = paper.printableRect
-        let topMargin = printable.origin.y
-        let bottomMargin = paper.paperSize.height - printable.maxY
         let targetLength = labelSize.height
         return min(targetLength, paper.paperSize.height)
     }
