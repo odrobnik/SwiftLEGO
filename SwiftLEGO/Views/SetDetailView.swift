@@ -292,9 +292,9 @@ private struct HeaderThumbnail: View {
     @ViewBuilder
     private var thumbnail: some View {
         if let url = brickSet.thumbnailURL {
-            AsyncImage(url: url) { phase in
+            ThumbnailImage(url: url) { phase in
                 switch phase {
-                case .empty:
+                case .empty, .loading:
                     ProgressView()
                         .frame(width: 44, height: 44)
                 case .success(let image):
@@ -303,10 +303,14 @@ private struct HeaderThumbnail: View {
                         .scaledToFill()
                         .frame(width: 96, height: 96)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                case .failure:
-                    placeholder
-                @unknown default:
-                    placeholder
+                case .failure(let state):
+                    VStack(spacing: 8) {
+                        placeholder
+                        Button("Retry") {
+                            state.retry()
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
             }
             .background(.white)
@@ -371,9 +375,9 @@ private struct MinifigureRowView: View {
     @ViewBuilder
     private var thumbnail: some View {
         if let url = minifigure.imageURL {
-            AsyncImage(url: url) { phase in
+            ThumbnailImage(url: url) { phase in
                 switch phase {
-                case .empty:
+                case .empty, .loading:
                     ProgressView()
                         .frame(width: 64, height: 64)
                 case .success(let image):
@@ -382,10 +386,14 @@ private struct MinifigureRowView: View {
                         .scaledToFit()
                         .frame(width: 64, height: 64)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                case .failure:
-                    placeholder
-                @unknown default:
-                    placeholder
+                case .failure(let state):
+                    VStack(spacing: 6) {
+                        placeholder
+                        Button("Retry") {
+                            state.retry()
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
             }
             .background(.white)
@@ -486,9 +494,9 @@ struct PartRowView: View {
     @ViewBuilder
     private var thumbnail: some View {
         if let url = part.imageURL {
-            AsyncImage(url: url) { phase in
+            ThumbnailImage(url: url) { phase in
                 switch phase {
-                case .empty:
+                case .empty, .loading:
                     ProgressView()
                         .frame(width: 80, height: 60)
                 case .success(let image):
@@ -497,10 +505,14 @@ struct PartRowView: View {
 //                        .scaledToFit()
                         .frame(width: 80, height: 60)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                case .failure:
-                    placeholder
-                @unknown default:
-                    placeholder
+                case .failure(let state):
+                    VStack(spacing: 6) {
+                        placeholder
+                        Button("Retry") {
+                            state.retry()
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
             }
             .background(.white)

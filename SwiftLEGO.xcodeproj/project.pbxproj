@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00223344556677889900AABB /* ThumbnailImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00AABBCCDDEEFF0011223344 /* ThumbnailImage.swift */; };
+		00223344556677889900AABC /* ThumbnailCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00AABBCCDDEEFF0011223345 /* ThumbnailCacheManager.swift */; };
 		003b71505824429e8f563e5a /* Part.swift in Sources */ = {isa = PBXBuildFile; fileRef = a6784f013ddf499db8bdabcf /* Part.swift */; };
 		E5A0B9F2C972428BA662CEB6 /* Minifigure.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEB699C7264945E8ADAE7CA4 /* Minifigure.swift */; };
 		E126552B7EF340CD8F078047 /* MinifigCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A75EB7C37AF549DCAD01EEAC /* MinifigCategory.swift */; };
@@ -48,6 +50,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		00AABBCCDDEEFF0011223344 /* ThumbnailImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailImage.swift; sourceTree = "<group>"; };
+		00AABBCCDDEEFF0011223345 /* ThumbnailCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCacheManager.swift; sourceTree = "<group>"; };
 		1f2e3d4c5b6a79808796a5b4 /* BulkAddSetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BulkAddSetsView.swift; sourceTree = "<group>"; };
 		9c8d7e6f5a4b3c2d1e0f9a8b /* SetCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCategory.swift; sourceTree = "<group>"; };
 		A75EB7C37AF549DCAD01EEAC /* MinifigCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinifigCategory.swift; sourceTree = "<group>"; };
@@ -133,6 +137,7 @@
 				35386ab795c64cfe8821d271 /* AddSetView.swift */,
 				1f2e3d4c5b6a79808796a5b4 /* BulkAddSetsView.swift */,
 				cbff937e47d941a48c5de551 /* RenameSetView.swift */,
+				00AABBCCDDEEFF0011223344 /* ThumbnailImage.swift */,
 				b7f25c9f025b48bfbb5e7b71 /* SetCardView.swift */,
 				D4E5F60718293A4B5C6D7E8F /* SetLabelPreviewView.swift */,
 			);
@@ -157,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				87e2ca925daf41bd8f822bb3 /* BrickLinkService.swift */,
+				00AABBCCDDEEFF0011223345 /* ThumbnailCacheManager.swift */,
 				3c4d5e6f708192a3b4c5d6e7 /* SetImportUtilities.swift */,
 				5f3c1a2b4d6e7f8091a2b3c4 /* InventorySnapshot.swift */,
 				4a5b6c7d8e9f0123456789ab /* InventorySnapshotDocument.swift */,
@@ -322,6 +328,8 @@
 				2a3b4c5d6e7f8091a2b3c4d5 /* BulkAddSetsView.swift in Sources */,
 				5b1023cd80a2408b832e1582 /* RenameSetView.swift in Sources */,
 				78b83b4b7a6f4f549f1d6945 /* SetCardView.swift in Sources */,
+				00223344556677889900AABC /* ThumbnailCacheManager.swift in Sources */,
+				00223344556677889900AABB /* ThumbnailImage.swift in Sources */,
 				aa759d4131464a139628de43 /* CollectionList.swift in Sources */,
 				360f6b44ed3545d98f309e88 /* BrickSet.swift in Sources */,
 				0147f5a9b2c34d8e9f0a1b2c /* SetCategory.swift in Sources */,

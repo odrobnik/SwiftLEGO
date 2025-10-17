@@ -138,9 +138,9 @@ private struct MinifigureThumbnail: View {
     @ViewBuilder
     private var thumbnail: some View {
         if let url = minifigure.imageURL {
-            AsyncImage(url: url) { phase in
+            ThumbnailImage(url: url) { phase in
                 switch phase {
-                case .empty:
+                case .empty, .loading:
                     ProgressView()
                         .frame(width: 96, height: 96)
                 case .success(let image):
@@ -148,10 +148,20 @@ private struct MinifigureThumbnail: View {
                         .resizable()
                         .scaledToFit()
                         .frame(maxWidth: 120, maxHeight: 120)
-                case .failure:
-                    placeholder
-                @unknown default:
-                    placeholder
+                case .failure(let state):
+                    ZStack {
+                        placeholder
+                        VStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(.red)
+                            Button("Retry") {
+                                state.retry()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .padding(12)
+                    }
                 }
             }
             .background(.white)

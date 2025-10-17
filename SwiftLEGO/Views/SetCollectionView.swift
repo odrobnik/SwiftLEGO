@@ -756,18 +756,28 @@ struct SetCollectionView: View {
         var body: some View {
             Group {
                 if let url {
-                    AsyncImage(url: url) { phase in
+                    ThumbnailImage(url: url) { phase in
                         switch phase {
-                        case .empty:
+                        case .empty, .loading:
                             ProgressView()
                         case .success(let image):
                             image
                                 .resizable()
                                 .scaledToFit()
-                        case .failure:
-                            placeholder
-                        @unknown default:
-                            placeholder
+                        case .failure(let state):
+                            ZStack {
+                                placeholder
+                                VStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.red)
+                                    Button("Retry") {
+                                        state.retry()
+                                    }
+                                    .font(.caption)
+                                }
+                                .padding(8)
+                            }
                         }
                     }
                 } else {
@@ -798,18 +808,28 @@ struct SetCollectionView: View {
         var body: some View {
             Group {
                 if let url {
-                    AsyncImage(url: url) { phase in
+                    ThumbnailImage(url: url) { phase in
                         switch phase {
-                        case .empty:
+                        case .empty, .loading:
                             ProgressView()
                         case .success(let image):
                             image
                                 .resizable()
                                 .scaledToFit()
-                        case .failure:
-                            placeholder
-                        @unknown default:
-                            placeholder
+                        case .failure(let state):
+                            ZStack {
+                                placeholder
+                                VStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.red)
+                                    Button("Retry") {
+                                        state.retry()
+                                    }
+                                    .font(.caption)
+                                }
+                                .padding(8)
+                            }
                         }
                     }
                 } else {

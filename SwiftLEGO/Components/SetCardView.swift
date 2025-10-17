@@ -3,8 +3,6 @@ import SwiftData
 
 struct SetCardView: View {
     let brickSet: BrickSet
-    @State private var thumbnailReloadID = UUID()
-    @State private var thumbnailRetryCount = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -14,30 +12,25 @@ struct SetCardView: View {
                    
 
                 if let url = brickSet.thumbnailURL {
-                    AsyncImage(url: url, transaction: Transaction(animation: .default)) { phase in
+                    ThumbnailImage(url: url) { phase in
                         switch phase {
-                        case .empty:
+                        case .empty, .loading:
                             ProgressView()
                         case .success(let image):
                             image
                                 .resizable()
                                 .scaledToFit()
                                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .onAppear {
-                                    if thumbnailRetryCount != 0 {
-                                        thumbnailRetryCount = 0
-                                    }
+                        case .failure(let state):
+                            VStack(spacing: 12) {
+                                PlaceholderArtworkView(symbol: "shippingbox.fill")
+                                Button("Retry") {
+                                    state.retry()
                                 }
-                        case .failure(let error):
-                            PlaceholderArtworkView(symbol: "shippingbox.fill")
-                                .onAppear {
-                                    scheduleThumbnailRetry(for: error, url: url)
-                                }
-                        @unknown default:
-                            PlaceholderArtworkView(symbol: "questionmark")
+                                .buttonStyle(.bordered)
+                            }
                         }
                     }
-                    .id(thumbnailReloadID)
                 } else {
                     PlaceholderArtworkView(symbol: "shippingbox.fill")
                 }
@@ -63,38 +56,6 @@ struct SetCardView: View {
                 .fill(Color(.systemBackground))
                 .shadow(color: Color.primary.opacity(0.15), radius: 14, x: 0, y: 10)
         }
-    }
-
-    private func scheduleThumbnailRetry(for error: Error, url: URL) {
-        guard shouldRetryThumbnail(for: error) else {
-            #if DEBUG
-            print("\(url.absoluteString) - \(error.localizedDescription)")
-            #endif
-            return
-        }
-
-        let attempt = thumbnailRetryCount
-
-        Task {
-            try? await Task.sleep(nanoseconds: 200_000_000)
-
-            await MainActor.run {
-                guard thumbnailRetryCount == attempt else { return }
-                thumbnailRetryCount += 1
-                thumbnailReloadID = UUID()
-            }
-        }
-    }
-
-    private func shouldRetryThumbnail(for error: Error) -> Bool {
-        guard thumbnailRetryCount < 3 else { return false }
-
-        if let urlError = error as? URLError {
-            return urlError.code == .cancelled
-        }
-
-        let nsError = error as NSError
-        return nsError.domain == NSURLErrorDomain && nsError.code == URLError.cancelled.rawValue
     }
 }
 
