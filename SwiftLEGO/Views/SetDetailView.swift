@@ -35,7 +35,7 @@ struct SetDetailView: View {
 
     private var minifigures: [Minifigure] {
         guard shouldShowMinifigures else { return [] }
-        filteredMinifigures.sorted { lhs, rhs in
+        return filteredMinifigures.sorted { lhs, rhs in
             if lhs.name != rhs.name {
                 return lhs.name < rhs.name
             }
