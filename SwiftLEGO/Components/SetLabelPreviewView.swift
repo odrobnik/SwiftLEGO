@@ -530,20 +530,6 @@ struct LabelPrintSheet: View {
 
                 Spacer(minLength: 24)
 
-                Button {
-                    printLabel()
-                } label: {
-                    if isPrinting {
-                        ProgressView()
-                            .controlSize(.large)
-                    } else {
-                        Label("Print", systemImage: "printer")
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isPrinting)
-
                 PrintAnchorView(anchorView: $anchorView)
                     .frame(width: 0, height: 0)
 
@@ -553,14 +539,30 @@ struct LabelPrintSheet: View {
             .navigationTitle("Print Label")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
                         dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if isPrinting {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Button {
+                            printLabel()
+                        } label: {
+                            Label("Print", systemImage: "printer")
+                        }
+                        .controlSize(.large)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.accentColor)
+                        .keyboardShortcut(.defaultAction)
                     }
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium])
     }
 
     private func printLabel() {
