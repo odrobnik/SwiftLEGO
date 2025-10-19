@@ -29,5 +29,40 @@
     </array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Automatic</string>
+    <key>UTTypeExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.swiftlego.inventory</string>
+            <key>UTTypeDescription</key>
+            <string>SwiftLEGO Inventory</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.json</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>lego</string>
+                </array>
+                <key>public.mime-type</key>
+                <string>application/json</string>
+            </dict>
+        </dict>
+    </array>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>SwiftLEGO Inventory</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.swiftlego.inventory</string>
+            </array>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+        </dict>
+    </array>
 </dict>
 </plist>

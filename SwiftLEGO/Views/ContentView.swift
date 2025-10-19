@@ -3,7 +3,7 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \CollectionList.name, animation: .default) private var lists: [CollectionList]
+    @Query(animation: .default) private var lists: [CollectionList]
     @State private var path: [Destination] = []
     @State private var selectedListID: PersistentIdentifier?
     @State private var selectedCategoryPath: [String]?
@@ -32,12 +32,12 @@ struct ContentView: View {
                         }
                         .id(categoryPath.joined(separator: "|"))
                     } else if let list = selectedList {
-                        SetCollectionView(list: list, allLists: lists) { destination in
+                        SetCollectionView(list: list) { destination in
                             path.append(destination)
                         }
                         .id(list.persistentModelID)
                     } else if let first = lists.first {
-                        SetCollectionView(list: first, allLists: lists) { destination in
+                        SetCollectionView(list: first) { destination in
                             path.append(destination)
                         }
                         .task { setSelectedList(first) }

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		00223344556677889900AABB /* ThumbnailImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00AABBCCDDEEFF0011223344 /* ThumbnailImage.swift */; };
 		00223344556677889900AABC /* ThumbnailCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00AABBCCDDEEFF0011223345 /* ThumbnailCacheManager.swift */; };
+		00223344556677889900AABD /* UTType+SwiftLEGO.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00AABBCCDDEEFF0011223346 /* UTType+SwiftLEGO.swift */; };
 		003b71505824429e8f563e5a /* Part.swift in Sources */ = {isa = PBXBuildFile; fileRef = a6784f013ddf499db8bdabcf /* Part.swift */; };
 		0147f5a9b2c34d8e9f0a1b2c /* SetCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9c8d7e6f5a4b3c2d1e0f9a8b /* SetCategory.swift */; };
 		028ab47ef91b4ad18c3f6a70 /* CategorySetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5a9c8b7d6e5f4a3b2c1d0e9f /* CategorySetsView.swift */; };
@@ -52,6 +53,7 @@
 /* Begin PBXFileReference section */
 		00AABBCCDDEEFF0011223344 /* ThumbnailImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailImage.swift; sourceTree = "<group>"; };
 		00AABBCCDDEEFF0011223345 /* ThumbnailCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCacheManager.swift; sourceTree = "<group>"; };
+		00AABBCCDDEEFF0011223346 /* UTType+SwiftLEGO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UTType+SwiftLEGO.swift"; sourceTree = "<group>"; };
 		1f2e3d4c5b6a79808796a5b4 /* BulkAddSetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BulkAddSetsView.swift; sourceTree = "<group>"; };
 		22f3a692b1b448c58de41adb /* SetCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetCollectionView.swift; sourceTree = "<group>"; };
 		35386ab795c64cfe8821d271 /* AddSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSetView.swift; sourceTree = "<group>"; };
@@ -170,6 +172,14 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
+		EEFF00112233445566778899 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				00AABBCCDDEEFF0011223346 /* UTType+SwiftLEGO.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
 		7ce0b45e3ec9414f958a844b /* Persistence */ = {
 			isa = PBXGroup;
 			children = (
@@ -196,10 +206,11 @@
 			children = (
 				c1e2d3f4a5b6409897654321 /* BrickLinkInventoryModels.swift */,
 				b4c5d6e7f8a9401234567890 /* BrickLinkInventoryService.swift */,
-				FEEDFEEDFEEDFEEDFEEDFEED /* Scraper */,
-				8c2fc0c3dae14e24aa63cb8c /* Models */,
 				6fb0db6162e84ef5a41c39a1 /* Services */,
+				EEFF00112233445566778899 /* Extensions */,
+				8c2fc0c3dae14e24aa63cb8c /* Models */,
 				7ce0b45e3ec9414f958a844b /* Persistence */,
+				FEEDFEEDFEEDFEEDFEEDFEED /* Scraper */,
 			);
 			name = BrickCore;
 			path = Sources/BrickCore;
@@ -330,6 +341,7 @@
 				78b83b4b7a6f4f549f1d6945 /* SetCardView.swift in Sources */,
 				00223344556677889900AABC /* ThumbnailCacheManager.swift in Sources */,
 				00223344556677889900AABB /* ThumbnailImage.swift in Sources */,
+				00223344556677889900AABD /* UTType+SwiftLEGO.swift in Sources */,
 				aa759d4131464a139628de43 /* CollectionList.swift in Sources */,
 				360f6b44ed3545d98f309e88 /* BrickSet.swift in Sources */,
 				0147f5a9b2c34d8e9f0a1b2c /* SetCategory.swift in Sources */,

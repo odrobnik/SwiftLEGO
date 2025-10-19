@@ -47,35 +47,95 @@ struct InventorySnapshot: Codable, Sendable {
             let parts: [PartSnapshot]
         }
 
+        let id: UUID?
         let setNumber: String
+        let name: String?
+        let thumbnailURLString: String?
         let parts: [PartSnapshot]
         let minifigures: [MinifigureSnapshot]
 
         private enum CodingKeys: String, CodingKey {
+            case id
             case setNumber
+            case name
+            case thumbnailURLString
             case parts
             case minifigures
         }
 
-        init(setNumber: String, parts: [PartSnapshot], minifigures: [MinifigureSnapshot] = []) {
+        init(
+            id: UUID? = nil,
+            setNumber: String,
+            name: String? = nil,
+            thumbnailURLString: String? = nil,
+            parts: [PartSnapshot],
+            minifigures: [MinifigureSnapshot] = []
+        ) {
+            self.id = id
             self.setNumber = setNumber
+            self.name = name
+            self.thumbnailURLString = thumbnailURLString
             self.parts = parts
             self.minifigures = minifigures
         }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(UUID.self, forKey: .id)
             setNumber = try container.decode(String.self, forKey: .setNumber)
+            name = try container.decodeIfPresent(String.self, forKey: .name)
+            thumbnailURLString = try container.decodeIfPresent(String.self, forKey: .thumbnailURLString)
             parts = try container.decode([PartSnapshot].self, forKey: .parts)
             minifigures = try container.decodeIfPresent([MinifigureSnapshot].self, forKey: .minifigures) ?? []
         }
 
         func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(id, forKey: .id)
             try container.encode(setNumber, forKey: .setNumber)
+            if let name, !name.isEmpty {
+                try container.encode(name, forKey: .name)
+            }
+            if let thumbnailURLString, !thumbnailURLString.isEmpty {
+                try container.encode(thumbnailURLString, forKey: .thumbnailURLString)
+            }
             try container.encode(parts, forKey: .parts)
             if !minifigures.isEmpty {
                 try container.encode(minifigures, forKey: .minifigures)
+            }
+        }
+    }
+
+    struct ListSnapshot: Codable, Sendable {
+        let id: UUID?
+        let name: String
+        let sets: [SetSnapshot]
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case sets
+        }
+
+        init(id: UUID? = nil, name: String, sets: [SetSnapshot]) {
+            self.id = id
+            self.name = name
+            self.sets = sets
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(UUID.self, forKey: .id)
+            name = try container.decode(String.self, forKey: .name)
+            sets = try container.decodeIfPresent([SetSnapshot].self, forKey: .sets) ?? []
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(id, forKey: .id)
+            try container.encode(name, forKey: .name)
+            if !sets.isEmpty {
+                try container.encode(sets, forKey: .sets)
             }
         }
     }
@@ -103,58 +163,54 @@ struct InventorySnapshot: Codable, Sendable {
         }
     }
 
-    static let empty = InventorySnapshot(sets: [])
+    static let empty = InventorySnapshot(sets: [], lists: [])
 
     let sets: [SetSnapshot]
+    let lists: [ListSnapshot]
+
+    private enum CodingKeys: String, CodingKey {
+        case sets
+        case lists
+    }
+
+    init(sets: [SetSnapshot], lists: [ListSnapshot] = []) {
+        self.sets = sets
+        self.lists = lists
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sets = try container.decodeIfPresent([SetSnapshot].self, forKey: .sets) ?? []
+        lists = try container.decodeIfPresent([ListSnapshot].self, forKey: .lists) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if !sets.isEmpty {
+            try container.encode(sets, forKey: .sets)
+        }
+        if !lists.isEmpty {
+            try container.encode(lists, forKey: .lists)
+        }
+    }
 }
 
 extension InventorySnapshot {
     @MainActor
     static func make(from lists: [CollectionList]) -> InventorySnapshot {
-        let sets = lists
+        let allSets = lists
             .flatMap { $0.sets }
-            .sorted { $0.setNumber.localizedCaseInsensitiveCompare($1.setNumber) == .orderedAscending }
-            .map { set in
-                let partSnapshots = set.parts.map { part in
-                    SetSnapshot.PartSnapshot(
-                        partID: part.partID,
-                        colorID: part.colorID,
-                        quantityHave: part.quantityHave,
-                        inventorySection: part.inventorySection.rawValue,
-                        subparts: makePartSnapshots(from: part.subparts)
-                    )
-                }
-                .sorted(by: partSnapshotSortComparator)
+            .sorted(by: setSortComparator)
+            .map { makeSetSnapshot(from: $0) }
 
-                let minifigureSnapshots = set.minifigures
-                    .sorted { $0.identifier.localizedCaseInsensitiveCompare($1.identifier) == .orderedAscending }
-                    .map { minifigure in
-                        let componentParts = minifigure.parts.map { part in
-                            SetSnapshot.PartSnapshot(
-                                partID: part.partID,
-                                colorID: part.colorID,
-                                quantityHave: part.quantityHave,
-                                inventorySection: part.inventorySection.rawValue,
-                                subparts: makePartSnapshots(from: part.subparts)
-                            )
-                        }
-                        .sorted(by: partSnapshotSortComparator)
+        let listSnapshots = lists.map { list in
+            let listSets = list.sets
+                .sorted(by: setSortComparator)
+                .map { makeSetSnapshot(from: $0) }
+            return ListSnapshot(id: list.id, name: list.name, sets: listSets)
+        }
 
-                        return SetSnapshot.MinifigureSnapshot(
-                            identifier: minifigure.identifier,
-                            quantityHave: minifigure.quantityHave,
-                            parts: componentParts
-                        )
-                    }
-
-                return SetSnapshot(
-                    setNumber: set.setNumber,
-                    parts: partSnapshots,
-                    minifigures: minifigureSnapshots
-                )
-            }
-
-        return InventorySnapshot(sets: sets)
+        return InventorySnapshot(sets: allSets, lists: listSnapshots)
     }
 
     @MainActor
@@ -172,7 +228,9 @@ extension InventorySnapshot {
         var unmatchedSetNumbers: [String] = []
         var unmatchedPartCount = 0
 
-        for setSnapshot in sets {
+        let resolvedSnapshots = !sets.isEmpty ? sets : self.lists.flatMap { $0.sets }
+
+        for setSnapshot in resolvedSnapshots {
             guard let set = setLookup[normalizedSetKey(for: setSnapshot.setNumber)] else {
                 unmatchedSetNumbers.append(setSnapshot.setNumber)
                 continue
@@ -288,6 +346,57 @@ extension InventorySnapshot {
         let lhsSection = lhs.inventorySection ?? ""
         let rhsSection = rhs.inventorySection ?? ""
         return lhsSection.localizedCaseInsensitiveCompare(rhsSection) == .orderedAscending
+    }
+
+    private static func setSortComparator(_ lhs: BrickSet, _ rhs: BrickSet) -> Bool {
+        if lhs.setNumber.caseInsensitiveCompare(rhs.setNumber) != .orderedSame {
+            return lhs.setNumber.localizedCaseInsensitiveCompare(rhs.setNumber) == .orderedAscending
+        }
+
+        return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }
+
+    private static func makeSetSnapshot(from set: BrickSet) -> SetSnapshot {
+        let partSnapshots = set.parts.map { part in
+            SetSnapshot.PartSnapshot(
+                partID: part.partID,
+                colorID: part.colorID,
+                quantityHave: part.quantityHave,
+                inventorySection: part.inventorySection.rawValue,
+                subparts: makePartSnapshots(from: part.subparts)
+            )
+        }
+        .sorted(by: partSnapshotSortComparator)
+
+        let minifigureSnapshots = set.minifigures
+            .sorted { $0.identifier.localizedCaseInsensitiveCompare($1.identifier) == .orderedAscending }
+            .map { minifigure in
+                let componentParts = minifigure.parts.map { part in
+                    SetSnapshot.PartSnapshot(
+                        partID: part.partID,
+                        colorID: part.colorID,
+                        quantityHave: part.quantityHave,
+                        inventorySection: part.inventorySection.rawValue,
+                        subparts: makePartSnapshots(from: part.subparts)
+                    )
+                }
+                .sorted(by: partSnapshotSortComparator)
+
+                return SetSnapshot.MinifigureSnapshot(
+                    identifier: minifigure.identifier,
+                    quantityHave: minifigure.quantityHave,
+                    parts: componentParts
+                )
+            }
+
+        return SetSnapshot(
+            id: set.id,
+            setNumber: set.setNumber,
+            name: set.name,
+            thumbnailURLString: set.thumbnailURLString,
+            parts: partSnapshots,
+            minifigures: minifigureSnapshots
+        )
     }
 
     private func applyPartSnapshot(

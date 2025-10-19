@@ -3,8 +3,8 @@ import UniformTypeIdentifiers
 import SwiftUI
 
 struct InventorySnapshotDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json] }
-    static var writableContentTypes: [UTType] { [.json] }
+    static var readableContentTypes: [UTType] { [.legoInventory, .json] }
+    static var writableContentTypes: [UTType] { [.legoInventory] }
 
     var snapshot: InventorySnapshot
 
@@ -31,6 +31,6 @@ struct InventorySnapshotDocument: FileDocument {
     static func defaultFilename() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
-        return "inventory-snapshot-\(formatter.string(from: Date())).json"
+        return "inventory-snapshot-\(formatter.string(from: Date())).lego"
     }
 }

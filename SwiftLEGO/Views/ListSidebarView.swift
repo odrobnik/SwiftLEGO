@@ -1,14 +1,20 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct ListSidebarView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \CollectionList.name, animation: .default) private var lists: [CollectionList]
+    @Query(animation: .default) private var lists: [CollectionList]
     @Binding var selectionID: PersistentIdentifier?
     @Binding var selectedCategoryPath: [String]?
     @State private var editorState: EditorState?
     @State private var expandedCategoryIDs: Set<String> = []
     @State private var setBeingRenamed: BrickSet?
+    @State private var exportDocument = InventorySnapshotDocument(snapshot: .empty)
+    @State private var exportFilename = InventorySnapshotDocument.defaultFilename()
+    @State private var isExportingInventory = false
+    @State private var isImportingInventory = false
+    @State private var inventoryAlert: InventoryAlert?
     let onSetSelected: (BrickSet) -> Void
     let onCategorySelected: ([String]?) -> Void
     let selectedSetID: PersistentIdentifier?
@@ -80,6 +86,23 @@ struct ListSidebarView: View {
                     Label("Add List", systemImage: "plus")
                 }
             }
+            ToolbarItem(placement: .secondaryAction) {
+                Menu {
+                    Button {
+                        beginInventoryImport()
+                    } label: {
+                        Label("Import Lists", systemImage: "square.and.arrow.down")
+                    }
+
+                    Button {
+                        beginInventoryExport()
+                    } label: {
+                        Label("Export Lists", systemImage: "square.and.arrow.up")
+                    }
+                } label: {
+                    Label("Inventory Actions", systemImage: "shippingbox")
+                }
+            }
         }
         .overlay {
             if lists.isEmpty {
@@ -108,6 +131,35 @@ struct ListSidebarView: View {
             if let path = newValue {
                 expandAncestors(of: path)
             }
+        }
+        .fileExporter(
+            isPresented: $isExportingInventory,
+            document: exportDocument,
+            contentType: .legoInventory,
+            defaultFilename: exportFilename
+        ) { result in
+            if case .failure(let error) = result {
+                inventoryAlert = .error("Export failed: \(error.localizedDescription)")
+            }
+        }
+        .fileImporter(
+            isPresented: $isImportingInventory,
+            allowedContentTypes: [.legoInventory, .json]
+        ) { result in
+            isImportingInventory = false
+            switch result {
+            case .success(let url):
+                handleInventoryImport(from: url)
+            case .failure(let error):
+                inventoryAlert = .error("Import failed: \(error.localizedDescription)")
+            }
+        }
+        .alert(item: $inventoryAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -140,6 +192,130 @@ struct ListSidebarView: View {
         }
 
         try? modelContext.save()
+    }
+
+    private func beginInventoryExport() {
+        let snapshot = InventorySnapshot.make(from: Array(lists))
+        exportDocument = InventorySnapshotDocument(snapshot: snapshot)
+        exportFilename = InventorySnapshotDocument.defaultFilename()
+        isExportingInventory = true
+    }
+
+    private func beginInventoryImport() {
+        isImportingInventory = true
+    }
+
+    private func handleInventoryImport(from url: URL) {
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let decoder = JSONDecoder()
+            let snapshot = try decoder.decode(InventorySnapshot.self, from: data)
+
+            if snapshot.lists.isEmpty && snapshot.sets.isEmpty {
+                inventoryAlert = .error("The selected file does not contain any inventory information.")
+                return
+            }
+
+            let existingLists = Array(lists)
+            let allSets = try modelContext.fetch(FetchDescriptor<BrickSet>())
+            var setLookup: [String: BrickSet] = [:]
+            for set in allSets {
+                let key = normalizedSetKey(for: set.setNumber)
+                if setLookup[key] == nil {
+                    setLookup[key] = set
+                }
+            }
+
+            var createdLists: [CollectionList] = []
+            var unmatchedSetNumbers = Set<String>()
+            var assignedSetCount = 0
+
+            func importList(named name: String, with snapshots: [InventorySnapshot.SetSnapshot]) {
+                let list = CollectionList(name: sanitizedListName(name))
+                modelContext.insert(list)
+                let assignment = assignSets(from: snapshots, to: list, using: &setLookup)
+                assignedSetCount += assignment.matched
+                unmatchedSetNumbers.formUnion(assignment.missing)
+                createdLists.append(list)
+            }
+
+            if snapshot.lists.isEmpty {
+                importList(named: "Unnamed List", with: snapshot.sets)
+            } else {
+                for listSnapshot in snapshot.lists {
+                    importList(named: listSnapshot.name, with: listSnapshot.sets)
+                }
+            }
+
+            let applyTargets = existingLists + createdLists
+            let applyResult = snapshot.apply(to: applyTargets)
+            unmatchedSetNumbers.formUnion(applyResult.unmatchedSetNumbers)
+
+            try modelContext.save()
+
+            var messageComponents: [String] = []
+
+            if !createdLists.isEmpty {
+                let names = createdLists.map(\.name).joined(separator: ", ")
+                messageComponents.append("Added \(createdLists.count) list\(createdLists.count == 1 ? "" : "s"): \(names)")
+            }
+
+            if assignedSetCount > 0 {
+                messageComponents.append("Assigned \(assignedSetCount) set\(assignedSetCount == 1 ? "" : "s") to imported list\(createdLists.count == 1 ? "" : "s").")
+            }
+
+            messageComponents.append(applyResult.summaryDescription)
+
+            if !unmatchedSetNumbers.isEmpty {
+                let joined = unmatchedSetNumbers.sorted().joined(separator: ", ")
+                messageComponents.append("Missing set\(unmatchedSetNumbers.count == 1 ? "" : "s"): \(joined)")
+            }
+
+            inventoryAlert = .success(messageComponents.joined(separator: "\n"))
+        } catch {
+            inventoryAlert = .error("Import failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func assignSets(
+        from snapshots: [InventorySnapshot.SetSnapshot],
+        to list: CollectionList,
+        using setLookup: inout [String: BrickSet]
+    ) -> (matched: Int, missing: [String]) {
+        var matched = 0
+        var missing: [String] = []
+
+        for snapshot in snapshots {
+            let key = normalizedSetKey(for: snapshot.setNumber)
+            guard let set = setLookup[key] else {
+                missing.append(snapshot.setNumber)
+                continue
+            }
+
+            if set.collection?.persistentModelID != list.persistentModelID {
+                set.collection = list
+            }
+
+            matched += 1
+        }
+
+        return (matched, missing)
+    }
+
+    private func sanitizedListName(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Unnamed List" : trimmed
+    }
+
+    private func normalizedSetKey(for setNumber: String) -> String {
+        SetImportUtilities.normalizedSetNumber(setNumber).lowercased()
     }
 
     private func ensureSelection() {
@@ -359,6 +535,34 @@ struct ListSidebarView: View {
     }
 
     private func selectionHighlight(for set: BrickSet) -> some View { Color.clear }
+}
+
+private struct InventoryAlert: Identifiable {
+    enum Kind {
+        case success
+        case error
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let message: String
+
+    var title: String {
+        switch kind {
+        case .success:
+            return "Import Complete"
+        case .error:
+            return "Inventory Error"
+        }
+    }
+
+    static func success(_ message: String) -> InventoryAlert {
+        InventoryAlert(kind: .success, message: message)
+    }
+
+    static func error(_ message: String) -> InventoryAlert {
+        InventoryAlert(kind: .error, message: message)
+    }
 }
 
 // MARK: - Editor Support

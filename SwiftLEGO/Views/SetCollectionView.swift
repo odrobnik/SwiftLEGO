@@ -1,11 +1,9 @@
 import SwiftUI
 import SwiftData
-import UniformTypeIdentifiers
 
 struct SetCollectionView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var list: CollectionList
-    let allLists: [CollectionList]
     let onNavigate: (ContentView.Destination) -> Void
     @State private var showingAddSetSheet = false
     @State private var showingBulkAddSheet = false
@@ -14,20 +12,13 @@ struct SetCollectionView: View {
     @State private var searchScope: SearchScope = .sets
     @State private var debouncedSearchText: String = ""
     @State private var searchTask: Task<Void, Never>?
-    @State private var exportDocument = InventorySnapshotDocument(snapshot: .empty)
-    @State private var exportFilename = InventorySnapshotDocument.defaultFilename()
-    @State private var isExportingInventory = false
-    @State private var isImportingInventory = false
-    @State private var inventoryAlert: InventoryAlert?
     @State private var labelPrintTarget: BrickSet?
 
     init(
         list: CollectionList,
-        allLists: [CollectionList],
         onNavigate: @escaping (ContentView.Destination) -> Void = { _ in }
     ) {
         self._list = Bindable(list)
-        self.allLists = allLists
         self.onNavigate = onNavigate
     }
 
@@ -108,20 +99,6 @@ struct SetCollectionView: View {
                     } label: {
                         Label("Bulk Add from File", systemImage: "tray.and.arrow.down.fill")
                     }
-
-                    Divider()
-
-                    Button {
-                        beginInventoryExport()
-                    } label: {
-                        Label("Export Inventory JSON", systemImage: "square.and.arrow.up")
-                    }
-
-                    Button {
-                        beginInventoryImport()
-                    } label: {
-                        Label("Import Inventory JSON", systemImage: "square.and.arrow.down")
-                    }
                 } label: {
                     Label("Add Sets", systemImage: "plus")
                 }
@@ -170,35 +147,6 @@ struct SetCollectionView: View {
         }
         .sheet(item: $labelPrintTarget) { set in
             LabelPrintSheet(brickSet: set)
-        }
-        .fileExporter(
-            isPresented: $isExportingInventory,
-            document: exportDocument,
-            contentType: .json,
-            defaultFilename: exportFilename
-        ) { result in
-            if case .failure(let error) = result {
-                inventoryAlert = .error("Export failed: \(error.localizedDescription)")
-            }
-        }
-        .fileImporter(
-            isPresented: $isImportingInventory,
-            allowedContentTypes: [.json]
-        ) { result in
-            isImportingInventory = false
-            switch result {
-            case .success(let url):
-                handleInventoryImport(from: url)
-            case .failure(let error):
-                inventoryAlert = .error("Import failed: \(error.localizedDescription)")
-            }
-        }
-        .alert(item: $inventoryAlert) { alert in
-            Alert(
-                title: Text(alert.title),
-                message: Text(alert.message),
-                dismissButton: .default(Text("OK"))
-            )
         }
     }
 
@@ -854,66 +802,6 @@ struct SetCollectionView: View {
         }
     }
 
-    private struct InventoryAlert: Identifiable {
-        enum Kind {
-            case success
-            case error
-        }
-
-        let id = UUID()
-        let kind: Kind
-        let message: String
-
-        var title: String {
-            switch kind {
-            case .success:
-                return "Import Complete"
-            case .error:
-                return "Inventory Error"
-            }
-        }
-
-        static func success(_ message: String) -> InventoryAlert {
-            InventoryAlert(kind: .success, message: message)
-        }
-
-        static func error(_ message: String) -> InventoryAlert {
-            InventoryAlert(kind: .error, message: message)
-        }
-    }
-
-    private func beginInventoryExport() {
-        let snapshot = InventorySnapshot.make(from: allLists)
-        exportDocument = InventorySnapshotDocument(snapshot: snapshot)
-        exportFilename = InventorySnapshotDocument.defaultFilename()
-        isExportingInventory = true
-    }
-
-    private func beginInventoryImport() {
-        isImportingInventory = true
-    }
-
-    private func handleInventoryImport(from url: URL) {
-        let didAccess = url.startAccessingSecurityScopedResource()
-        defer {
-            if didAccess {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        do {
-            let data = try Data(contentsOf: url)
-            let decoder = JSONDecoder()
-            let snapshot = try decoder.decode(InventorySnapshot.self, from: data)
-
-            let result = snapshot.apply(to: allLists)
-            try? modelContext.save()
-
-            inventoryAlert = .success(result.summaryDescription)
-        } catch {
-            inventoryAlert = .error("Import failed: \(error.localizedDescription)")
-        }
-    }
 }
 
 #Preview("Sets Grid") {
@@ -923,7 +811,7 @@ struct SetCollectionView: View {
         .first!
 
     return NavigationStack {
-        SetCollectionView(list: list, allLists: [list])
+        SetCollectionView(list: list)
     }
     .modelContainer(container)
 }
