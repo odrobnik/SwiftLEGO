@@ -15,6 +15,9 @@ struct ListSidebarView: View {
     @State private var isExportingInventory = false
     @State private var isImportingInventory = false
     @State private var inventoryAlert: InventoryAlert?
+    @State private var importingListIDs: Set<PersistentIdentifier> = []
+    @State private var importStatusMessage: String?
+    @State private var pendingImportURL: URL?
     let onSetSelected: (BrickSet) -> Void
     let onCategorySelected: ([String]?) -> Void
     let selectedSetID: PersistentIdentifier?
@@ -26,6 +29,17 @@ struct ListSidebarView: View {
 
     var body: some View {
         List {
+            if let statusMessage = importStatusMessage {
+                Section {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(statusMessage)
+                            .font(.subheadline)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
             if !lists.isEmpty {
                 Section("Lists") {
                     ForEach(lists) { list in
@@ -39,9 +53,19 @@ struct ListSidebarView: View {
                                     Text(list.name)
                                         .font(.subheadline)
                                         .lineLimit(1)
-                                    Text("\(list.sets.count) sets")
+                                    if importingListIDs.contains(list.persistentModelID) {
+                                        HStack(spacing: 6) {
+                                            ProgressView()
+                                                .scaleEffect(0.6)
+                                            Text("Importing…")
+                                        }
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                    } else {
+                                        Text("\(list.sets.count) set\(list.sets.count == 1 ? "" : "s")")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                                 Spacer()
                             }
@@ -149,7 +173,7 @@ struct ListSidebarView: View {
             isImportingInventory = false
             switch result {
             case .success(let url):
-                handleInventoryImport(from: url)
+                pendingImportURL = url
             case .failure(let error):
                 inventoryAlert = .error("Import failed: \(error.localizedDescription)")
             }
@@ -160,6 +184,13 @@ struct ListSidebarView: View {
                 message: Text(alert.message),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .task(id: pendingImportURL) {
+            guard let url = pendingImportURL else { return }
+            await processImport(from: url)
+            await MainActor.run {
+                pendingImportURL = nil
+            }
         }
     }
 
@@ -205,108 +236,179 @@ struct ListSidebarView: View {
         isImportingInventory = true
     }
 
-    private func handleInventoryImport(from url: URL) {
-        let didAccess = url.startAccessingSecurityScopedResource()
-        defer {
-            if didAccess {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-
+    private func processImport(from sourceURL: URL) async {
+        importStatusMessage = "Reading file…"
         do {
-            let data = try Data(contentsOf: url)
-            let decoder = JSONDecoder()
-            let snapshot = try decoder.decode(InventorySnapshot.self, from: data)
+            let data = try await loadFileData(from: sourceURL)
 
-            if snapshot.lists.isEmpty && snapshot.sets.isEmpty {
-                inventoryAlert = .error("The selected file does not contain any inventory information.")
-                return
+            await MainActor.run {
+                importStatusMessage = "Parsing inventory…"
             }
 
-            let existingLists = Array(lists)
-            let allSets = try modelContext.fetch(FetchDescriptor<BrickSet>())
-            var setLookup: [String: BrickSet] = [:]
-            for set in allSets {
-                let key = normalizedSetKey(for: set.setNumber)
-                if setLookup[key] == nil {
-                    setLookup[key] = set
-                }
+            let snapshot = try await decodeSnapshot(from: data)
+
+            await MainActor.run {
+                importStatusMessage = "Importing lists…"
             }
 
-            var createdLists: [CollectionList] = []
-            var unmatchedSetNumbers = Set<String>()
-            var assignedSetCount = 0
-
-            func importList(named name: String, with snapshots: [InventorySnapshot.SetSnapshot]) {
-                let list = CollectionList(name: sanitizedListName(name))
-                modelContext.insert(list)
-                let assignment = assignSets(from: snapshots, to: list, using: &setLookup)
-                assignedSetCount += assignment.matched
-                unmatchedSetNumbers.formUnion(assignment.missing)
-                createdLists.append(list)
+            let summary = try await MainActor.run {
+                try performImport(using: snapshot)
             }
 
-            if snapshot.lists.isEmpty {
-                importList(named: "Unnamed List", with: snapshot.sets)
-            } else {
-                for listSnapshot in snapshot.lists {
-                    importList(named: listSnapshot.name, with: listSnapshot.sets)
-                }
+            await MainActor.run {
+                inventoryAlert = .success(summary)
+                importStatusMessage = nil
             }
-
-            let applyTargets = existingLists + createdLists
-            let applyResult = snapshot.apply(to: applyTargets)
-            unmatchedSetNumbers.formUnion(applyResult.unmatchedSetNumbers)
-
-            try modelContext.save()
-
-            var messageComponents: [String] = []
-
-            if !createdLists.isEmpty {
-                let names = createdLists.map(\.name).joined(separator: ", ")
-                messageComponents.append("Added \(createdLists.count) list\(createdLists.count == 1 ? "" : "s"): \(names)")
-            }
-
-            if assignedSetCount > 0 {
-                messageComponents.append("Assigned \(assignedSetCount) set\(assignedSetCount == 1 ? "" : "s") to imported list\(createdLists.count == 1 ? "" : "s").")
-            }
-
-            messageComponents.append(applyResult.summaryDescription)
-
-            if !unmatchedSetNumbers.isEmpty {
-                let joined = unmatchedSetNumbers.sorted().joined(separator: ", ")
-                messageComponents.append("Missing set\(unmatchedSetNumbers.count == 1 ? "" : "s"): \(joined)")
-            }
-
-            inventoryAlert = .success(messageComponents.joined(separator: "\n"))
         } catch {
-            inventoryAlert = .error("Import failed: \(error.localizedDescription)")
+            await MainActor.run {
+                if let importError = error as? InventoryImportError {
+                    inventoryAlert = .error(importError.localizedDescription)
+                } else {
+                    inventoryAlert = .error("Import failed: \(error.localizedDescription)")
+                }
+                importingListIDs.removeAll()
+                importStatusMessage = nil
+            }
         }
     }
 
-    private func assignSets(
-        from snapshots: [InventorySnapshot.SetSnapshot],
-        to list: CollectionList,
-        using setLookup: inout [String: BrickSet]
-    ) -> (matched: Int, missing: [String]) {
-        var matched = 0
-        var missing: [String] = []
-
-        for snapshot in snapshots {
-            let key = normalizedSetKey(for: snapshot.setNumber)
-            guard let set = setLookup[key] else {
-                missing.append(snapshot.setNumber)
-                continue
+    private func loadFileData(from url: URL) async throws -> Data {
+        try await Task.detached(priority: .userInitiated) {
+            let didAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if didAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
             }
+            return try Data(contentsOf: url)
+        }.value
+    }
 
-            if set.collection?.persistentModelID != list.persistentModelID {
-                set.collection = list
-            }
+    private func decodeSnapshot(from data: Data) async throws -> InventorySnapshot {
+        try await Task.detached(priority: .userInitiated) {
+            let decoder = JSONDecoder()
+            return try decoder.decode(InventorySnapshot.self, from: data)
+        }.value
+    }
 
-            matched += 1
+    @MainActor
+    private func performImport(using snapshot: InventorySnapshot) throws -> String {
+        if snapshot.lists.isEmpty && snapshot.sets.isEmpty {
+            throw InventoryImportError.emptySnapshot
         }
 
-        return (matched, missing)
+        importingListIDs.removeAll()
+
+        let existingLists = Array(lists)
+
+        if snapshot.lists.isEmpty {
+            let applyResult = snapshot.apply(to: existingLists)
+            try modelContext.save()
+            return applyResult.summaryDescription
+        }
+
+        let allSets = try modelContext.fetch(FetchDescriptor<BrickSet>())
+        var setLookup: [String: BrickSet] = [:]
+        for set in allSets {
+            let key = normalizedSetKey(for: set.setNumber)
+            if setLookup[key] == nil {
+                setLookup[key] = set
+            }
+        }
+
+        var usedNames = Set(existingLists.map { $0.name })
+        var createdLists: [CollectionList] = []
+        var totalImportedSets = 0
+        var missingSetNumbers = Set<String>()
+
+        for listSnapshot in snapshot.lists {
+            let uniqueName = uniqueListName(for: listSnapshot.name, usedNames: &usedNames)
+            let newList = CollectionList(name: uniqueName)
+            modelContext.insert(newList)
+            let listID = newList.persistentModelID
+            importingListIDs.insert(listID)
+            importStatusMessage = "Importing \(uniqueName)…"
+
+            var importedCount = 0
+            for setSnapshot in listSnapshot.sets {
+                let key = normalizedSetKey(for: setSnapshot.setNumber)
+                guard let sourceSet = setLookup[key] else {
+                    missingSetNumbers.insert(setSnapshot.setNumber)
+                    continue
+                }
+
+                _ = cloneSet(from: sourceSet, into: newList, using: setSnapshot)
+                importedCount += 1
+            }
+
+            if importedCount > 0 {
+                let perListSnapshot = InventorySnapshot(sets: listSnapshot.sets)
+                _ = perListSnapshot.apply(to: [newList])
+                createdLists.append(newList)
+                totalImportedSets += importedCount
+            } else {
+                modelContext.delete(newList)
+            }
+
+            importingListIDs.remove(listID)
+        }
+
+        importingListIDs.removeAll()
+
+        try modelContext.save()
+
+        var messageComponents: [String] = []
+        if !createdLists.isEmpty {
+            let names = createdLists.map(\.name).joined(separator: ", ")
+            messageComponents.append("Imported \(createdLists.count) list\(createdLists.count == 1 ? "" : "s") (\(names)) with \(totalImportedSets) set\(totalImportedSets == 1 ? "" : "s").")
+        } else {
+            messageComponents.append("No lists were imported.")
+        }
+
+        if !missingSetNumbers.isEmpty {
+            let missing = missingSetNumbers.sorted().joined(separator: ", ")
+            messageComponents.append("Skipped \(missingSetNumbers.count) set\(missingSetNumbers.count == 1 ? "" : "s") not found in your collection: \(missing).")
+        }
+
+        return messageComponents.joined(separator: "\n")
+    }
+
+    private func uniqueListName(for rawName: String, usedNames: inout Set<String>) -> String {
+        let baseName = sanitizedListName(rawName)
+        var candidate = baseName
+        var counter = 2
+
+        while usedNames.contains(candidate) {
+            candidate = "\(baseName) \(counter)"
+            counter += 1
+        }
+
+        usedNames.insert(candidate)
+        return candidate
+    }
+
+    private func cloneSet(
+        from source: BrickSet,
+        into list: CollectionList,
+        using snapshot: InventorySnapshot.SetSnapshot
+    ) -> BrickSet {
+        let partPayloads = SetImportUtilities.partPayloads(from: source.parts)
+        let categoryPayloads = SetImportUtilities.categoryPayloads(from: source.categories)
+        let minifigurePayloads = SetImportUtilities.minifigurePayloads(from: source.minifigures)
+        let resolvedName = snapshot.name
+        let resolvedThumbnail = snapshot.thumbnailURLString ?? source.thumbnailURLString
+
+        return SetImportUtilities.persistSet(
+            list: list,
+            modelContext: modelContext,
+            setNumber: source.setNumber,
+            defaultName: source.name,
+            customName: resolvedName,
+            thumbnailURLString: resolvedThumbnail,
+            parts: partPayloads,
+            categories: categoryPayloads,
+            minifigures: minifigurePayloads
+        )
     }
 
     private func sanitizedListName(_ raw: String) -> String {
@@ -316,6 +418,14 @@ struct ListSidebarView: View {
 
     private func normalizedSetKey(for setNumber: String) -> String {
         SetImportUtilities.normalizedSetNumber(setNumber).lowercased()
+    }
+
+    private enum InventoryImportError: LocalizedError {
+        case emptySnapshot
+
+        var errorDescription: String? {
+            "The selected file does not contain any inventory information."
+        }
     }
 
     private func ensureSelection() {

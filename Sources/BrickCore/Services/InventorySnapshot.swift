@@ -148,8 +148,13 @@ struct InventorySnapshot: Codable, Sendable {
 
         var summaryDescription: String {
             var components: [String] = []
-            components.append("Updated \(updatedPartCount) part\(updatedPartCount == 1 ? "" : "s")")
-            components.append("across \(matchedSetCount) set\(matchedSetCount == 1 ? "" : "s")")
+            if updatedPartCount > 0 {
+                components.append("Updated \(updatedPartCount) part\(updatedPartCount == 1 ? "" : "s") across \(matchedSetCount) set\(matchedSetCount == 1 ? "" : "s")")
+            } else if matchedSetCount > 0 {
+                components.append("Verified \(matchedSetCount) set\(matchedSetCount == 1 ? "" : "s"); no part quantity changes required")
+            } else {
+                components.append("No sets matched the import file")
+            }
 
             if !unmatchedSetNumbers.isEmpty {
                 components.append("Skipped \(unmatchedSetNumbers.count) missing set\(unmatchedSetNumbers.count == 1 ? "" : "s")")

@@ -1,5 +1,10 @@
 import UniformTypeIdentifiers
 
 extension UTType {
-    static let legoInventory = UTType(exportedAs: "com.swiftlego.inventory", conformingTo: .json)
+    static let legoInventory: UTType = {
+        if let type = UTType(filenameExtension: "lego", conformingTo: .json) {
+            return type
+        }
+        return UTType(importedAs: "com.swiftlego.inventory")
+    }()
 }
