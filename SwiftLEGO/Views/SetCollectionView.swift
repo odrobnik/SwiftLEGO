@@ -207,14 +207,19 @@ struct SetCollectionView: View {
         .background(Color(uiColor: .systemGroupedBackground))
     }
 
+    @ViewBuilder
     private var searchResultsView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 32) {
-                searchResultsContent
+        if searchScope == .parts {
+            partsSearchResultsList
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    searchResultsContent
+                }
+                .padding(.top, 16)
             }
-            .padding(.top, 16)
+            .background(Color(uiColor: .systemGroupedBackground))
         }
-        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     @ViewBuilder
@@ -222,10 +227,10 @@ struct SetCollectionView: View {
         switch searchScope {
         case .sets:
             setsSearchResultsContent
-        case .parts:
-            partsSearchResultsContent
         case .minifigures:
             minifigureSearchResultsContent
+        case .parts:
+            EmptyView()
         }
     }
 
@@ -270,16 +275,17 @@ struct SetCollectionView: View {
         }
     }
 
-    @ViewBuilder
-    private var partsSearchResultsContent: some View {
-        if !groupedPartEntries.isEmpty {
-            ForEach(groupedPartEntries, id: \.colorName) { group in
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(group.colorName)
-                        .font(.title2.weight(.semibold))
-                        .padding(.horizontal)
-
-                    VStack(spacing: 16) {
+    private var partsSearchResultsList: some View {
+        List {
+            if groupedPartEntries.isEmpty {
+                ContentUnavailableView.search(text: trimmedSearchText)
+                    .padding()
+                    .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(groupedPartEntries, id: \.colorName) { group in
+                    Section(group.colorName) {
                         ForEach(group.entries) { entry in
                             PartSearchResultRow(
                                 set: entry.set,
@@ -294,15 +300,17 @@ struct SetCollectionView: View {
                                     )
                                 }
                             )
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                         }
                     }
-                    .padding(.horizontal)
                 }
             }
-        } else {
-            ContentUnavailableView.search(text: trimmedSearchText)
-                .padding()
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     @ViewBuilder
