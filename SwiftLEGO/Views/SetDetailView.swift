@@ -11,27 +11,24 @@ struct SetDetailView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Bindable var brickSet: BrickSet
-    let partFilter: ((Part) -> Bool)?
-    let onShowEntireSet: (() -> Void)?
     @State private var selectedSection: Part.InventorySection
     @State private var searchText: String = ""
     @State private var effectiveSearchText: String = ""
     @State private var showMissingOnly: Bool = false
-    @State private var searchTask: Task<Void, Never>?
+    @State private var isShowingLabelPrintSheet: Bool = false
 
     init(
         brickSet: BrickSet,
-        partFilter: ((Part) -> Bool)? = nil,
-        onShowEntireSet: (() -> Void)? = nil
+        initialSearchText: String? = nil,
+        initialSelectedSection: Part.InventorySection? = nil
     ) {
         self._brickSet = Bindable(brickSet)
-        self.partFilter = partFilter
-        self.onShowEntireSet = onShowEntireSet
         self._selectedSection = State(
-            initialValue: Self.initialSection(
-                for: brickSet,
-                partFilter: partFilter
-            )
+            initialValue: initialSelectedSection ?? Self.initialSection(for: brickSet)
+        )
+        self._searchText = State(initialValue: initialSearchText ?? "")
+        self._effectiveSearchText = State(
+            initialValue: initialSearchText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         )
     }
 
@@ -57,10 +54,9 @@ struct SetDetailView: View {
 
     private var filteredParts: [Part] {
         let partsMatchingSection = brickSet.parts.filter { part in
-            let matchesFilter = partFilter?(part) ?? true
             let matchesSection = part.inventorySection == selectedSection
             let matchesMissingToggle = !showMissingOnly || part.quantityHave < part.quantityNeeded
-            return matchesFilter && matchesSection && matchesMissingToggle
+            return matchesSection && matchesMissingToggle
         }
 
         guard let searchQuery = normalizedSearchQuery else {
@@ -134,6 +130,9 @@ struct SetDetailView: View {
         .task(id: searchText) {
             await updateSearchQuery()
         }
+        .sheet(isPresented: $isShowingLabelPrintSheet) {
+            LabelPrintSheet(brickSet: brickSet)
+        }
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
         .toolbar {
@@ -147,13 +146,11 @@ struct SetDetailView: View {
                 .pickerStyle(.segmented)
             }
             
-            if partFilter != nil, let onShowEntireSet {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        onShowEntireSet()
-                    } label: {
-                        Label("Show Entire Set", systemImage: "rectangle.stack")
-                    }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isShowingLabelPrintSheet = true
+                } label: {
+                    Label("Print Label", systemImage: "printer")
                 }
             }
             
@@ -247,16 +244,9 @@ struct SetDetailView: View {
         selectedSection == .regular
     }
 
-    private static func initialSection(
-        for brickSet: BrickSet,
-        partFilter: ((Part) -> Bool)?
-    ) -> Part.InventorySection {
-        let filteredParts = brickSet.parts.filter { part in
-            partFilter?(part) ?? true
-        }
-
+    private static func initialSection(for brickSet: BrickSet) -> Part.InventorySection {
         for section in segmentedSections {
-            if filteredParts.contains(where: { $0.inventorySection == section }) {
+            if brickSet.parts.contains(where: { $0.inventorySection == section }) {
                 return section
             }
         }

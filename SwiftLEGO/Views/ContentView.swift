@@ -95,7 +95,7 @@ struct ContentView: View {
         switch path.last {
         case .set(let id):
             return id
-        case .filteredSet(let id, _, _):
+        case .filteredSet(let id, _, _, _):
             return id
         case .none:
             return nil
@@ -128,15 +128,11 @@ struct ContentView: View {
                 Text("Set unavailable")
                     .foregroundStyle(.secondary)
             }
-        case .filteredSet(let setID, let partID, let colorID):
+        case .filteredSet(let setID, let partID, let colorID, let query):
             if let set = fetchSet(with: setID) {
                 SetDetailView(
                     brickSet: set,
-                    partFilter: { part in
-                        part.partID.compare(partID, options: .caseInsensitive) == .orderedSame
-                            && part.colorID.compare(colorID, options: .caseInsensitive) == .orderedSame
-                    },
-                    onShowEntireSet: { showEntireSet(set) }
+                    initialSearchText: query
                 )
             } else {
                 Text("Set unavailable")
@@ -180,18 +176,12 @@ struct ContentView: View {
         return nil
     }
 
-    private func showEntireSet(_ set: BrickSet) {
-        if let list = set.collection {
-            setSelectedList(list)
-        }
-        path = [.set(set.persistentModelID)]
-    }
 }
 
 extension ContentView {
     enum Destination: Hashable {
         case set(PersistentIdentifier)
-        case filteredSet(PersistentIdentifier, partID: String, colorID: String)
+        case filteredSet(PersistentIdentifier, partID: String, colorID: String, query: String)
     }
 }
 

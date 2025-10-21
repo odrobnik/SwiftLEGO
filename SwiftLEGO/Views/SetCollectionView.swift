@@ -12,6 +12,8 @@ struct SetCollectionView: View {
     @State private var searchScope: SearchScope = .sets
     @State private var effectiveSearchText: String = ""
     @State private var labelPrintTarget: BrickSet?
+    @State private var partSearchResults: [PartSearchEntry] = []
+    @State private var minifigureSearchResults: [MinifigureSearchEntry] = []
 
     init(
         list: CollectionList,
@@ -277,14 +279,14 @@ struct SetCollectionView: View {
 
     private var partsSearchResultsList: some View {
         List {
-            if groupedPartEntries.isEmpty {
+            if groupedPartResults.isEmpty {
                 ContentUnavailableView.search(text: trimmedSearchText)
                     .padding()
                     .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else {
-                ForEach(groupedPartEntries, id: \.colorName) { group in
+                ForEach(groupedPartResults, id: \.colorName) { group in
                     Section(group.colorName) {
                         ForEach(group.entries) { entry in
                             PartSearchResultRow(
@@ -295,7 +297,8 @@ struct SetCollectionView: View {
                                         .filteredSet(
                                             entry.set.persistentModelID,
                                             partID: entry.part.partID,
-                                            colorID: entry.part.colorID
+                                            colorID: entry.part.colorID,
+                                            query: effectiveSearchText
                                         )
                                     )
                                 }
@@ -315,9 +318,9 @@ struct SetCollectionView: View {
 
     @ViewBuilder
     private var minifigureSearchResultsContent: some View {
-        if !minifigureEntries.isEmpty {
+        if !minifigureResults.isEmpty {
             VStack(spacing: 16) {
-                ForEach(minifigureEntries) { entry in
+                ForEach(minifigureResults) { entry in
                     MinifigureSearchResultRow(entry: entry) {
                         onNavigate(.set(entry.set.persistentModelID))
                     }
@@ -445,9 +448,8 @@ struct SetCollectionView: View {
         }
     }
 
-    private var matchingParts: [Part] {
-        guard searchScope == .parts, isSearching else { return [] }
-        let rawQuery = trimmedSearchText.lowercased()
+    private func runPartSearch(for query: String) -> [PartSearchEntry] {
+        let rawQuery = query.lowercased()
         guard !rawQuery.isEmpty else { return [] }
 
         let startsWithNumber = rawQuery.first?.isNumber == true
@@ -456,48 +458,67 @@ struct SetCollectionView: View {
         let normalizedQueryTokens = queryTokens(from: rawQuery)
         let secondaryTokens = normalizedQueryTokens.dropFirst()
 
-        return list.sets.flatMap { set in
-            set.parts.filter { part in
-                guard part.inventorySection != .extra else { return false }
+        var results: [PartSearchEntry] = []
+
+        for set in list.sets {
+            for part in set.parts {
+                guard part.inventorySection != .extra else { continue }
 
                 let partIDLower = part.partID.lowercased()
                 let colorLower = part.colorName.lowercased()
                 let nameLower = part.name.lowercased()
                 let partTokens = partSearchTokens(for: part)
 
+                let matches: Bool
                 if startsWithNumber {
-                    guard partIDLower.hasPrefix(primaryToken) else { return false }
-                    if secondaryTokens.isEmpty { return true }
-                    return secondaryTokens.allSatisfy { token in
+                    guard partIDLower.hasPrefix(primaryToken) else { continue }
+                    if secondaryTokens.isEmpty {
+                        matches = true
+                    } else {
+                        matches = secondaryTokens.allSatisfy { token in
+                            partTokens.contains(where: { $0.hasPrefix(token) || $0.contains(token) })
+                        }
+                    }
+                } else if colorLower.contains(rawQuery) || nameLower.contains(rawQuery) {
+                    matches = true
+                } else {
+                    matches = normalizedQueryTokens.allSatisfy { token in
                         partTokens.contains(where: { $0.hasPrefix(token) || $0.contains(token) })
                     }
                 }
 
-                if colorLower.contains(rawQuery) || nameLower.contains(rawQuery) {
-                    return true
-                }
-
-                return normalizedQueryTokens.allSatisfy { token in
-                    partTokens.contains(where: { $0.hasPrefix(token) || $0.contains(token) })
-                }
+                guard matches else { continue }
+                guard missingCount(for: part) > 0 else { continue }
+                let entrySet = part.set ?? set
+                let entry = PartSearchEntry(set: entrySet, part: part, orderIndex: results.count)
+                results.append(entry)
             }
         }
+
+        return results
     }
 
-    private var matchingMinifigures: [Minifigure] {
-        guard searchScope == .minifigures, isSearching else { return [] }
-        let normalizedQuery = normalizedSearchText
-        let tokens = queryTokens(from: trimmedSearchText)
+    private func runMinifigureSearch(for query: String) -> [MinifigureSearchEntry] {
+        let normalizedQuery = query.lowercased()
+        guard !normalizedQuery.isEmpty else { return [] }
+        let tokens = queryTokens(from: query)
 
         return list.sets
             .flatMap { $0.minifigures }
-            .filter { minifigure in
+            .compactMap { minifigure in
                 let identifierLower = minifigure.identifier.lowercased()
-                if !normalizedQuery.isEmpty && identifierLower == normalizedQuery {
-                    return true
-                }
+                let matchesIdentifier = !normalizedQuery.isEmpty && identifierLower == normalizedQuery
+                let matchesName = matches(nameTokens: tokens, in: minifigure.name)
 
-                return matches(nameTokens: tokens, in: minifigure.name)
+                guard matchesIdentifier || matchesName else { return nil }
+                guard let set = minifigure.set else { return nil }
+                return MinifigureSearchEntry(set: set, minifigure: minifigure)
+            }
+            .sorted { lhs, rhs in
+                if lhs.missingCount != rhs.missingCount {
+                    return lhs.missingCount < rhs.missingCount
+                }
+                return lhs.minifigure.identifier.localizedCaseInsensitiveCompare(rhs.minifigure.identifier) == .orderedAscending
             }
     }
 
@@ -521,6 +542,8 @@ struct SetCollectionView: View {
         if trimmed.isEmpty {
             await MainActor.run {
                 effectiveSearchText = ""
+                partSearchResults = []
+                minifigureSearchResults = []
             }
             return
         }
@@ -540,6 +563,17 @@ struct SetCollectionView: View {
 
         await MainActor.run {
             effectiveSearchText = trimmed
+            switch key.scope {
+            case .parts:
+                partSearchResults = runPartSearch(for: trimmed)
+                minifigureSearchResults = []
+            case .minifigures:
+                minifigureSearchResults = runMinifigureSearch(for: trimmed)
+                partSearchResults = []
+            case .sets:
+                partSearchResults = []
+                minifigureSearchResults = []
+            }
         }
     }
 
@@ -552,18 +586,8 @@ struct SetCollectionView: View {
         )
     }
 
-    private var partSearchEntries: [PartSearchEntry] {
-        guard searchScope == .parts else { return [] }
-        return matchingParts.compactMap { part in
-            let missing = missingCount(for: part)
-            guard missing > 0 else { return nil }
-            guard let set = part.set else { return nil }
-            return PartSearchEntry(set: set, part: part, missingCount: missing)
-        }
-    }
-
-    private var groupedPartEntries: [ColorGroup] {
-        let entries = partSearchEntries
+    private var groupedPartResults: [ColorGroup] {
+        let entries = partSearchResults.filter { $0.missingCount > 0 }
         guard !entries.isEmpty else { return [] }
 
         let grouped = Dictionary(grouping: entries) { entry in
@@ -574,10 +598,7 @@ struct SetCollectionView: View {
             ColorGroup(
                 colorName: key,
                 entries: value.sorted { lhs, rhs in
-                    if lhs.missingCount != rhs.missingCount {
-                        return lhs.missingCount < rhs.missingCount
-                    }
-                    return lhs.set.setNumber.localizedCaseInsensitiveCompare(rhs.set.setNumber) == .orderedAscending
+                    lhs.orderIndex < rhs.orderIndex
                 }
             )
         }
@@ -586,32 +607,12 @@ struct SetCollectionView: View {
         }
     }
 
-    private var minifigureEntries: [MinifigureSearchEntry] {
-        guard searchScope == .minifigures else { return [] }
-
-        return matchingMinifigures
-            .compactMap { minifigure in
-                guard let set = minifigure.set else { return nil }
-                return MinifigureSearchEntry(
-                    set: set,
-                    minifigure: minifigure,
-                    missingCount: missingCount(for: minifigure)
-                )
-            }
-            .sorted { lhs, rhs in
-                if lhs.missingCount != rhs.missingCount {
-                    return lhs.missingCount < rhs.missingCount
-                }
-                return lhs.minifigure.identifier.localizedCaseInsensitiveCompare(rhs.minifigure.identifier) == .orderedAscending
-            }
+    private var minifigureResults: [MinifigureSearchEntry] {
+        minifigureSearchResults
     }
 
     private func missingCount(for part: Part) -> Int {
         max(part.quantityNeeded - part.quantityHave, 0)
-    }
-
-    private func missingCount(for minifigure: Minifigure) -> Int {
-        max(minifigure.quantityNeeded - minifigure.quantityHave, 0)
     }
 
     private func normalizeSetNumber(_ number: String) -> String {
@@ -621,7 +622,11 @@ struct SetCollectionView: View {
     private struct PartSearchEntry: Identifiable {
         let set: BrickSet
         let part: Part
-        let missingCount: Int
+        let orderIndex: Int
+
+        var missingCount: Int {
+            max(part.quantityNeeded - part.quantityHave, 0)
+        }
 
         var id: PersistentIdentifier { part.persistentModelID }
     }
@@ -738,7 +743,10 @@ struct SetCollectionView: View {
     private struct MinifigureSearchEntry: Identifiable {
         let set: BrickSet
         let minifigure: Minifigure
-        let missingCount: Int
+
+        var missingCount: Int {
+            max(minifigure.quantityNeeded - minifigure.quantityHave, 0)
+        }
 
         var id: PersistentIdentifier { minifigure.persistentModelID }
     }
