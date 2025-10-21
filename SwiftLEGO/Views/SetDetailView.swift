@@ -15,7 +15,9 @@ struct SetDetailView: View {
     let onShowEntireSet: (() -> Void)?
     @State private var selectedSection: Part.InventorySection
     @State private var searchText: String = ""
+    @State private var effectiveSearchText: String = ""
     @State private var showMissingOnly: Bool = false
+    @State private var searchTask: Task<Void, Never>?
 
     init(
         brickSet: BrickSet,
@@ -86,7 +88,7 @@ struct SetDetailView: View {
     }
 
     private var normalizedSearchQuery: String? {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = effectiveSearchText
         return trimmed.isEmpty ? nil : trimmed.lowercased()
     }
 
@@ -129,6 +131,9 @@ struct SetDetailView: View {
             }
         }
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search parts")
+        .task(id: searchText) {
+            await updateSearchQuery()
+        }
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
         .toolbar {
@@ -285,6 +290,19 @@ struct SetDetailView: View {
         text
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
             .map { $0.lowercased() }
+    }
+
+    private func updateSearchQuery() async {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            await MainActor.run { effectiveSearchText = "" }
+            return
+        }
+
+        do { try await Task.sleep(nanoseconds: 200_000_000) } catch { return }
+        guard !Task.isCancelled else { return }
+        await MainActor.run { effectiveSearchText = trimmed }
     }
 
 }

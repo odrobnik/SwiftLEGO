@@ -10,8 +10,7 @@ struct SetCollectionView: View {
     @State private var setBeingRenamed: BrickSet?
     @State private var searchText: String = ""
     @State private var searchScope: SearchScope = .sets
-    @State private var debouncedSearchText: String = ""
-    @State private var searchTask: Task<Void, Never>?
+    @State private var effectiveSearchText: String = ""
     @State private var labelPrintTarget: BrickSet?
 
     init(
@@ -66,6 +65,15 @@ struct SetCollectionView: View {
         }
     }
 
+    private struct SearchTaskKey: Equatable {
+        let query: String
+        let scope: SearchScope
+    }
+
+    private var searchTaskKey: SearchTaskKey {
+        SearchTaskKey(query: searchText, scope: searchScope)
+    }
+
     var body: some View {
         Group {
             if isSearching {
@@ -84,6 +92,10 @@ struct SetCollectionView: View {
             ForEach(SearchScope.allCases) { scope in
                 Text(scope.title).tag(scope)
             }
+        }
+        .task(id: searchTaskKey) {
+            let key = searchTaskKey
+            await performSearch(for: key)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -104,23 +116,6 @@ struct SetCollectionView: View {
                 }
             }
 
-        }
-        .onChange(of: searchText) { _, newValue in
-            searchTask?.cancel()
-
-            searchTask = Task { @MainActor in
-                do {
-                    try await Task.sleep(nanoseconds: 500_000_000)
-                } catch {
-                    return
-                }
-
-                debouncedSearchText = newValue
-            }
-        }
-        .onChange(of: searchScope) { _, _ in
-            searchTask?.cancel()
-            debouncedSearchText = searchText
         }
         .sheet(isPresented: $showingAddSetSheet) {
             AddSetView(list: list) { result in
@@ -286,15 +281,19 @@ struct SetCollectionView: View {
 
                     VStack(spacing: 16) {
                         ForEach(group.entries) { entry in
-                            PartSearchResultRow(entry: entry) {
-                                onNavigate(
-                                    .filteredSet(
-                                        entry.set.persistentModelID,
-                                        partID: entry.part.partID,
-                                        colorID: entry.part.colorID
+                            PartSearchResultRow(
+                                set: entry.set,
+                                part: entry.part,
+                                onShowSet: {
+                                    onNavigate(
+                                        .filteredSet(
+                                            entry.set.persistentModelID,
+                                            partID: entry.part.partID,
+                                            colorID: entry.part.colorID
+                                        )
                                     )
-                                )
-                            }
+                                }
+                            )
                         }
                     }
                     .padding(.horizontal)
@@ -404,7 +403,7 @@ struct SetCollectionView: View {
     }
 
     private var trimmedSearchText: String {
-        debouncedSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        effectiveSearchText
     }
 
     private var isSearching: Bool {
@@ -451,6 +450,8 @@ struct SetCollectionView: View {
 
         return list.sets.flatMap { set in
             set.parts.filter { part in
+                guard part.inventorySection != .extra else { return false }
+
                 let partIDLower = part.partID.lowercased()
                 let colorLower = part.colorName.lowercased()
                 let nameLower = part.name.lowercased()
@@ -506,6 +507,34 @@ struct SetCollectionView: View {
             .map { $0.lowercased() }
     }
 
+    private func performSearch(for key: SearchTaskKey) async {
+        let trimmed = key.query.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            await MainActor.run {
+                effectiveSearchText = ""
+            }
+            return
+        }
+
+        do {
+            try await Task.sleep(nanoseconds: 300_000_000)
+        } catch {
+            return
+        }
+
+        if Task.isCancelled {
+            #if DEBUG
+            print("🔍 SetCollectionView search cancelled for query: '\(key.query)' scope: \(key.scope)")
+            #endif
+            return
+        }
+
+        await MainActor.run {
+            effectiveSearchText = trimmed
+        }
+    }
+
     private func partSearchTokens(for part: Part) -> [String] {
         let combined = "\(part.partID) \(part.colorName) \(part.name)"
         return Array(
@@ -518,8 +547,10 @@ struct SetCollectionView: View {
     private var partSearchEntries: [PartSearchEntry] {
         guard searchScope == .parts else { return [] }
         return matchingParts.compactMap { part in
+            let missing = missingCount(for: part)
+            guard missing > 0 else { return nil }
             guard let set = part.set else { return nil }
-            return PartSearchEntry(set: set, part: part, missingCount: missingCount(for: part))
+            return PartSearchEntry(set: set, part: part, missingCount: missing)
         }
     }
 
@@ -588,51 +619,111 @@ struct SetCollectionView: View {
     }
 
     private struct PartSearchResultRow: View {
-        let entry: PartSearchEntry
-        let action: () -> Void
+        @Environment(\.modelContext) private var modelContext
+        let set: BrickSet
+        @Bindable var part: Part
+        let onShowSet: (() -> Void)?
 
-        var body: some View {
-            Button(action: action) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 16) {
-                        PartThumbnail(url: entry.part.imageURL)
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(entry.set.name)
-                                .font(.headline)
-
-                            Text(entry.set.setNumber)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-
-                            Text("\(entry.part.partID) • \(entry.part.colorName)")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    let missingCount = entry.missingCount
-                    Text(statusText(for: missingCount, part: entry.part))
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(missingCount > 0 ? .orange : .green)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color(uiColor: .secondarySystemBackground))
-                        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
-                )
-            }
-            .buttonStyle(.plain)
+        private var missingCount: Int {
+            max(part.quantityNeeded - part.quantityHave, 0)
         }
 
-        private func statusText(for missingCount: Int, part: Part) -> String {
-            if missingCount > 0 {
-                return "Missing \(missingCount) • Need \(part.quantityNeeded), have \(part.quantityHave)"
-            } else {
-                return "Complete • Need \(part.quantityNeeded), have \(part.quantityHave)"
+        private var quantityBinding: Binding<Int> {
+            Binding(
+                get: { part.quantityHave },
+                set: { updateQuantity(to: $0) }
+            )
+        }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 16) {
+                    PartThumbnail(url: part.imageURL)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(set.name)
+                            .font(.headline)
+
+                        Text(set.setNumber)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        Text("\(part.partID) • \(part.colorName)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("\(part.quantityHave) of \(part.quantityNeeded)")
+                            .font(.title3.bold())
+                            .contentTransition(.numericText())
+
+                        Stepper("", value: quantityBinding, in: 0...part.quantityNeeded)
+                            .labelsHidden()
+                    }
+                    .frame(minWidth: 110)
+                }
+
+                HStack {
+                    Text("Missing \(missingCount) • Need \(part.quantityNeeded), have \(part.quantityHave)")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.orange)
+
+                    Spacer()
+
+                    if let onShowSet {
+                        Button {
+                            onShowSet()
+                        } label: {
+                            Label("View Set", systemImage: "arrow.up.right.square")
+                                .font(.footnote.weight(.semibold))
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground))
+                    .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
+            )
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button {
+                    markComplete()
+                } label: {
+                    Label("Have All", systemImage: "checkmark.circle.fill")
+                }
+                .tint(.green)
+                .disabled(part.quantityHave >= part.quantityNeeded)
+            }
+        }
+
+        private func updateQuantity(to newValue: Int) {
+            let clamped = max(0, min(newValue, part.quantityNeeded))
+            guard clamped != part.quantityHave else { return }
+
+            let applyChange = {
+                part.quantityHave = clamped
+                try? modelContext.save()
+            }
+
+            if clamped >= part.quantityNeeded {
+                withAnimation(.easeInOut) {
+                    applyChange()
+                }
+            } else {
+                withAnimation {
+                    applyChange()
+                }
+            }
+        }
+
+        private func markComplete() {
+            updateQuantity(to: part.quantityNeeded)
         }
     }
 
