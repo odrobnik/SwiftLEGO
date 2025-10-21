@@ -649,37 +649,35 @@ struct SetCollectionView: View {
         }
 
         var body: some View {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 16) {
                     PartThumbnail(url: part.imageURL)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(set.name)
+                        Text(part.name)
                             .font(.headline)
 
-                        Text(set.setNumber)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-
                         Text("\(part.partID) • \(part.colorName)")
-                            .font(.footnote)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
-                    VStack(alignment: .trailing, spacing: 4) {
+                    VStack(alignment: .center, spacing: 6) {
                         Text("\(part.quantityHave) of \(part.quantityNeeded)")
                             .font(.title3.bold())
                             .contentTransition(.numericText())
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
 
                         Stepper("", value: quantityBinding, in: 0...part.quantityNeeded)
                             .labelsHidden()
                     }
-                    .frame(minWidth: 110)
+                    .frame(width: 110, alignment: .trailing)
                 }
 
-                HStack {
+                HStack(alignment: .center, spacing: 12) {
                     Text("Missing \(missingCount) • Need \(part.quantityNeeded), have \(part.quantityHave)")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.orange)
@@ -687,13 +685,21 @@ struct SetCollectionView: View {
                     Spacer()
 
                     if let onShowSet {
-                        Button {
-                            onShowSet()
-                        } label: {
-                            Label("View Set", systemImage: "arrow.up.right.square")
-                                .font(.footnote.weight(.semibold))
+                        Button(action: onShowSet) {
+                            HStack(spacing: 6) {
+                                Text("\(set.setNumber) • \(set.name)")
+                                    .font(.body)
+                                Image(systemName: "arrow.up.right.square")
+                                    .imageScale(.medium)
+                            }
+                            .padding(.vertical, 2)
+                            .foregroundStyle(Color.accentColor)
                         }
                         .buttonStyle(.borderless)
+                    } else {
+                        Text("\(set.setNumber) • \(set.name)")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -701,8 +707,7 @@ struct SetCollectionView: View {
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemBackground))
-                    .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
+                    .fill(Color(uiColor: .systemBackground))
             )
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                 Button {
@@ -815,10 +820,11 @@ struct SetCollectionView: View {
                         switch phase {
                         case .empty, .loading:
                             ProgressView()
+                                .frame(width: 80, height: 60)
                         case .success(let image):
                             image
-                                .resizable()
-                                .scaledToFit()
+                                .frame(width: 80, height: 60)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         case .failure(let state):
                             ZStack {
                                 placeholder
@@ -835,21 +841,19 @@ struct SetCollectionView: View {
                             }
                         }
                     }
+                    .background(.white)
                 } else {
                     placeholder
                 }
             }
-            .frame(width: 60, height: 60)
+            .frame(width: 80, height: 60)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-            )
         }
 
         private var placeholder: some View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(uiColor: .tertiarySystemFill))
+                .frame(width: 80, height: 60)
                 .overlay {
                     Image(systemName: "cube.transparent")
                         .foregroundStyle(.secondary)
