@@ -33,7 +33,10 @@ struct SetDetailView: View {
     }
 
     private var minifigures: [Minifigure] {
-        guard shouldShowMinifigures else { return [] }
+        if normalizedSearchQuery == nil && !shouldShowMinifigures {
+            return []
+        }
+
         return filteredMinifigures.sorted { lhs, rhs in
             if lhs.name != rhs.name {
                 return lhs.name < rhs.name
@@ -53,43 +56,24 @@ struct SetDetailView: View {
     }
 
     private var filteredParts: [Part] {
-        let matchesActiveFilters: (Part) -> Bool = { part in
-            let matchesSection = part.inventorySection == selectedSection
-            let matchesMissingToggle = !showMissingOnly || part.quantityHave < part.quantityNeeded
-            return matchesSection && matchesMissingToggle
-        }
+        brickSet.parts.filter { part in
+            guard part.inventorySection == selectedSection else { return false }
 
-        guard let searchQuery = normalizedSearchQuery else {
-            return brickSet.parts.filter(matchesActiveFilters)
-        }
-
-        var matches: [Part] = []
-        var seen = Set<PersistentIdentifier>()
-
-        let visit: (Part) -> Void = { part in
-            guard matchesActiveFilters(part) else { return }
-            guard matchesSearch(part, query: searchQuery) else { return }
-            let identifier = part.persistentModelID
-            if seen.insert(identifier).inserted {
-                matches.append(part)
+            if showMissingOnly && !hasMissingHierarchy(part) {
+                return false
             }
-        }
 
-        enumeratePartHierarchy(parts: brickSet.parts, visit: visit)
-
-        if shouldShowMinifigures {
-            for minifigure in brickSet.minifigures {
-                enumeratePartHierarchy(parts: minifigure.parts, visit: visit)
+            guard let searchQuery = normalizedSearchQuery else {
+                return true
             }
-        }
 
-        return matches
+            return matchesHierarchy(part, query: searchQuery)
+        }
     }
 
     private var filteredMinifigures: [Minifigure] {
-        guard shouldShowMinifigures else { return [] }
         let minifiguresMatchingMissingToggle = brickSet.minifigures.filter { minifigure in
-            !showMissingOnly || minifigure.quantityHave < minifigure.quantityNeeded
+            !showMissingOnly || hasMissingHierarchy(minifigure: minifigure)
         }
 
         guard let query = normalizedSearchQuery else {
@@ -97,7 +81,8 @@ struct SetDetailView: View {
         }
 
         return minifiguresMatchingMissingToggle.filter { minifigure in
-            matchesMinifigure(minifigure, query: query)
+            matchesMinifigure(minifigure, query: query) ||
+            minifigure.parts.contains { matchesHierarchy($0, query: query) }
         }
     }
 
@@ -109,7 +94,7 @@ struct SetDetailView: View {
     var body: some View {
         
         Group {
-            if partsByColor.isEmpty {
+            if partsByColor.isEmpty && minifigures.isEmpty {
                 
                 EmptyStateView(icon: "shippingbox", title: "No parts", message: normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search.")
             } else {
@@ -121,10 +106,7 @@ struct SetDetailView: View {
                     
                     
                     
-                    if partsByColor.isEmpty {
-                        
-                        EmptyStateView(icon: "shippingbox", title: "No parts", message: normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search.")
-                    } else {
+                    if !partsByColor.isEmpty {
                         ForEach(partsByColor, id: \.color) { group in
                             Section(group.color) {
                                 ForEach(group.parts) { part in
@@ -262,18 +244,6 @@ struct SetDetailView: View {
         selectedSection == .regular
     }
 
-    private func enumeratePartHierarchy(
-        parts: [Part],
-        visit: (Part) -> Void
-    ) {
-        for part in parts {
-            visit(part)
-            if !part.subparts.isEmpty {
-                enumeratePartHierarchy(parts: part.subparts, visit: visit)
-            }
-        }
-    }
-
     private static func initialSection(for brickSet: BrickSet) -> Part.InventorySection {
         for section in segmentedSections {
             if brickSet.parts.contains(where: { $0.inventorySection == section }) {
@@ -282,6 +252,30 @@ struct SetDetailView: View {
         }
 
         return .regular
+    }
+
+    private func matchesHierarchy(_ part: Part, query: String) -> Bool {
+        if matchesSearch(part, query: query) {
+            return true
+        }
+
+        return part.subparts.contains { matchesHierarchy($0, query: query) }
+    }
+
+    private func hasMissingHierarchy(_ part: Part) -> Bool {
+        if part.quantityHave < part.quantityNeeded {
+            return true
+        }
+
+        return part.subparts.contains { hasMissingHierarchy($0) }
+    }
+
+    private func hasMissingHierarchy(minifigure: Minifigure) -> Bool {
+        if minifigure.quantityHave < minifigure.quantityNeeded {
+            return true
+        }
+
+        return minifigure.parts.contains { hasMissingHierarchy($0) }
     }
 
     private func matchesSearch(_ part: Part, query: String) -> Bool {

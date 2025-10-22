@@ -288,21 +288,22 @@ struct SetCollectionView: View {
             } else {
                 ForEach(groupedPartResults, id: \.colorName) { group in
                     Section(group.colorName) {
-                        ForEach(group.entries) { entry in
-                            PartSearchResultRow(
-                                set: entry.set,
-                                part: entry.part,
-                                onShowSet: {
-                                    onNavigate(
-                                        .filteredSet(
-                                            entry.set.persistentModelID,
-                                            partID: entry.part.partID,
-                                            colorID: entry.part.colorID,
-                                            query: effectiveSearchText
-                                        )
-                                    )
-                                }
+                ForEach(group.entries) { entry in
+                    PartSearchResultRow(
+                        set: entry.set,
+                        part: entry.part,
+                        containerDescription: entry.containerDescription,
+                        onShowSet: {
+                            onNavigate(
+                                .filteredSet(
+                                    entry.set.persistentModelID,
+                                    partID: entry.displayPart.partID,
+                                    colorID: entry.displayPart.colorID,
+                                    query: effectiveSearchText
+                                )
                             )
+                        }
+                    )
                             .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -461,7 +462,7 @@ struct SetCollectionView: View {
         var results: [PartSearchEntry] = []
 
         for set in sortedSets {
-            enumerateSearchableParts(in: set) { part in
+            enumerateSearchableParts(in: set) { part, displayPart, owningMinifigure in
                 let partIDLower = part.partID.lowercased()
                 let colorLower = part.colorName.lowercased()
                 let nameLower = part.name.lowercased()
@@ -488,7 +489,13 @@ struct SetCollectionView: View {
                 guard matches else { return }
                 guard missingCount(for: part) > 0 else { return }
                 let entrySet = part.set ?? part.minifigure?.set ?? set
-                let entry = PartSearchEntry(set: entrySet, part: part, orderIndex: results.count)
+                let entry = PartSearchEntry(
+                    set: entrySet,
+                    part: part,
+                    displayPart: displayPart,
+                    owningMinifigure: owningMinifigure,
+                    orderIndex: results.count
+                )
                 results.append(entry)
             }
         }
@@ -586,24 +593,24 @@ struct SetCollectionView: View {
 
     private func enumerateSearchableParts(
         in set: BrickSet,
-        visit: (Part) -> Void
+        visit: (Part, Part, Minifigure?) -> Void
     ) {
-        func walk(part: Part) {
+        func walk(part: Part, root: Part, owningMinifigure: Minifigure?) {
             guard part.inventorySection != .extra else { return }
 
-            visit(part)
+            visit(part, root, owningMinifigure)
             for child in part.subparts {
-                walk(part: child)
+                walk(part: child, root: root, owningMinifigure: owningMinifigure)
             }
         }
 
         for part in set.parts {
-            walk(part: part)
+            walk(part: part, root: part, owningMinifigure: nil)
         }
 
         for minifigure in set.minifigures {
             for part in minifigure.parts {
-                walk(part: part)
+                walk(part: part, root: part, owningMinifigure: minifigure)
             }
         }
     }
@@ -620,7 +627,11 @@ struct SetCollectionView: View {
             ColorGroup(
                 colorName: key,
                 entries: value.sorted { lhs, rhs in
-                    lhs.orderIndex < rhs.orderIndex
+                    let nameComparison = lhs.part.name.localizedCaseInsensitiveCompare(rhs.part.name)
+                    if nameComparison != .orderedSame {
+                        return nameComparison == .orderedAscending
+                    }
+                    return lhs.part.partID.localizedCaseInsensitiveCompare(rhs.part.partID) == .orderedAscending
                 }
             )
         }
@@ -644,10 +655,40 @@ struct SetCollectionView: View {
     private struct PartSearchEntry: Identifiable {
         let set: BrickSet
         let part: Part
+        let displayPart: Part
+        let owningMinifigure: Minifigure?
         let orderIndex: Int
 
         var missingCount: Int {
             max(part.quantityNeeded - part.quantityHave, 0)
+        }
+
+        var containerDescription: String? {
+            var components: [String] = []
+
+            if displayPart.persistentModelID != part.persistentModelID {
+                let parentName = displayPart.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !parentName.isEmpty {
+                    let labelPrefix: String
+                    switch displayPart.inventorySection {
+                    case .alternate:
+                        labelPrefix = "Alternate"
+                    case .counterpart:
+                        labelPrefix = "Counterpart"
+                    case .extra:
+                        labelPrefix = "Extra"
+                    case .regular:
+                        labelPrefix = "Sub-Part"
+                    }
+                    components.append("\(labelPrefix): \(parentName)")
+                }
+            }
+
+            if let owningMinifigure {
+                components.append("Minifigure: \(owningMinifigure.name)")
+            }
+
+            return components.isEmpty ? nil : components.joined(separator: " • ")
         }
 
         var id: PersistentIdentifier { part.persistentModelID }
@@ -657,6 +698,7 @@ struct SetCollectionView: View {
         @Environment(\.modelContext) private var modelContext
         let set: BrickSet
         @Bindable var part: Part
+        let containerDescription: String?
         let onShowSet: (() -> Void)?
 
         private var missingCount: Int {
@@ -696,15 +738,22 @@ struct SetCollectionView: View {
                         Stepper("", value: quantityBinding, in: 0...part.quantityNeeded)
                             .labelsHidden()
                     }
-                    .frame(width: 110, alignment: .trailing)
-                }
+                    .frame(width: 150, alignment: .trailing)
+            }
 
-                HStack(alignment: .center, spacing: 12) {
-                    Text("Missing \(missingCount) • Need \(part.quantityNeeded), have \(part.quantityHave)")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.orange)
+            HStack(alignment: .center, spacing: 12) {
+                Text("Missing \(missingCount) • Need \(part.quantityNeeded), have \(part.quantityHave)")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.orange)
 
-                    Spacer()
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    if let containerDescription {
+                        Text(containerDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
                     if let onShowSet {
                         Button(action: onShowSet) {
@@ -725,6 +774,7 @@ struct SetCollectionView: View {
                     }
                 }
             }
+        }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             .background(

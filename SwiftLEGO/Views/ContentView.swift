@@ -128,7 +128,7 @@ struct ContentView: View {
                 Text("Set unavailable")
                     .foregroundStyle(.secondary)
             }
-        case .filteredSet(let setID, let partID, let colorID, let query):
+        case .filteredSet(let setID, _, _, let query):
             if let set = fetchSet(with: setID) {
                 SetDetailView(
                     brickSet: set,
