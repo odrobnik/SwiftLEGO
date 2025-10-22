@@ -90,7 +90,7 @@ struct SetCollectionView: View {
             placement: .navigationBarDrawer(displayMode: .always),
             prompt: Text(searchScope.prompt)
         )
-        .searchScopes($searchScope) {
+        .searchScopes($searchScope, activation: .onSearchPresentation) {
             ForEach(SearchScope.allCases) { scope in
                 Text(scope.title).tag(scope)
             }
@@ -213,6 +213,8 @@ struct SetCollectionView: View {
     private var searchResultsView: some View {
         if searchScope == .parts {
             partsSearchResultsList
+        } else if searchScope == .minifigures {
+            minifigureSearchResultsList
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 32) {
@@ -230,7 +232,7 @@ struct SetCollectionView: View {
         case .sets:
             setsSearchResultsContent
         case .minifigures:
-            minifigureSearchResultsContent
+            EmptyView()
         case .parts:
             EmptyView()
         }
@@ -317,21 +319,43 @@ struct SetCollectionView: View {
         .background(Color(uiColor: .systemGroupedBackground))
     }
 
-    @ViewBuilder
-    private var minifigureSearchResultsContent: some View {
-        if !minifigureResults.isEmpty {
-            VStack(spacing: 16) {
+    private var minifigureSearchResultsList: some View {
+        List {
+            if minifigureResults.isEmpty {
+                ContentUnavailableView.search(text: trimmedSearchText)
+                    .padding()
+                    .listRowInsets(
+                        EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else {
                 ForEach(minifigureResults) { entry in
-                    MinifigureSearchResultRow(entry: entry) {
-                        onNavigate(.set(entry.set.persistentModelID))
-                    }
+                    MinifigureSearchResultRow(
+                        set: entry.set,
+                        minifigure: entry.minifigure,
+                        onShowSet: {
+                            onNavigate(
+                                .filteredSet(
+                                    entry.set.persistentModelID,
+                                    partID: entry.minifigure.identifier,
+                                    colorID: "",
+                                    query: effectiveSearchText
+                                )
+                            )
+                        }
+                    )
+                    .listRowInsets(
+                        EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+                    )
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             }
-            .padding(.horizontal)
-        } else {
-            ContentUnavailableView.search(text: trimmedSearchText)
-                .padding()
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     private var groupedSets: [(path: [String], sets: [BrickSet])] {
@@ -829,51 +853,116 @@ struct SetCollectionView: View {
     }
 
     private struct MinifigureSearchResultRow: View {
-        let entry: MinifigureSearchEntry
-        let action: () -> Void
+        @Environment(\.modelContext) private var modelContext
+        let set: BrickSet
+        @Bindable var minifigure: Minifigure
+        let onShowSet: (() -> Void)?
 
-        var body: some View {
-            Button(action: action) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 16) {
-                        MinifigureThumbnail(url: entry.minifigure.imageURL)
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(entry.minifigure.name)
-                                .font(.headline)
-
-                            Text(entry.minifigure.identifier)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-
-                            Text("\(entry.set.name) • \(entry.set.setNumber)")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    let missingCount = entry.missingCount
-                    Text(statusText(for: missingCount, minifigure: entry.minifigure))
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(missingCount > 0 ? .orange : .green)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color(uiColor: .secondarySystemBackground))
-                        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
-                )
-            }
-            .buttonStyle(.plain)
+        private var missingCount: Int {
+            max(minifigure.quantityNeeded - minifigure.quantityHave, 0)
         }
 
-        private func statusText(for missingCount: Int, minifigure: Minifigure) -> String {
-            if missingCount > 0 {
-                return "Missing \(missingCount) • Need \(minifigure.quantityNeeded), have \(minifigure.quantityHave)"
-            } else {
-                return "Complete • Need \(minifigure.quantityNeeded), have \(minifigure.quantityHave)"
+        private var quantityBinding: Binding<Int> {
+            Binding(
+                get: { minifigure.quantityHave },
+                set: { updateQuantity(to: $0) }
+            )
+        }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 16) {
+                    MinifigureThumbnail(url: minifigure.imageURL)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(minifigure.name)
+                            .font(.headline)
+
+                        Text(minifigure.identifier)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    VStack(alignment: .center, spacing: 6) {
+                        Text("\(minifigure.quantityHave) of \(minifigure.quantityNeeded)")
+                            .font(.title3.bold())
+                            .contentTransition(.numericText())
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+
+                        Stepper("", value: quantityBinding, in: 0...max(minifigure.quantityNeeded, 0))
+                            .labelsHidden()
+                    }
+                    .frame(width: 150, alignment: .trailing)
+                }
+
+                HStack(alignment: .center, spacing: 12) {
+                    Text("Missing \(missingCount) • Need \(minifigure.quantityNeeded), have \(minifigure.quantityHave)")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(missingCount > 0 ? .orange : .green)
+
+                    Spacer()
+
+                    if let onShowSet {
+                        Button(action: onShowSet) {
+                            HStack(spacing: 6) {
+                                Text("\(set.setNumber) • \(set.name)")
+                                    .font(.body)
+                                Image(systemName: "arrow.up.right.square")
+                                    .imageScale(.medium)
+                            }
+                            .padding(.vertical, 2)
+                            .foregroundStyle(Color.accentColor)
+                        }
+                        .buttonStyle(.borderless)
+                    } else {
+                        Text("\(set.setNumber) • \(set.name)")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color(uiColor: .systemBackground))
+            )
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button {
+                    markComplete()
+                } label: {
+                    Label("Have All", systemImage: "checkmark.circle.fill")
+                }
+                .tint(.green)
+                .disabled(minifigure.quantityHave >= minifigure.quantityNeeded)
+            }
+        }
+
+        private func updateQuantity(to newValue: Int) {
+            let clamped = max(0, min(newValue, minifigure.quantityNeeded))
+            guard clamped != minifigure.quantityHave else { return }
+
+            let applyChange = {
+                minifigure.quantityHave = clamped
+                try? modelContext.save()
+            }
+
+            if clamped >= minifigure.quantityNeeded {
+                withAnimation(.easeInOut) {
+                    applyChange()
+                }
+            } else {
+                withAnimation {
+                    applyChange()
+                }
+            }
+        }
+
+        private func markComplete() {
+            updateQuantity(to: minifigure.quantityNeeded)
         }
     }
 
