@@ -898,18 +898,22 @@ struct SetCollectionView: View {
                                 .frame(width: 80, height: 60)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         case .failure(let state):
-                            ZStack {
-                                placeholder
-                                VStack(spacing: 6) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(.red)
-                                    Button("Retry") {
-                                        state.retry()
+                            if shouldShowRetry(for: state.error) {
+                                ZStack {
+                                    placeholder
+                                    VStack(spacing: 6) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(.red)
+                                        Button("Retry") {
+                                            state.retry()
+                                        }
+                                        .font(.caption)
                                     }
-                                    .font(.caption)
+                                    .padding(8)
                                 }
-                                .padding(8)
+                            } else {
+                                placeholder
                             }
                         }
                     }
@@ -930,6 +934,20 @@ struct SetCollectionView: View {
                     Image(systemName: "cube.transparent")
                         .foregroundStyle(.secondary)
                 }
+        }
+
+        private func shouldShowRetry(for error: Error) -> Bool {
+            if let cacheError = error as? ThumbnailCacheError,
+               cacheError.isMissingAssetError {
+                return false
+            }
+
+            if let urlError = error as? URLError,
+               urlError.code == .fileDoesNotExist {
+                return false
+            }
+
+            return true
         }
     }
 
@@ -985,6 +1003,22 @@ struct SetCollectionView: View {
         }
     }
 
+}
+
+private extension ThumbnailCacheError {
+    var isMissingAssetError: Bool {
+        switch self {
+        case .invalidResponse(let statusCode):
+            if let statusCode {
+                return statusCode == 404 || statusCode == 410
+            }
+            return false
+        case .emptyData:
+            return true
+        case .managerDeallocated:
+            return false
+        }
+    }
 }
 
 #Preview("Sets Grid") {

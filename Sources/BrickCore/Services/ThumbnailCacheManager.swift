@@ -84,9 +84,12 @@ actor ThumbnailCacheManager {
 
         try Task.checkCancellation()
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw ThumbnailCacheError.invalidResponse
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ThumbnailCacheError.invalidResponse(statusCode: nil)
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw ThumbnailCacheError.invalidResponse(statusCode: httpResponse.statusCode)
         }
 
         guard !data.isEmpty else {
@@ -173,7 +176,7 @@ actor ThumbnailCacheManager {
 }
 
 enum ThumbnailCacheError: Error {
-    case invalidResponse
+    case invalidResponse(statusCode: Int?)
     case emptyData
     case managerDeallocated
 }
