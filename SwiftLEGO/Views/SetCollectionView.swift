@@ -460,10 +460,8 @@ struct SetCollectionView: View {
 
         var results: [PartSearchEntry] = []
 
-        for set in list.sets {
-            for part in set.parts {
-                guard part.inventorySection != .extra else { continue }
-
+        for set in sortedSets {
+            enumerateSearchableParts(in: set) { part in
                 let partIDLower = part.partID.lowercased()
                 let colorLower = part.colorName.lowercased()
                 let nameLower = part.name.lowercased()
@@ -471,7 +469,7 @@ struct SetCollectionView: View {
 
                 let matches: Bool
                 if startsWithNumber {
-                    guard partIDLower.hasPrefix(primaryToken) else { continue }
+                    guard partIDLower.hasPrefix(primaryToken) else { return }
                     if secondaryTokens.isEmpty {
                         matches = true
                     } else {
@@ -487,9 +485,9 @@ struct SetCollectionView: View {
                     }
                 }
 
-                guard matches else { continue }
-                guard missingCount(for: part) > 0 else { continue }
-                let entrySet = part.set ?? set
+                guard matches else { return }
+                guard missingCount(for: part) > 0 else { return }
+                let entrySet = part.set ?? part.minifigure?.set ?? set
                 let entry = PartSearchEntry(set: entrySet, part: part, orderIndex: results.count)
                 results.append(entry)
             }
@@ -584,6 +582,30 @@ struct SetCollectionView: View {
                 queryTokens(from: combined)
             )
         )
+    }
+
+    private func enumerateSearchableParts(
+        in set: BrickSet,
+        visit: (Part) -> Void
+    ) {
+        func walk(part: Part) {
+            guard part.inventorySection != .extra else { return }
+
+            visit(part)
+            for child in part.subparts {
+                walk(part: child)
+            }
+        }
+
+        for part in set.parts {
+            walk(part: part)
+        }
+
+        for minifigure in set.minifigures {
+            for part in minifigure.parts {
+                walk(part: part)
+            }
+        }
     }
 
     private var groupedPartResults: [ColorGroup] {

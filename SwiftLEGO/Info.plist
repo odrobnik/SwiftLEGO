@@ -64,5 +64,7 @@
             <string>Owner</string>
         </dict>
     </array>
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <false/>
 </dict>
 </plist>

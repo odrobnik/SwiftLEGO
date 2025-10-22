@@ -53,19 +53,37 @@ struct SetDetailView: View {
     }
 
     private var filteredParts: [Part] {
-        let partsMatchingSection = brickSet.parts.filter { part in
+        let matchesActiveFilters: (Part) -> Bool = { part in
             let matchesSection = part.inventorySection == selectedSection
             let matchesMissingToggle = !showMissingOnly || part.quantityHave < part.quantityNeeded
             return matchesSection && matchesMissingToggle
         }
 
         guard let searchQuery = normalizedSearchQuery else {
-            return partsMatchingSection
+            return brickSet.parts.filter(matchesActiveFilters)
         }
 
-        return partsMatchingSection.filter { part in
-            matchesSearch(part, query: searchQuery)
+        var matches: [Part] = []
+        var seen = Set<PersistentIdentifier>()
+
+        let visit: (Part) -> Void = { part in
+            guard matchesActiveFilters(part) else { return }
+            guard matchesSearch(part, query: searchQuery) else { return }
+            let identifier = part.persistentModelID
+            if seen.insert(identifier).inserted {
+                matches.append(part)
+            }
         }
+
+        enumeratePartHierarchy(parts: brickSet.parts, visit: visit)
+
+        if shouldShowMinifigures {
+            for minifigure in brickSet.minifigures {
+                enumeratePartHierarchy(parts: minifigure.parts, visit: visit)
+            }
+        }
+
+        return matches
     }
 
     private var filteredMinifigures: [Minifigure] {
@@ -242,6 +260,18 @@ struct SetDetailView: View {
 
     private var shouldShowMinifigures: Bool {
         selectedSection == .regular
+    }
+
+    private func enumeratePartHierarchy(
+        parts: [Part],
+        visit: (Part) -> Void
+    ) {
+        for part in parts {
+            visit(part)
+            if !part.subparts.isEmpty {
+                enumeratePartHierarchy(parts: part.subparts, visit: visit)
+            }
+        }
     }
 
     private static func initialSection(for brickSet: BrickSet) -> Part.InventorySection {
