@@ -279,13 +279,27 @@ struct SetDetailView: View {
     }
 
     private func matchesSearch(_ part: Part, query: String) -> Bool {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let numericPrefixToken = String(trimmedQuery.prefix { $0.isNumber })
+        if !numericPrefixToken.isEmpty {
+            guard matchesNumericPartID(part.partID, numericQuery: numericPrefixToken) else { return false }
+        }
+
         let queryTokens = wordPrefixes(in: query)
         guard !queryTokens.isEmpty else { return true }
 
         let partTokens = Set(wordPrefixes(in: "\(part.partID) \(part.colorName) \(part.name)"))
 
         return queryTokens.allSatisfy { token in
-            partTokens.contains(where: { $0.contains(token) || $0.hasPrefix(token) })
+            if token.allSatisfy({ $0.isNumber }) {
+                if matchesNumericPartID(part.partID, numericQuery: token) {
+                    return true
+                }
+
+                return partTokens.contains(token)
+            }
+
+            return partTokens.contains(where: { $0.contains(token) || $0.hasPrefix(token) })
         }
     }
 
@@ -319,6 +333,13 @@ struct SetDetailView: View {
         await MainActor.run { effectiveSearchText = trimmed }
     }
 
+}
+
+private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {
+    guard !numericQuery.isEmpty else { return false }
+    let numericPrefix = partID.prefix { $0.isNumber }
+    guard !numericPrefix.isEmpty else { return false }
+    return String(numericPrefix).caseInsensitiveCompare(numericQuery) == .orderedSame
 }
 
 private struct HeaderThumbnail: View {

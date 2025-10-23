@@ -481,6 +481,8 @@ struct SetCollectionView: View {
         let startsWithNumber = rawQuery.first?.isNumber == true
         let components = rawQuery.split(whereSeparator: { $0.isWhitespace })
         let primaryToken = components.first.map(String.init) ?? rawQuery
+        let primaryTokenIsNumeric = primaryToken.allSatisfy { $0.isNumber }
+        let numericPrefixToken = String(primaryToken.prefix { $0.isNumber })
         let normalizedQueryTokens = queryTokens(from: rawQuery)
         let secondaryTokens = normalizedQueryTokens.dropFirst()
 
@@ -494,21 +496,33 @@ struct SetCollectionView: View {
                 let nameLower = part.name.lowercased()
                 let partTokens = partSearchTokens(for: part)
 
+                if !numericPrefixToken.isEmpty {
+                    guard matchesNumericPartID(part.partID, numericQuery: numericPrefixToken) else { return }
+                }
+
                 let matches: Bool
-                if startsWithNumber {
+                if primaryTokenIsNumeric {
+                    if secondaryTokens.isEmpty {
+                        matches = true
+                    } else {
+                        matches = secondaryTokens.allSatisfy { token in
+                            matchesToken(token, for: part, partTokens: partTokens)
+                        }
+                    }
+                } else if startsWithNumber {
                     guard partIDLower.hasPrefix(primaryToken) else { return }
                     if secondaryTokens.isEmpty {
                         matches = true
                     } else {
                         matches = secondaryTokens.allSatisfy { token in
-                            partTokens.contains(where: { $0.hasPrefix(token) || $0.contains(token) })
+                            matchesToken(token, for: part, partTokens: partTokens)
                         }
                     }
                 } else if colorLower.contains(rawQuery) || nameLower.contains(rawQuery) {
                     matches = true
                 } else {
                     matches = normalizedQueryTokens.allSatisfy { token in
-                        partTokens.contains(where: { $0.hasPrefix(token) || $0.contains(token) })
+                        matchesToken(token, for: part, partTokens: partTokens)
                     }
                 }
 
@@ -628,6 +642,25 @@ struct SetCollectionView: View {
                 queryTokens(from: combined)
             )
         )
+    }
+
+    private func matchesToken(_ token: String, for part: Part, partTokens: [String]) -> Bool {
+        if token.allSatisfy({ $0.isNumber }) {
+            if matchesNumericPartID(part.partID, numericQuery: token) {
+                return true
+            }
+
+            return partTokens.contains { $0 == token }
+        }
+
+        return partTokens.contains { $0.hasPrefix(token) || $0.contains(token) }
+    }
+
+    private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {
+        guard !numericQuery.isEmpty else { return false }
+        let numericPrefix = partID.prefix { $0.isNumber }
+        guard !numericPrefix.isEmpty else { return false }
+        return String(numericPrefix).caseInsensitiveCompare(numericQuery) == .orderedSame
     }
 
     private func enumerateSearchableParts(
@@ -754,6 +787,20 @@ struct SetCollectionView: View {
         private(set) var matchingParts: [Part] = []
         private var recordedIDs: Set<PersistentIdentifier> = []
         private(set) var orderIndex: Int
+
+        init(
+            set: BrickSet,
+            displayPart: Part,
+            owningMinifigure: Minifigure?,
+            orderIndex: Int
+        ) {
+            self.set = set
+            self.displayPart = displayPart
+            self.owningMinifigure = owningMinifigure
+            self.matchingParts = []
+            self.recordedIDs = []
+            self.orderIndex = orderIndex
+        }
 
         mutating func recordMatch(_ part: Part, order: Int) {
             if order < orderIndex {
