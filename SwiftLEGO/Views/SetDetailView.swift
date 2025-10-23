@@ -289,6 +289,7 @@ struct SetDetailView: View {
         guard !queryTokens.isEmpty else { return true }
 
         let partTokens = Set(wordPrefixes(in: "\(part.partID) \(part.colorName) \(part.name)"))
+        let lowercasedPartName = part.name.lowercased()
 
         return queryTokens.allSatisfy { token in
             if token.allSatisfy({ $0.isNumber }) {
@@ -297,6 +298,11 @@ struct SetDetailView: View {
                 }
 
                 return partTokens.contains(token)
+            }
+
+            if let dimensionQuery = normalizedDimensionQuery(for: token),
+               lowercasedPartName.contains(dimensionQuery) {
+                return true
             }
 
             return partTokens.contains(where: { $0.contains(token) || $0.hasPrefix(token) })
@@ -318,6 +324,25 @@ struct SetDetailView: View {
         text
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
             .map { $0.lowercased() }
+    }
+
+    private func normalizedDimensionQuery(for token: String) -> String? {
+        let lowercased = token
+            .lowercased()
+            .replacingOccurrences(of: "×", with: "x")
+        let compact = lowercased.replacingOccurrences(of: " ", with: "")
+
+        guard compact.contains("x") else { return nil }
+
+        let components = compact.split(separator: "x", omittingEmptySubsequences: false)
+        guard components.count >= 2 else { return nil }
+
+        let numericComponents = components.map(String.init)
+        guard numericComponents.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isNumber } }) else {
+            return nil
+        }
+
+        return numericComponents.joined(separator: " x ")
     }
 
     private func updateSearchQuery() async {
