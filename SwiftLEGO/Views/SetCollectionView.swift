@@ -483,6 +483,8 @@ struct SetCollectionView: View {
         let primaryToken = components.first.map(String.init) ?? rawQuery
         let primaryTokenIsNumeric = primaryToken.allSatisfy { $0.isNumber }
         let numericPrefixToken = String(primaryToken.prefix { $0.isNumber })
+        let dimensionPrefixQuery = normalizedDimensionPrefix(in: rawQuery)
+        let shouldEnforceNumericPrefix = !numericPrefixToken.isEmpty && dimensionPrefixQuery == nil
         let normalizedQueryTokens = queryTokens(from: rawQuery)
         let secondaryTokens = normalizedQueryTokens.dropFirst()
 
@@ -494,20 +496,38 @@ struct SetCollectionView: View {
                 let partIDLower = part.partID.lowercased()
                 let colorLower = part.colorName.lowercased()
                 let nameLower = part.name.lowercased()
+                let searchableText = searchableText(for: part)
                 let partTokens = partSearchTokens(for: part)
 
-                if !numericPrefixToken.isEmpty {
+                if shouldEnforceNumericPrefix {
                     guard matchesNumericPartID(part.partID, numericQuery: numericPrefixToken) else { return }
                 }
 
+                if let dimensionPrefixQuery, !searchableText.contains(dimensionPrefixQuery) {
+                    return
+                }
+
                 let matches: Bool
-                if primaryTokenIsNumeric {
+                if let dimensionPrefixQuery = dimensionPrefixQuery {
+                    if normalizedQueryTokens.count <= 1 {
+                        matches = true
+                    } else {
+                        matches = secondaryTokens.allSatisfy { token in
+                            matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
+                        }
+                    }
+                } else if primaryTokenIsNumeric {
                     if secondaryTokens.isEmpty {
                         matches = true
                     } else {
                         matches = secondaryTokens.allSatisfy { token in
-                            matchesToken(token, for: part, partTokens: partTokens)
+                            matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
                         }
+                    }
+                } else if normalizedDimensionQuery(for: primaryToken) != nil {
+                    matches = matchesToken(primaryToken, for: part, partTokens: partTokens, searchableText: searchableText) &&
+                    secondaryTokens.allSatisfy { token in
+                        matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
                     }
                 } else if startsWithNumber {
                     guard partIDLower.hasPrefix(primaryToken) else { return }
@@ -515,14 +535,14 @@ struct SetCollectionView: View {
                         matches = true
                     } else {
                         matches = secondaryTokens.allSatisfy { token in
-                            matchesToken(token, for: part, partTokens: partTokens)
+                            matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
                         }
                     }
                 } else if colorLower.contains(rawQuery) || nameLower.contains(rawQuery) {
                     matches = true
                 } else {
                     matches = normalizedQueryTokens.allSatisfy { token in
-                        matchesToken(token, for: part, partTokens: partTokens)
+                        matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
                     }
                 }
 
@@ -644,13 +664,18 @@ struct SetCollectionView: View {
         )
     }
 
-    private func matchesToken(_ token: String, for part: Part, partTokens: [String]) -> Bool {
+    private func matchesToken(_ token: String, for part: Part, partTokens: [String], searchableText: String) -> Bool {
         if token.allSatisfy({ $0.isNumber }) {
             if matchesNumericPartID(part.partID, numericQuery: token) {
                 return true
             }
 
             return partTokens.contains { $0 == token }
+        }
+
+        if let dimensionQuery = normalizedDimensionQuery(for: token),
+           searchableText.contains(dimensionQuery) {
+            return true
         }
 
         return partTokens.contains { $0.hasPrefix(token) || $0.contains(token) }
@@ -661,6 +686,43 @@ struct SetCollectionView: View {
         let numericPrefix = partID.prefix { $0.isNumber }
         guard !numericPrefix.isEmpty else { return false }
         return String(numericPrefix).caseInsensitiveCompare(numericQuery) == .orderedSame
+    }
+
+    private func normalizedDimensionPrefix(in query: String) -> String? {
+        let prefix = query.prefix { character in
+            character.isNumber || character.isWhitespace || character == "x" || character == "X" || character == "×"
+        }
+        guard !prefix.isEmpty else { return nil }
+        return normalizedDimensionQuery(for: String(prefix))
+    }
+
+    private func normalizedDimensionQuery(for token: String) -> String? {
+        let lowercased = token
+            .lowercased()
+            .replacingOccurrences(of: "×", with: "x")
+        let compact = lowercased.replacingOccurrences(of: " ", with: "")
+
+        guard compact.contains("x") else { return nil }
+
+        let components = compact.split(separator: "x", omittingEmptySubsequences: false)
+        guard components.count >= 2 else { return nil }
+
+        let numericComponents = components.map(String.init)
+        guard numericComponents.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isNumber } }) else {
+            return nil
+        }
+
+        return numericComponents.joined(separator: " x ")
+    }
+
+    private func searchableText(for part: Part) -> String {
+        let combined = "\(part.partID) \(part.colorName) \(part.name)"
+            .lowercased()
+            .replacingOccurrences(of: "×", with: "x")
+
+        return combined
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
     }
 
     private func enumerateSearchableParts(

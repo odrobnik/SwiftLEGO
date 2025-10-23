@@ -282,7 +282,13 @@ struct SetDetailView: View {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let numericPrefixToken = String(trimmedQuery.prefix { $0.isNumber })
         if !numericPrefixToken.isEmpty {
-            guard matchesNumericPartID(part.partID, numericQuery: numericPrefixToken) else { return false }
+            let remainder = trimmedQuery.dropFirst(numericPrefixToken.count)
+            let remainderAfterSpaces = remainder.drop(while: { $0.isWhitespace })
+            let isDimensionQuery = remainderAfterSpaces.first.map { ["x", "X", "×"].contains($0) } ?? false
+
+            if !isDimensionQuery {
+                guard matchesNumericPartID(part.partID, numericQuery: numericPrefixToken) else { return false }
+            }
         }
 
         let queryTokens = wordPrefixes(in: query)
