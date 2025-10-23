@@ -293,8 +293,9 @@ struct SetCollectionView: View {
                 ForEach(group.entries) { entry in
                     PartSearchResultRow(
                         set: entry.set,
-                        part: entry.part,
-                        containerDescription: entry.containerDescription,
+                        displayPart: entry.displayPart,
+                        matchingParts: entry.matchingParts,
+                        contextDescription: entry.contextDescription,
                         onShowSet: {
                             onNavigate(
                                 .filteredSet(
@@ -483,7 +484,8 @@ struct SetCollectionView: View {
         let normalizedQueryTokens = queryTokens(from: rawQuery)
         let secondaryTokens = normalizedQueryTokens.dropFirst()
 
-        var results: [PartSearchEntry] = []
+        var builders: [PersistentIdentifier: PartSearchEntryBuilder] = [:]
+        var matchOrder = 0
 
         for set in sortedSets {
             enumerateSearchableParts(in: set) { part, displayPart, owningMinifigure in
@@ -512,19 +514,32 @@ struct SetCollectionView: View {
 
                 guard matches else { return }
                 guard missingCount(for: part) > 0 else { return }
+
                 let entrySet = part.set ?? part.minifigure?.set ?? set
-                let entry = PartSearchEntry(
-                    set: entrySet,
-                    part: part,
-                    displayPart: displayPart,
-                    owningMinifigure: owningMinifigure,
-                    orderIndex: results.count
-                )
-                results.append(entry)
+                let key = displayPart.persistentModelID
+
+                if builders[key] == nil {
+                    builders[key] = PartSearchEntryBuilder(
+                        set: entrySet,
+                        displayPart: displayPart,
+                        owningMinifigure: owningMinifigure,
+                        orderIndex: matchOrder
+                    )
+                }
+
+                builders[key]?.recordMatch(part, order: matchOrder)
+                matchOrder += 1
             }
         }
 
-        return results
+        return builders.values
+            .map { $0.build() }
+            .sorted { lhs, rhs in
+                if lhs.orderIndex != rhs.orderIndex {
+                    return lhs.orderIndex < rhs.orderIndex
+                }
+                return lhs.displayPart.partID.localizedCaseInsensitiveCompare(rhs.displayPart.partID) == .orderedAscending
+            }
     }
 
     private func runMinifigureSearch(for query: String) -> [MinifigureSearchEntry] {
@@ -644,18 +659,18 @@ struct SetCollectionView: View {
         guard !entries.isEmpty else { return [] }
 
         let grouped = Dictionary(grouping: entries) { entry in
-            entry.part.colorName.isEmpty ? "Unknown Color" : entry.part.colorName
+            entry.groupingColorName
         }
 
         return grouped.map { key, value in
             ColorGroup(
                 colorName: key,
                 entries: value.sorted { lhs, rhs in
-                    let nameComparison = lhs.part.name.localizedCaseInsensitiveCompare(rhs.part.name)
+                    let nameComparison = lhs.displayPart.name.localizedCaseInsensitiveCompare(rhs.displayPart.name)
                     if nameComparison != .orderedSame {
                         return nameComparison == .orderedAscending
                     }
-                    return lhs.part.partID.localizedCaseInsensitiveCompare(rhs.part.partID) == .orderedAscending
+                    return lhs.displayPart.partID.localizedCaseInsensitiveCompare(rhs.displayPart.partID) == .orderedAscending
                 }
             )
         }
@@ -678,19 +693,35 @@ struct SetCollectionView: View {
 
     private struct PartSearchEntry: Identifiable {
         let set: BrickSet
-        let part: Part
         let displayPart: Part
+        let matchingParts: [Part]
         let owningMinifigure: Minifigure?
         let orderIndex: Int
 
-        var missingCount: Int {
-            max(part.quantityNeeded - part.quantityHave, 0)
+        var id: PersistentIdentifier { displayPart.persistentModelID }
+
+        var directMatch: Part? {
+            matchingParts.first { $0.persistentModelID == displayPart.persistentModelID }
         }
 
-        var containerDescription: String? {
+        var subpartMatches: [Part] {
+            matchingParts.filter { $0.persistentModelID != displayPart.persistentModelID }
+        }
+
+        var missingCount: Int {
+            matchingParts.reduce(0) { $0 + max($1.quantityNeeded - $1.quantityHave, 0) }
+        }
+
+        var groupingColorName: String {
+            let candidate = displayPart.colorName.isEmpty ? (subpartMatches.first?.colorName ?? displayPart.colorName) : displayPart.colorName
+            let name = candidate
+            return name.isEmpty ? "Unknown Color" : name
+        }
+
+        var contextDescription: String? {
             var components: [String] = []
 
-            if displayPart.persistentModelID != part.persistentModelID {
+            if !subpartMatches.isEmpty || directMatch == nil {
                 let parentName = displayPart.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !parentName.isEmpty {
                     let labelPrefix: String
@@ -714,91 +745,181 @@ struct SetCollectionView: View {
 
             return components.isEmpty ? nil : components.joined(separator: " • ")
         }
+    }
 
-        var id: PersistentIdentifier { part.persistentModelID }
+    private struct PartSearchEntryBuilder {
+        let set: BrickSet
+        let displayPart: Part
+        let owningMinifigure: Minifigure?
+        private(set) var matchingParts: [Part] = []
+        private var recordedIDs: Set<PersistentIdentifier> = []
+        private(set) var orderIndex: Int
+
+        mutating func recordMatch(_ part: Part, order: Int) {
+            if order < orderIndex {
+                orderIndex = order
+            }
+
+            let identifier = part.persistentModelID
+            guard !recordedIDs.contains(identifier) else { return }
+
+            recordedIDs.insert(identifier)
+            matchingParts.append(part)
+        }
+
+        func build() -> PartSearchEntry {
+            PartSearchEntry(
+                set: set,
+                displayPart: displayPart,
+                matchingParts: matchingParts,
+                owningMinifigure: owningMinifigure,
+                orderIndex: orderIndex
+            )
+        }
     }
 
     private struct PartSearchResultRow: View {
         @Environment(\.modelContext) private var modelContext
         let set: BrickSet
-        @Bindable var part: Part
-        let containerDescription: String?
+        @Bindable var displayPart: Part
+        let matchingParts: [Part]
+        let contextDescription: String?
         let onShowSet: (() -> Void)?
 
-        private var missingCount: Int {
-            max(part.quantityNeeded - part.quantityHave, 0)
+        private var directMatch: Part? {
+            matchingParts.first { $0.persistentModelID == displayPart.persistentModelID }
         }
 
-        private var quantityBinding: Binding<Int> {
-            Binding(
-                get: { part.quantityHave },
-                set: { updateQuantity(to: $0) }
+        private var subpartMatches: [Part] {
+            matchingParts.filter { $0.persistentModelID != displayPart.persistentModelID }
+        }
+
+        private var totalMissing: Int {
+            matchingParts.reduce(0) { $0 + missingCount(for: $1) }
+        }
+
+        private var totalNeeded: Int {
+            matchingParts.reduce(0) { $0 + $1.quantityNeeded }
+        }
+
+        private var totalHave: Int {
+            matchingParts.reduce(0) { $0 + $1.quantityHave }
+        }
+
+        private var directMatchBinding: Binding<Int>? {
+            guard let target = directMatch, subpartMatches.isEmpty else { return nil }
+            return Binding(
+                get: { target.quantityHave },
+                set: { updateQuantity(for: target, to: $0) }
             )
         }
 
+        private var thumbnailSource: Part {
+            if displayPart.imageURL != nil {
+                return displayPart
+            }
+            if let directMatch, directMatch.imageURL != nil {
+                return directMatch
+            }
+            return subpartMatches.first ?? displayPart
+        }
+
+        private var missingSummaryText: String {
+            if let directMatch, subpartMatches.isEmpty {
+                return "Missing \(missingCount(for: directMatch)) • Need \(directMatch.quantityNeeded), have \(directMatch.quantityHave)"
+            }
+
+            let itemLabel = matchingParts.count == 1 ? "item" : "items"
+            return "Missing \(totalMissing) across \(matchingParts.count) \(itemLabel) • Need \(totalNeeded), have \(totalHave)"
+        }
+
         var body: some View {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .center, spacing: 16) {
-                    PartThumbnail(url: part.imageURL)
+                    PartThumbnail(url: thumbnailSource.imageURL)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(part.name)
+                        Text(displayPart.name)
                             .font(.headline)
 
-                        Text("\(part.partID) • \(part.colorName)")
+                        let secondaryColorName = displayPart.colorName.isEmpty ? (subpartMatches.first?.colorName ?? displayPart.colorName) : displayPart.colorName
+                        Text("\(displayPart.partID) • \(secondaryColorName)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
-                    VStack(alignment: .center, spacing: 6) {
-                        Text("\(part.quantityHave) of \(part.quantityNeeded)")
-                            .font(.title3.bold())
-                            .contentTransition(.numericText())
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
+                    if let binding = directMatchBinding, let directMatch {
+                        VStack(alignment: .center, spacing: 6) {
+                            Text("\(directMatch.quantityHave) of \(directMatch.quantityNeeded)")
+                                .font(.title3.bold())
+                                .contentTransition(.numericText())
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
 
-                        Stepper("", value: quantityBinding, in: 0...part.quantityNeeded)
-                            .labelsHidden()
-                    }
-                    .frame(width: 150, alignment: .trailing)
-            }
-
-            HStack(alignment: .center, spacing: 12) {
-                Text("Missing \(missingCount) • Need \(part.quantityNeeded), have \(part.quantityHave)")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.orange)
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 4) {
-                    if let containerDescription {
-                        Text(containerDescription)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let onShowSet {
-                        Button(action: onShowSet) {
-                            HStack(spacing: 6) {
-                                Text("\(set.setNumber) • \(set.name)")
-                                    .font(.body)
-                                Image(systemName: "arrow.up.right.square")
-                                    .imageScale(.medium)
-                            }
-                            .padding(.vertical, 2)
-                            .foregroundStyle(Color.accentColor)
+                            Stepper("", value: binding, in: 0...directMatch.quantityNeeded)
+                                .labelsHidden()
                         }
-                        .buttonStyle(.borderless)
+                        .frame(width: 150, alignment: .trailing)
                     } else {
-                        Text("\(set.setNumber) • \(set.name)")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("Missing \(totalMissing)")
+                                .font(.title3.bold())
+                                .foregroundStyle(.orange)
+
+                            Text("Need \(totalNeeded), have \(totalHave)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(minWidth: 150, alignment: .trailing)
+                    }
+                }
+
+                if let contextDescription, !contextDescription.isEmpty {
+                    Text(contextDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !subpartMatches.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(subpartMatches, id: \.persistentModelID) { subpart in
+                            Text(subpartSummary(for: subpart))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                HStack(alignment: .center, spacing: 12) {
+                    Text(missingSummaryText)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.orange)
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        if let onShowSet {
+                            Button(action: onShowSet) {
+                                HStack(spacing: 6) {
+                                    Text("\(set.setNumber) • \(set.name)")
+                                        .font(.body)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .imageScale(.medium)
+                                }
+                                .padding(.vertical, 2)
+                                .foregroundStyle(Color.accentColor)
+                            }
+                            .buttonStyle(.borderless)
+                        } else {
+                            Text("\(set.setNumber) • \(set.name)")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
-        }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             .background(
@@ -806,17 +927,29 @@ struct SetCollectionView: View {
                     .fill(Color(uiColor: .systemBackground))
             )
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                Button {
-                    markComplete()
-                } label: {
-                    Label("Have All", systemImage: "checkmark.circle.fill")
+                if let directMatch, subpartMatches.isEmpty {
+                    Button {
+                        markComplete(for: directMatch)
+                    } label: {
+                        Label("Have All", systemImage: "checkmark.circle.fill")
+                    }
+                    .tint(.green)
+                    .disabled(directMatch.quantityHave >= directMatch.quantityNeeded)
                 }
-                .tint(.green)
-                .disabled(part.quantityHave >= part.quantityNeeded)
             }
         }
 
-        private func updateQuantity(to newValue: Int) {
+        private func missingCount(for part: Part) -> Int {
+            max(part.quantityNeeded - part.quantityHave, 0)
+        }
+
+        private func subpartSummary(for part: Part) -> String {
+            let missing = missingCount(for: part)
+            let colorDescription = part.colorName.isEmpty ? "Unknown color" : part.colorName
+            return "• \(part.partID) • \(colorDescription) — Missing \(missing) \(missing == 1 ? "piece" : "pieces") (Need \(part.quantityNeeded), have \(part.quantityHave))"
+        }
+
+        private func updateQuantity(for part: Part, to newValue: Int) {
             let clamped = max(0, min(newValue, part.quantityNeeded))
             guard clamped != part.quantityHave else { return }
 
@@ -836,8 +969,8 @@ struct SetCollectionView: View {
             }
         }
 
-        private func markComplete() {
-            updateQuantity(to: part.quantityNeeded)
+        private func markComplete(for part: Part) {
+            updateQuantity(for: part, to: part.quantityNeeded)
         }
     }
 
