@@ -7,7 +7,6 @@ struct PartSearchResultRow: View {
     @Bindable var displayPart: Part
     let matchingParts: [Part]
     let contextDescription: String?
-    let onShowSet: (() -> Void)?
 
     private var directMatch: Part? {
         matchingParts.first { $0.persistentModelID == displayPart.persistentModelID }
@@ -122,33 +121,11 @@ struct PartSearchResultRow: View {
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
-                    if let onShowSet {
-                        Button(action: onShowSet) {
-                            HStack(spacing: 6) {
-                                Text("\(set.setNumber) • \(set.name)")
-                                    .font(.body)
-                                Image(systemName: "arrow.up.right.square")
-                                    .imageScale(.medium)
-                            }
-                            .padding(.vertical, 2)
-                            .foregroundStyle(Color.accentColor)
-                        }
-                        .buttonStyle(.borderless)
-                    } else {
-                        Text("\(set.setNumber) • \(set.name)")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                Text("\(set.setNumber) • \(set.name)")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(uiColor: .systemBackground))
-        )
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             if let directMatch, subpartMatches.isEmpty {
                 Button {
@@ -304,8 +281,7 @@ private struct PartThumbnail: View {
         set: set,
         displayPart: part,
         matchingParts: matches,
-        contextDescription: "Counterpart: Preview Sample",
-        onShowSet: nil
+        contextDescription: "Counterpart: Preview Sample"
     )
     .padding()
     .modelContainer(container)
@@ -366,8 +342,7 @@ private struct PartThumbnail: View {
                     set: directSet,
                     displayPart: directPart,
                     matchingParts: directMatches,
-                    contextDescription: nil,
-                    onShowSet: nil
+                    contextDescription: nil
                 )
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 .listRowSeparator(.hidden)
@@ -376,8 +351,7 @@ private struct PartThumbnail: View {
                     set: counterpartSet,
                     displayPart: counterpartPart,
                     matchingParts: aggregatedMatches,
-                    contextDescription: "Counterpart: Preview Bundle",
-                    onShowSet: {}
+                    contextDescription: "Counterpart: Preview Bundle"
                 )
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 .listRowSeparator(.hidden)

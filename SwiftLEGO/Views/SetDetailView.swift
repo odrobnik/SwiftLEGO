@@ -1,6 +1,26 @@
 import SwiftUI
 import SwiftData
 
+private struct SetSearchQueryKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+private struct SetInitialSectionKey: EnvironmentKey {
+    static let defaultValue: Part.InventorySection? = nil
+}
+
+extension EnvironmentValues {
+    var setSearchQuery: String? {
+        get { self[SetSearchQueryKey.self] }
+        set { self[SetSearchQueryKey.self] = newValue }
+    }
+    
+    var setInitialSection: Part.InventorySection? {
+        get { self[SetInitialSectionKey.self] }
+        set { self[SetInitialSectionKey.self] = newValue }
+    }
+}
+
 struct SetDetailView: View {
     private static let segmentedSections: [Part.InventorySection] = [
         .regular,
@@ -10,6 +30,8 @@ struct SetDetailView: View {
     ]
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.setSearchQuery) private var environmentSearchQuery
+    @Environment(\.setInitialSection) private var environmentInitialSection
     private let brickLinkService = BrickLinkService()
     @Bindable var brickSet: BrickSet
     @State private var selectedSection: Part.InventorySection
@@ -21,19 +43,12 @@ struct SetDetailView: View {
     @State private var refreshAlert: RefreshAlert?
     @State private var minifigureGroupExpansion: [String: Bool] = [:]
 
-    init(
-        brickSet: BrickSet,
-        initialSearchText: String? = nil,
-        initialSelectedSection: Part.InventorySection? = nil
-    ) {
+    init(brickSet: BrickSet) {
         self._brickSet = Bindable(brickSet)
-        self._selectedSection = State(
-            initialValue: initialSelectedSection ?? Self.initialSection(for: brickSet)
-        )
-        self._searchText = State(initialValue: initialSearchText ?? "")
-        self._effectiveSearchText = State(
-            initialValue: initialSearchText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        )
+        // selectedSection and searchText will be initialized in onAppear
+        self._selectedSection = State(initialValue: .regular)
+        self._searchText = State(initialValue: "")
+        self._effectiveSearchText = State(initialValue: "")
     }
 
     private var minifigureGroups: [MinifigureGroup] {
@@ -168,6 +183,19 @@ struct SetDetailView: View {
         }
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
+        .onAppear {
+            // Initialize from environment values on first appearance
+            if let section = environmentInitialSection {
+                selectedSection = section
+            } else {
+                selectedSection = Self.initialSection(for: brickSet)
+            }
+            
+            if let query = environmentSearchQuery {
+                searchText = query
+                effectiveSearchText = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if isRefreshingInventory {
@@ -223,7 +251,7 @@ struct SetDetailView: View {
         Section("Minifigures") {
             ForEach(minifigureGroups) { group in
                 if group.instanceCount <= 1, let instance = group.instances.first {
-                    NavigationLink(value: minifigureDestination(for: instance)) {
+                    NavigationLink(value: instance) {
                         MinifigureInstanceRowView(
                             minifigure: instance,
                             includeInstanceSuffix: false
@@ -235,7 +263,7 @@ struct SetDetailView: View {
                         isExpanded: expansionBinding(for: group)
                     ) {
                         ForEach(group.instances) { minifigure in
-                            NavigationLink(value: minifigureDestination(for: minifigure)) {
+                            NavigationLink(value: minifigure) {
                                 MinifigureInstanceRowView(
                                     minifigure: minifigure,
                                     includeInstanceSuffix: true
@@ -256,16 +284,6 @@ struct SetDetailView: View {
                 }
             }
         }
-    }
-
-    private func minifigureDestination(for minifigure: Minifigure) -> ContentView.Destination {
-        let resolvedSetID = minifigure.set?.persistentModelID ?? brickSet.persistentModelID
-        return .minifigure(
-            .init(
-                setID: resolvedSetID,
-                minifigureID: minifigure.persistentModelID
-            )
-        )
     }
 
     private var headerSection: some View {
@@ -638,42 +656,26 @@ private struct MinifigureGroupRow: View {
 
     var body: some View {
         if group.instanceCount <= 1, let instance = group.instances.first {
-            if let destination = destination(for: instance) {
-                NavigationLink(value: destination) {
-                    MinifigureInstanceRowView(
-                        minifigure: instance,
-                        includeInstanceSuffix: false
-                    )
-                }
-                .buttonStyle(.plain)
-            } else {
+            NavigationLink(value: instance) {
                 MinifigureInstanceRowView(
                     minifigure: instance,
                     includeInstanceSuffix: false
                 )
             }
+            .buttonStyle(.plain)
         } else {
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(spacing: 0) {
                     ForEach(group.instances) { minifigure in
-                        if let destination = destination(for: minifigure) {
-                            NavigationLink(value: destination) {
-                                MinifigureInstanceRowView(
-                                    minifigure: minifigure,
-                                    includeInstanceSuffix: true
-                                )
-                                .padding(.leading, 12)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.vertical, 4)
-                        } else {
+                        NavigationLink(value: minifigure) {
                             MinifigureInstanceRowView(
                                 minifigure: minifigure,
                                 includeInstanceSuffix: true
                             )
                             .padding(.leading, 12)
-                            .padding(.vertical, 4)
                         }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 4)
                     }
                 }
                 .padding(.top, 6)
@@ -728,10 +730,6 @@ private struct MinifigureGroupRow: View {
         }
     }
 
-    private func destination(for minifigure: Minifigure) -> ContentView.Destination? {
-        guard let setID = minifigure.set?.persistentModelID else { return nil }
-        return .minifigure(.init(setID: setID, minifigureID: minifigure.persistentModelID))
-    }
 }
 
 private struct MinifigureGroupSummaryView: View {

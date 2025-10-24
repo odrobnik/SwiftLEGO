@@ -5,7 +5,6 @@ struct CategorySetsView: View {
     @Environment(\.modelContext) private var modelContext
     let categoryPath: [String]
     let sets: [BrickSet]
-    let onNavigate: (ContentView.Destination) -> Void
 
     private let brickLinkService = BrickLinkService()
     @State private var setBeingRenamed: BrickSet?
@@ -72,9 +71,7 @@ struct CategorySetsView: View {
 
                             LazyVGrid(columns: adaptiveColumns, spacing: 16) {
                                 ForEach(group.sets) { set in
-                                    Button {
-                                        onNavigate(.set(.init(id: set.persistentModelID)))
-                                    } label: {
+                                    NavigationLink(value: set) {
                                         SetCardView(brickSet: set)
                                             .overlay(alignment: .topTrailing) {
                                                 if refreshingSetIDs.contains(set.persistentModelID) {

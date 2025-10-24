@@ -4,7 +4,7 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(animation: .default) private var lists: [CollectionList]
-    @State private var path: [Destination] = []
+    @State private var path = NavigationPath()
     @State private var selectedListID: PersistentIdentifier?
     @State private var selectedCategoryPath: [String]?
     private let uncategorizedCategoryTitle = "Uncategorized"
@@ -25,19 +25,13 @@ struct ContentView: View {
                         CategorySetsView(
                             categoryPath: categoryPath,
                             sets: setsMatchingCategory(path: categoryPath)
-                        ) { destination in
-                            path.append(destination)
-                        }
+                        )
                         .id(categoryPath.joined(separator: "|"))
                     } else if let list = selectedList {
-                        SetCollectionView(list: list) { destination in
-                            path.append(destination)
-                        }
+                        SetCollectionView(list: list)
                         .id(list.persistentModelID)
                     } else if let first = lists.first {
-                        SetCollectionView(list: first) { destination in
-                            path.append(destination)
-                        }
+                        SetCollectionView(list: first)
                         .task { setSelectedList(first) }
                     } else {
                         EmptyStateView(
@@ -47,7 +41,17 @@ struct ContentView: View {
                         )
                     }
                 }
-                .navigationDestination(for: Destination.self, destination: makeDestination)
+                .navigationDestination(for: BrickSet.self) { set in
+                    SetDetailView(brickSet: set)
+                }
+                .navigationDestination(for: SetNavigation.self) { navigation in
+                    SetDetailView(brickSet: navigation.set)
+                        .environment(\.setSearchQuery, navigation.searchQuery)
+                        .environment(\.setInitialSection, navigation.section)
+                }
+                .navigationDestination(for: Minifigure.self) { minifigure in
+                    MinifigureDetailView(minifigure: minifigure)
+                }
             }
         }
         .onChange(of: lists.count) { _, _ in
@@ -92,7 +96,8 @@ struct ContentView: View {
     private func handleSidebarSetSelection(_ set: BrickSet) {
         guard let list = set.collection else { return }
         setSelectedList(list)
-        path = [.set(.init(id: set.persistentModelID))]
+        path = NavigationPath()
+        path.append(set)
     }
 
     private func handleSidebarCategorySelection(_ pathComponents: [String]?) {
@@ -102,32 +107,8 @@ struct ContentView: View {
         } else {
             ensureSelection()
         }
-        path.removeAll()
+        path = NavigationPath()
     }
-    
-    @ViewBuilder
-    private func makeDestination(_ destination: Destination) -> some View {
-        switch destination {
-        case .set(let payload):
-            if let set = fetchSet(with: payload.id) {
-                SetDetailView(
-                    brickSet: set,
-                    initialSearchText: payload.searchQuery
-                )
-            } else {
-                Text("Set unavailable")
-                    .foregroundStyle(.secondary)
-            }
-        case .minifigure(let payload):
-            if let minifigure = fetchMinifigure(with: payload.minifigureID) {
-                MinifigureDetailView(minifigure: minifigure)
-            } else {
-                Text("Minifigure unavailable")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
     private func setsMatchingCategory(path: [String]) -> [BrickSet] {
         lists
             .flatMap { $0.sets }
@@ -154,56 +135,13 @@ struct ContentView: View {
         return path
     }
 
-    private func fetchSet(with id: PersistentIdentifier) -> BrickSet? {
-        for list in lists {
-            if let match = list.sets.first(where: { $0.persistentModelID == id }) {
-                return match
-            }
-        }
-        return nil
-    }
-
-    private func fetchMinifigure(with id: PersistentIdentifier) -> Minifigure? {
-        for list in lists {
-            for set in list.sets {
-                if let match = set.minifigures.first(where: { $0.persistentModelID == id }) {
-                    return match
-                }
-            }
-        }
-        return nil
-    }
-
 }
 
 extension ContentView {
-    enum Destination: Hashable {
-        case set(SetDestination)
-        case minifigure(MinifigureDestination)
-    }
-
-    struct SetDestination: Hashable {
-        let id: PersistentIdentifier
-        var partID: String?
-        var colorID: String?
+    struct SetNavigation: Hashable {
+        let set: BrickSet
         var searchQuery: String?
-
-        init(
-            id: PersistentIdentifier,
-            partID: String? = nil,
-            colorID: String? = nil,
-            searchQuery: String? = nil
-        ) {
-            self.id = id
-            self.partID = partID
-            self.colorID = colorID
-            self.searchQuery = searchQuery
-        }
-    }
-
-    struct MinifigureDestination: Hashable {
-        let setID: PersistentIdentifier
-        let minifigureID: PersistentIdentifier
+        var section: Part.InventorySection?
     }
 }
 

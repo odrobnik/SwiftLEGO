@@ -5,7 +5,6 @@ struct MinifigureSearchResultRow: View {
     @Environment(\.modelContext) private var modelContext
     let set: BrickSet
     @Bindable var minifigure: Minifigure
-    let onShowSet: (() -> Void)?
 
     private var missingCount: Int {
         max(minifigure.quantityNeeded - minifigure.quantityHave, 0)
@@ -54,31 +53,11 @@ struct MinifigureSearchResultRow: View {
 
                 Spacer()
 
-                if let onShowSet {
-                    Button(action: onShowSet) {
-                        HStack(spacing: 6) {
-                            Text("\(set.setNumber) • \(set.name)")
-                                .font(.body)
-                            Image(systemName: "arrow.up.right.square")
-                                .imageScale(.medium)
-                        }
-                        .padding(.vertical, 2)
-                        .foregroundStyle(Color.accentColor)
-                    }
-                    .buttonStyle(.borderless)
-                } else {
-                    Text("\(set.setNumber) • \(set.name)")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
+                Text("\(set.setNumber) • \(set.name)")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(uiColor: .systemBackground))
-        )
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button {
                 markComplete()
@@ -190,8 +169,7 @@ private struct MinifigureThumbnail: View {
 
     return MinifigureSearchResultRow(
         set: set,
-        minifigure: figure,
-        onShowSet: nil
+        minifigure: figure
     )
     .padding()
     .modelContainer(container)

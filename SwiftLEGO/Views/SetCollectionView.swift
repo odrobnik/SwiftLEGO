@@ -4,7 +4,6 @@ import SwiftData
 struct SetCollectionView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var list: CollectionList
-    let onNavigate: (ContentView.Destination) -> Void
     private let brickLinkService = BrickLinkService()
     @State private var showingAddSetSheet = false
     @State private var showingBulkAddSheet = false
@@ -18,12 +17,8 @@ struct SetCollectionView: View {
     @State private var refreshingSetIDs: Set<PersistentIdentifier> = []
     @State private var refreshError: RefreshError?
 
-    init(
-        list: CollectionList,
-        onNavigate: @escaping (ContentView.Destination) -> Void = { _ in }
-    ) {
+    init(list: CollectionList) {
         self._list = Bindable(list)
-        self.onNavigate = onNavigate
     }
 
     private var sortedSets: [BrickSet] {
@@ -181,9 +176,7 @@ struct SetCollectionView: View {
 
                             LazyVGrid(columns: adaptiveColumns, spacing: 16) {
                                 ForEach(group.sets) { set in
-                                    Button {
-                                        onNavigate(.set(.init(id: set.persistentModelID)))
-                                    } label: {
+                                    NavigationLink(value: set) {
                                         SetCardView(brickSet: set)
                                             .overlay(alignment: .topTrailing) {
                                                 if refreshingSetIDs.contains(set.persistentModelID) {
@@ -275,9 +268,7 @@ struct SetCollectionView: View {
 
                     LazyVGrid(columns: adaptiveColumns, spacing: 16) {
                         ForEach(group.sets) { set in
-                            Button {
-                                onNavigate(.set(.init(id: set.persistentModelID)))
-                            } label: {
+                            NavigationLink(value: set) {
                                 SetCardView(brickSet: set)
                                     .overlay(alignment: .topTrailing) {
                                         if refreshingSetIDs.contains(set.persistentModelID) {
@@ -328,27 +319,18 @@ struct SetCollectionView: View {
                 ForEach(groupedPartResults, id: \.colorName) { group in
                     Section(group.colorName) {
                 ForEach(group.entries) { entry in
-                    PartSearchResultRow(
+                    NavigationLink(value: ContentView.SetNavigation(
                         set: entry.set,
-                        displayPart: entry.displayPart,
-                        matchingParts: entry.matchingParts,
-                        contextDescription: entry.contextDescription,
-                        onShowSet: {
-                            onNavigate(
-                                .set(
-                                    .init(
-                                        id: entry.set.persistentModelID,
-                                        partID: entry.displayPart.partID,
-                                        colorID: entry.displayPart.colorID,
-                                        searchQuery: effectiveSearchText
-                                    )
-                                )
-                            )
-                        }
-                    )
-                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                        searchQuery: effectiveSearchText,
+                        section: entry.displayPart.inventorySection
+                    )) {
+                        PartSearchResultRow(
+                            set: entry.set,
+                            displayPart: entry.displayPart,
+                            matchingParts: entry.matchingParts,
+                            contextDescription: entry.contextDescription
+                        )
+                    }
                         }
                     }
                 }
@@ -371,27 +353,16 @@ struct SetCollectionView: View {
                     .listRowSeparator(.hidden)
             } else {
                 ForEach(minifigureResults) { entry in
-                    MinifigureSearchResultRow(
+                    NavigationLink(value: ContentView.SetNavigation(
                         set: entry.set,
-                        minifigure: entry.minifigure,
-                        onShowSet: {
-                            onNavigate(
-                                .set(
-                                    .init(
-                                        id: entry.set.persistentModelID,
-                                        partID: entry.minifigure.identifier,
-                                        colorID: "",
-                                        searchQuery: effectiveSearchText
-                                    )
-                                )
-                            )
-                        }
-                    )
-                    .listRowInsets(
-                        EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
-                    )
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
+                        searchQuery: effectiveSearchText,
+                        section: .regular
+                    )) {
+                        MinifigureSearchResultRow(
+                            set: entry.set,
+                            minifigure: entry.minifigure
+                        )
+                    }
                 }
             }
         }
