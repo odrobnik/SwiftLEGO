@@ -15,6 +15,7 @@ struct BrickLinkPartPayload: Sendable {
     let colorID: String
     let colorName: String
     let quantityNeeded: Int
+    let instanceNumber: Int?
     let imageURL: URL?
     let partURL: URL?
     let inventorySection: Part.InventorySection
@@ -30,6 +31,7 @@ struct BrickLinkMinifigurePayload: Sendable {
     let identifier: String
     let name: String
     let quantityNeeded: Int
+    let instanceNumber: Int?
     let imageURL: URL?
     let catalogURL: URL?
     let inventoryURL: URL?
@@ -57,6 +59,7 @@ actor BrickLinkService {
                 identifier: minifigure.identifier,
                 name: minifigure.name,
                 quantityNeeded: minifigure.quantity,
+                instanceNumber: nil,
                 imageURL: minifigure.imageURL,
                 catalogURL: minifigure.catalogURL,
                 inventoryURL: minifigure.inventoryURL,
@@ -84,6 +87,7 @@ actor BrickLinkService {
             colorID: part.colorID,
             colorName: part.colorName,
             quantityNeeded: part.quantity,
+            instanceNumber: nil,
             imageURL: part.imageURL,
             partURL: part.partURL,
             inventorySection: Part.InventorySection(brickLinkSection: part.section),

@@ -14,6 +14,7 @@ final class Minifigure: Identifiable {
     var set: BrickSet?
     @Relationship(deleteRule: .cascade, inverse: \Part.minifigure) var parts: [Part]
     @Relationship(deleteRule: .cascade, inverse: \MinifigCategory.minifigure) var categories: [MinifigCategory]
+    var instanceNumber: Int = 1
 
     init(
         id: UUID = UUID(),
@@ -26,7 +27,8 @@ final class Minifigure: Identifiable {
         inventoryURLString: String? = nil,
         set: BrickSet? = nil,
         parts: [Part] = [],
-        categories: [MinifigCategory] = []
+        categories: [MinifigCategory] = [],
+        instanceNumber: Int = 1
     ) {
         self.id = id
         self.identifier = identifier
@@ -39,6 +41,7 @@ final class Minifigure: Identifiable {
         self.set = set
         self.parts = parts
         self.categories = categories
+        self.instanceNumber = instanceNumber
     }
 }
 
@@ -72,5 +75,15 @@ extension Minifigure {
         }
 
         return names.isEmpty ? [uncategorizedTitle] : names
+    }
+}
+
+extension Minifigure {
+    var displayIdentifierWithInstance: String {
+        "\(identifier)#\(instanceNumber)"
+    }
+
+    var displayNameWithInstance: String {
+        instanceNumber > 1 ? "\(name) #\(instanceNumber)" : name
     }
 }

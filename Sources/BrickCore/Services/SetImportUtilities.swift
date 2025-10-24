@@ -21,9 +21,17 @@ enum SetImportUtilities {
             let partID: String
             let colorID: String
             let inventorySection: Part.InventorySection
+            let instanceNumber: Int?
         }
 
-        let grouped = Dictionary(grouping: parts) { PartGroupKey(partID: $0.partID, colorID: $0.colorID, inventorySection: $0.inventorySection) }
+        let grouped = Dictionary(grouping: parts) {
+            PartGroupKey(
+                partID: $0.partID,
+                colorID: $0.colorID,
+                inventorySection: $0.inventorySection,
+                instanceNumber: $0.instanceNumber
+            )
+        }
 
         return grouped.map { (_, group) in
             guard let sample = group.first else { fatalError("Unexpected empty group") }
@@ -34,7 +42,8 @@ enum SetImportUtilities {
                 name: sample.name,
                 colorID: sample.colorID,
                 colorName: sample.colorName,
-                quantityNeeded: totalNeeded,
+                quantityNeeded: sample.instanceNumber == nil ? totalNeeded : sample.quantityNeeded,
+                instanceNumber: sample.instanceNumber,
                 imageURL: sample.imageURL,
                 partURL: sample.partURL,
                 inventorySection: sample.inventorySection,
@@ -44,6 +53,14 @@ enum SetImportUtilities {
         .sorted { lhs, rhs in
             if lhs.inventorySection != rhs.inventorySection {
                 return lhs.inventorySection.sortOrder < rhs.inventorySection.sortOrder
+            }
+
+            if lhs.instanceNumber != rhs.instanceNumber {
+                let lhsInstance = lhs.instanceNumber ?? 0
+                let rhsInstance = rhs.instanceNumber ?? 0
+                if lhsInstance != rhsInstance {
+                    return lhsInstance < rhsInstance
+                }
             }
 
             if lhs.colorName != rhs.colorName {
@@ -82,7 +99,8 @@ enum SetImportUtilities {
             set: owningSet,
             minifigure: owningMinifigure,
             subparts: [],
-            parentPart: parentPart
+            parentPart: parentPart,
+            instanceNumber: payload.instanceNumber ?? 1
         )
 
         if !payload.subparts.isEmpty {
@@ -109,6 +127,7 @@ enum SetImportUtilities {
                 colorID: $0.colorID,
                 colorName: $0.colorName,
                 quantityNeeded: $0.quantityNeeded,
+                instanceNumber: $0.instanceNumber,
                 imageURL: $0.imageURL,
                 partURL: $0.partURL,
                 inventorySection: $0.inventorySection,
@@ -134,6 +153,7 @@ enum SetImportUtilities {
                 identifier: minifigure.identifier,
                 name: minifigure.name,
                 quantityNeeded: minifigure.quantityNeeded,
+                instanceNumber: minifigure.instanceNumber,
                 imageURL: minifigure.imageURL,
                 catalogURL: minifigure.catalogURL,
                 inventoryURL: minifigure.inventoryURL,
@@ -217,49 +237,70 @@ enum SetImportUtilities {
         from payloads: [BrickLinkMinifigurePayload],
         set: BrickSet
     ) -> [Minifigure] {
-        payloads.enumerated().map { _, payload in
-            let minifigure = Minifigure(
-                identifier: payload.identifier,
-                name: payload.name,
-                quantityNeeded: payload.quantityNeeded,
-                quantityHave: 0,
-                imageURLString: payload.imageURL?.absoluteString,
-                catalogURLString: payload.catalogURL?.absoluteString,
-                inventoryURLString: payload.inventoryURL?.absoluteString,
-                set: set
+        payloads.flatMap { payload in
+            if let instanceNumber = payload.instanceNumber {
+                return [makeMinifigureModel(from: payload, set: set, instanceNumber: instanceNumber, quantityNeeded: payload.quantityNeeded)]
+            }
+
+            let copies = max(payload.quantityNeeded, 0)
+            guard copies > 0 else {
+                return [makeMinifigureModel(from: payload, set: set, instanceNumber: 1, quantityNeeded: 0)]
+            }
+
+            return (1...copies).map { index in
+                makeMinifigureModel(from: payload, set: set, instanceNumber: index, quantityNeeded: 1)
+            }
+        }
+    }
+
+    private static func makeMinifigureModel(
+        from payload: BrickLinkMinifigurePayload,
+        set: BrickSet,
+        instanceNumber: Int,
+        quantityNeeded: Int
+    ) -> Minifigure {
+        let minifigure = Minifigure(
+            identifier: payload.identifier,
+            name: payload.name,
+            quantityNeeded: quantityNeeded,
+            quantityHave: 0,
+            imageURLString: payload.imageURL?.absoluteString,
+            catalogURLString: payload.catalogURL?.absoluteString,
+            inventoryURLString: payload.inventoryURL?.absoluteString,
+            set: set,
+            instanceNumber: instanceNumber
+        )
+
+        var categoryModels: [MinifigCategory] = []
+        var previousCategory: MinifigCategory?
+
+        for (index, category) in payload.categories.enumerated() {
+            let categoryModel = MinifigCategory(
+                categoryID: category.id,
+                name: category.name,
+                sortOrder: index,
+                minifigure: minifigure,
+                parent: previousCategory
             )
 
-            var categoryModels: [MinifigCategory] = []
-            var previousCategory: MinifigCategory?
-
-            for (index, category) in payload.categories.enumerated() {
-                let categoryModel = MinifigCategory(
-                    categoryID: category.id,
-                    name: category.name,
-                    sortOrder: index,
-                    minifigure: minifigure,
-                    parent: previousCategory
-                )
-
-                previousCategory?.children.append(categoryModel)
-                categoryModels.append(categoryModel)
-                previousCategory = categoryModel
-            }
-
-            minifigure.categories = categoryModels
-
-            let aggregatedParts = aggregateParts(payload.parts)
-            let partModels = aggregatedParts.map { partPayload in
-                makePartModel(
-                    from: partPayload,
-                    set: nil,
-                    minifigure: minifigure,
-                    parentPart: nil
-                )
-            }
-
-            minifigure.parts = partModels
-            return minifigure
+            previousCategory?.children.append(categoryModel)
+            categoryModels.append(categoryModel)
+            previousCategory = categoryModel
         }
+
+        minifigure.categories = categoryModels
+
+        let aggregatedParts = aggregateParts(payload.parts)
+        let partModels = aggregatedParts.map { partPayload in
+            makePartModel(
+                from: partPayload,
+                set: nil,
+                minifigure: minifigure,
+                parentPart: nil
+            )
+        }
+
+        minifigure.parts = partModels
+        return minifigure
     }
 }

@@ -32,12 +32,34 @@ struct SetDetailView: View {
         )
     }
 
-    private var minifigures: [Minifigure] {
+    private var minifigureGroups: [MinifigureGroup] {
         if normalizedSearchQuery == nil && !shouldShowMinifigures {
             return []
         }
 
-        return filteredMinifigures.sorted { lhs, rhs in
+        let grouped = Dictionary(grouping: filteredMinifigures) { $0.identifier.lowercased() }
+
+        let mapped = grouped.values.compactMap { instances -> MinifigureGroup? in
+            guard !instances.isEmpty else { return nil }
+            let sortedInstances = instances.sorted { lhs, rhs in
+                if lhs.instanceNumber != rhs.instanceNumber {
+                    return lhs.instanceNumber < rhs.instanceNumber
+                }
+                if lhs.name != rhs.name {
+                    return lhs.name < rhs.name
+                }
+                return lhs.identifier < rhs.identifier
+            }
+
+            guard let representative = sortedInstances.first else { return nil }
+            return MinifigureGroup(
+                identifier: representative.identifier,
+                name: representative.name,
+                instances: sortedInstances
+            )
+        }
+
+        return mapped.sorted { lhs, rhs in
             if lhs.name != rhs.name {
                 return lhs.name < rhs.name
             }
@@ -94,7 +116,7 @@ struct SetDetailView: View {
     var body: some View {
         
         Group {
-            if partsByColor.isEmpty && minifigures.isEmpty {
+            if partsByColor.isEmpty && minifigureGroups.isEmpty {
                 
                 EmptyStateView(icon: "shippingbox", title: "No parts", message: normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search.")
             } else {
@@ -119,7 +141,7 @@ struct SetDetailView: View {
                         }
                     }
                     
-                    if !minifigures.isEmpty {
+                    if !minifigureGroups.isEmpty {
                         minifigureSection
                     }
                 }
@@ -174,14 +196,11 @@ struct SetDetailView: View {
 
     private var minifigureSection: some View {
         Section("Minifigures") {
-            ForEach(minifigures) { minifigure in
-                NavigationLink {
-                    MinifigureDetailView(minifigure: minifigure)
-                }
-                label: {
-                    MinifigureRowView(minifigure: minifigure)
-                }
-                .buttonStyle(.plain)
+            ForEach(minifigureGroups) { group in
+                MinifigureGroupRow(
+                    group: group,
+                    isFilteringMissing: showMissingOnly
+                )
             }
         }
     }
@@ -422,9 +441,175 @@ private struct HeaderThumbnail: View {
     }
 }
 
-private struct MinifigureRowView: View {
+private struct MinifigureGroup: Identifiable {
+    let identifier: String
+    let name: String
+    let instances: [Minifigure]
+
+    var id: String {
+        let suffix = instances.map { "\($0.instanceNumber)" }.joined(separator: "-")
+        return "\(identifier.lowercased())|\(suffix)"
+    }
+
+    var totalNeeded: Int {
+        instances.reduce(0) { $0 + $1.quantityNeeded }
+    }
+
+    var totalHave: Int {
+        instances.reduce(0) { $0 + $1.quantityHave }
+    }
+
+    var imageURL: URL? {
+        instances.first?.imageURL
+    }
+
+    var instanceCount: Int {
+        instances.count
+    }
+
+    var hasMissing: Bool {
+        totalHave < totalNeeded
+    }
+}
+
+private struct MinifigureGroupRow: View {
+    @Environment(\.modelContext) private var modelContext
+    let group: MinifigureGroup
+    let isFilteringMissing: Bool
+    @State private var isExpanded: Bool
+
+    init(group: MinifigureGroup, isFilteringMissing: Bool) {
+        self.group = group
+        self.isFilteringMissing = isFilteringMissing
+        let shouldExpand = group.instanceCount <= 1 || (isFilteringMissing && group.hasMissing)
+        self._isExpanded = State(initialValue: shouldExpand)
+    }
+
+    var body: some View {
+        if group.instanceCount <= 1, let instance = group.instances.first {
+            NavigationLink {
+                MinifigureDetailView(minifigure: instance)
+            } label: {
+                MinifigureInstanceRowView(
+                    minifigure: instance,
+                    showInstanceIndicator: false
+                )
+            }
+            .buttonStyle(.plain)
+        } else {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                VStack(spacing: 0) {
+                    ForEach(group.instances) { minifigure in
+                        NavigationLink {
+                            MinifigureDetailView(minifigure: minifigure)
+                        } label: {
+                            MinifigureInstanceRowView(
+                                minifigure: minifigure,
+                                showInstanceIndicator: true
+                            )
+                            .padding(.leading, 12)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 4)
+                    }
+                }
+                .padding(.top, 6)
+            } label: {
+                MinifigureGroupSummaryView(
+                    group: group,
+                    quantityBinding: aggregateQuantityBinding
+                )
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
+    private var aggregateQuantityBinding: Binding<Int> {
+        Binding(
+            get: { group.totalHave },
+            set: { updateGroupQuantity(to: $0) }
+        )
+    }
+
+    private func updateGroupQuantity(to newValue: Int) {
+        let totalNeeded = group.totalNeeded
+        let clamped = max(0, min(newValue, totalNeeded))
+        let current = group.totalHave
+        guard clamped != current else { return }
+
+        if clamped > current {
+            var remaining = clamped - current
+            withAnimation {
+                for figure in group.instances {
+                    guard remaining > 0 else { break }
+                    let capacity = figure.quantityNeeded - figure.quantityHave
+                    guard capacity > 0 else { continue }
+                    let addition = min(capacity, remaining)
+                    figure.quantityHave += addition
+                    remaining -= addition
+                }
+                try? modelContext.save()
+            }
+        } else {
+            var remaining = current - clamped
+            withAnimation {
+                for figure in group.instances.reversed() {
+                    guard remaining > 0 else { break }
+                    let reduction = min(figure.quantityHave, remaining)
+                    guard reduction > 0 else { continue }
+                    figure.quantityHave -= reduction
+                    remaining -= reduction
+                }
+                try? modelContext.save()
+            }
+        }
+    }
+}
+
+private struct MinifigureGroupSummaryView: View {
+    let group: MinifigureGroup
+    let quantityBinding: Binding<Int>
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            MinifigureThumbnailView(url: group.imageURL, size: 64)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(group.name)
+                    .font(.headline)
+
+                Text(group.identifier)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                if group.instanceCount > 1 {
+                    Text("Includes \(group.instanceCount) copies")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            VStack(alignment: .center, spacing: 4) {
+                Text("\(group.totalHave) of \(group.totalNeeded)")
+                    .font(.title3.bold())
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+
+                Stepper("", value: quantityBinding, in: 0...max(group.totalNeeded, 0))
+                    .labelsHidden()
+            }
+            .frame(minWidth: 90, idealWidth: 110)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct MinifigureInstanceRowView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var minifigure: Minifigure
+    let showInstanceIndicator: Bool
 
     private var quantityBinding: Binding<Int> {
         Binding(
@@ -434,88 +619,104 @@ private struct MinifigureRowView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 16) {
-                thumbnail
+        HStack(alignment: .center, spacing: 16) {
+            MinifigureThumbnailView(url: minifigure.imageURL, size: 56)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(minifigure.name)
-                        .font(.headline)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(minifigure.name)
+                    .font(.headline)
 
-                Text("\(minifigure.identifier)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Text(minifigure.displayIdentifierWithInstance)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    if showInstanceIndicator {
+                        Text("Instance \(minifigure.instanceNumber)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Spacer()
 
-                VStack(alignment: .center, spacing: 4) {
-                    Text("\(minifigure.quantityHave) of \(minifigure.quantityNeeded)")
-                        .font(.title3.bold())
-                        .contentTransition(.numericText())
+            VStack(alignment: .center, spacing: 4) {
+                Text("\(minifigure.quantityHave) of \(minifigure.quantityNeeded)")
+                    .font(.title3.bold())
+                    .contentTransition(.numericText())
 
-                    Stepper("", value: quantityBinding, in: 0...max(0, minifigure.quantityNeeded))
-                        .labelsHidden()
-                }
-                .frame(minWidth: 80, idealWidth: 100)
+                Stepper("", value: quantityBinding, in: 0...max(0, minifigure.quantityNeeded))
+                    .labelsHidden()
             }
+            .frame(minWidth: 80, idealWidth: 100)
         }
         .padding(.vertical, 6)
     }
 
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let url = minifigure.imageURL {
-            ThumbnailImage(url: url) { phase in
-                switch phase {
-                case .empty, .loading:
-                    ProgressView()
-                        .frame(width: 64, height: 64)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 64, height: 64)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                case .failure(let state):
-                    VStack(spacing: 6) {
-                        placeholder
-                        Button("Retry") {
-                            state.retry()
+    private func updateQuantity(to newValue: Int) {
+        let clamped = max(0, min(newValue, minifigure.quantityNeeded))
+        guard clamped != minifigure.quantityHave else { return }
+
+        let applyChange = {
+            minifigure.quantityHave = clamped
+            try? modelContext.save()
+        }
+
+        withAnimation {
+            applyChange()
+        }
+    }
+}
+
+private struct MinifigureThumbnailView: View {
+    let url: URL?
+    let size: CGFloat
+
+    init(url: URL?, size: CGFloat = 64) {
+        self.url = url
+        self.size = size
+    }
+
+    var body: some View {
+        Group {
+            if let url {
+                ThumbnailImage(url: url) { phase in
+                    switch phase {
+                    case .empty, .loading:
+                        ProgressView()
+                            .frame(width: size, height: size)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: size, height: size)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    case .failure(let state):
+                        VStack(spacing: 6) {
+                            placeholder
+                            Button("Retry") {
+                                state.retry()
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
+                .background(.white)
+            } else {
+                placeholder
             }
-            .background(.white)
-        } else {
-            placeholder
         }
     }
 
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color(uiColor: .tertiarySystemFill))
-            .frame(width: 64, height: 64)
+            .frame(width: size, height: size)
             .overlay {
                 Image(systemName: "person.fill")
                     .foregroundStyle(.secondary)
             }
-    }
-
-    private func updateQuantity(to newValue: Int) {
-        let clamped = max(0, min(newValue, minifigure.quantityNeeded))
-        let oldValue = minifigure.quantityHave
-        guard clamped != oldValue else { return }
-
-        let update = {
-            minifigure.quantityHave = clamped
-            try? modelContext.save()
-        }
-
-        withAnimation {
-            update()
-        }
     }
 }
 

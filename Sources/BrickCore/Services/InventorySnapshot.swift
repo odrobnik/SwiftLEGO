@@ -8,6 +8,7 @@ struct InventorySnapshot: Codable, Sendable {
             let colorID: String
             let quantityHave: Int
             let inventorySection: String?
+            let instanceNumber: Int?
             let subparts: [PartSnapshot]?
 
             init(
@@ -15,12 +16,14 @@ struct InventorySnapshot: Codable, Sendable {
                 colorID: String,
                 quantityHave: Int,
                 inventorySection: String?,
+                instanceNumber: Int?,
                 subparts: [PartSnapshot]? = nil
             ) {
                 self.partID = partID
                 self.colorID = colorID
                 self.quantityHave = quantityHave
                 self.inventorySection = inventorySection
+                self.instanceNumber = instanceNumber
                 self.subparts = subparts
             }
 
@@ -29,6 +32,7 @@ struct InventorySnapshot: Codable, Sendable {
                 case colorID
                 case quantityHave
                 case inventorySection
+                case instanceNumber
                 case subparts
             }
 
@@ -44,7 +48,43 @@ struct InventorySnapshot: Codable, Sendable {
         struct MinifigureSnapshot: Codable, Sendable {
             let identifier: String
             let quantityHave: Int
+            let instanceNumber: Int?
             let parts: [PartSnapshot]
+
+            private enum CodingKeys: String, CodingKey {
+                case identifier
+                case quantityHave
+                case instanceNumber
+                case parts
+            }
+
+            init(
+                identifier: String,
+                quantityHave: Int,
+                instanceNumber: Int?,
+                parts: [PartSnapshot]
+            ) {
+                self.identifier = identifier
+                self.quantityHave = quantityHave
+                self.instanceNumber = instanceNumber
+                self.parts = parts
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                identifier = try container.decode(String.self, forKey: .identifier)
+                quantityHave = try container.decode(Int.self, forKey: .quantityHave)
+                instanceNumber = try container.decodeIfPresent(Int.self, forKey: .instanceNumber)
+                parts = try container.decode([PartSnapshot].self, forKey: .parts)
+            }
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(identifier, forKey: .identifier)
+                try container.encode(quantityHave, forKey: .quantityHave)
+                try container.encodeIfPresent(instanceNumber, forKey: .instanceNumber)
+                try container.encode(parts, forKey: .parts)
+            }
         }
 
         let id: UUID?
@@ -243,10 +283,7 @@ extension InventorySnapshot {
 
             matchedSetCount += 1
 
-            var partsLookup: [String: Part] = [:]
-            for part in set.parts {
-                insertPart(part, into: &partsLookup)
-            }
+            let partsLookup = makePartLookup(from: set.parts)
 
             for partSnapshot in setSnapshot.parts {
                 applyPartSnapshot(
@@ -259,36 +296,46 @@ extension InventorySnapshot {
             }
 
             if !setSnapshot.minifigures.isEmpty {
-                var minifigureLookup: [String: Minifigure] = [:]
+                var minifigureLookup: [String: [Minifigure]] = [:]
                 for minifigure in set.minifigures {
                     let key = minifigure.identifier.lowercased()
-                    if minifigureLookup[key] == nil {
-                        minifigureLookup[key] = minifigure
-                    }
+                    minifigureLookup[key, default: []].append(minifigure)
+                }
+
+                for key in minifigureLookup.keys {
+                    minifigureLookup[key]?.sort { $0.instanceNumber < $1.instanceNumber }
                 }
 
                 for minifigureSnapshot in setSnapshot.minifigures {
                     let identifierKey = minifigureSnapshot.identifier.lowercased()
-                    guard let minifigure = minifigureLookup[identifierKey] else {
+                    guard let candidates = minifigureLookup[identifierKey], !candidates.isEmpty else {
                         unmatchedPartCount += 1
                         continue
                     }
 
-                    let clampedQuantity = max(0, min(minifigureSnapshot.quantityHave, minifigure.quantityNeeded))
-                    if minifigure.quantityHave != clampedQuantity {
-                        minifigure.quantityHave = clampedQuantity
+                    let targetMinifigure: Minifigure
+                    if let snapshotInstance = minifigureSnapshot.instanceNumber,
+                       let match = candidates.first(where: { $0.instanceNumber == snapshotInstance }) {
+                        targetMinifigure = match
+                    } else if let fallback = candidates.first {
+                        targetMinifigure = fallback
+                    } else {
+                        unmatchedPartCount += 1
+                        continue
+                    }
+
+                    let clampedQuantity = max(0, min(minifigureSnapshot.quantityHave, targetMinifigure.quantityNeeded))
+                    if targetMinifigure.quantityHave != clampedQuantity {
+                        targetMinifigure.quantityHave = clampedQuantity
                         updatedPartCount += 1
                     }
 
-                    var minifigurePartsLookup: [String: Part] = [:]
-                    for part in minifigure.parts {
-                        insertPart(part, into: &minifigurePartsLookup)
-                    }
+                    let minifigurePartsLookup = makePartLookup(from: targetMinifigure.parts)
 
                     for partSnapshot in minifigureSnapshot.parts {
                         applyPartSnapshot(
                             partSnapshot,
-                            parts: minifigure.parts,
+                            parts: targetMinifigure.parts,
                             precomputedLookup: minifigurePartsLookup,
                             updatedPartCount: &updatedPartCount,
                             unmatchedPartCount: &unmatchedPartCount
@@ -319,6 +366,7 @@ extension InventorySnapshot {
                 colorID: part.colorID,
                 quantityHave: part.quantityHave,
                 inventorySection: part.inventorySection.rawValue,
+                instanceNumber: part.instanceNumber,
                 subparts: makePartSnapshots(from: part.subparts)
             )
         }
@@ -350,7 +398,17 @@ extension InventorySnapshot {
 
         let lhsSection = lhs.inventorySection ?? ""
         let rhsSection = rhs.inventorySection ?? ""
-        return lhsSection.localizedCaseInsensitiveCompare(rhsSection) == .orderedAscending
+        if lhsSection.caseInsensitiveCompare(rhsSection) != .orderedSame {
+            return lhsSection.localizedCaseInsensitiveCompare(rhsSection) == .orderedAscending
+        }
+
+        let lhsInstance = lhs.instanceNumber ?? 0
+        let rhsInstance = rhs.instanceNumber ?? 0
+        if lhsInstance != rhsInstance {
+            return lhsInstance < rhsInstance
+        }
+
+        return lhs.quantityHave < rhs.quantityHave
     }
 
     private static func setSortComparator(_ lhs: BrickSet, _ rhs: BrickSet) -> Bool {
@@ -368,13 +426,25 @@ extension InventorySnapshot {
                 colorID: part.colorID,
                 quantityHave: part.quantityHave,
                 inventorySection: part.inventorySection.rawValue,
+                instanceNumber: part.instanceNumber,
                 subparts: makePartSnapshots(from: part.subparts)
             )
         }
         .sorted(by: partSnapshotSortComparator)
 
         let minifigureSnapshots = set.minifigures
-            .sorted { $0.identifier.localizedCaseInsensitiveCompare($1.identifier) == .orderedAscending }
+            .sorted {
+                let identifierComparison = $0.identifier.localizedCaseInsensitiveCompare($1.identifier)
+                if identifierComparison != .orderedSame {
+                    return identifierComparison == .orderedAscending
+                }
+
+                if $0.instanceNumber != $1.instanceNumber {
+                    return $0.instanceNumber < $1.instanceNumber
+                }
+
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
             .map { minifigure in
                 let componentParts = minifigure.parts.map { part in
                     SetSnapshot.PartSnapshot(
@@ -382,6 +452,7 @@ extension InventorySnapshot {
                         colorID: part.colorID,
                         quantityHave: part.quantityHave,
                         inventorySection: part.inventorySection.rawValue,
+                        instanceNumber: part.instanceNumber,
                         subparts: makePartSnapshots(from: part.subparts)
                     )
                 }
@@ -390,6 +461,7 @@ extension InventorySnapshot {
                 return SetSnapshot.MinifigureSnapshot(
                     identifier: minifigure.identifier,
                     quantityHave: minifigure.quantityHave,
+                    instanceNumber: minifigure.instanceNumber,
                     parts: componentParts
                 )
             }
@@ -407,18 +479,28 @@ extension InventorySnapshot {
     private func applyPartSnapshot(
         _ snapshot: SetSnapshot.PartSnapshot,
         parts: [Part],
-        precomputedLookup: [String: Part]? = nil,
+        precomputedLookup: [String: [Part]]? = nil,
         updatedPartCount: inout Int,
         unmatchedPartCount: inout Int
     ) {
         let lookup = precomputedLookup ?? makePartLookup(from: parts)
 
-        guard
-            let key = snapshot.lookupKeys.first(where: { lookup[$0] != nil }),
-            let part = lookup[key]
-        else {
+        guard let key = snapshot.lookupKeys.first(where: { (lookup[$0]?.isEmpty == false) }) else {
             unmatchedPartCount += 1
             return
+        }
+
+        guard let candidates = lookup[key], !candidates.isEmpty else {
+            unmatchedPartCount += 1
+            return
+        }
+
+        let part: Part
+        if let snapshotInstance = snapshot.instanceNumber,
+           let match = candidates.first(where: { $0.instanceNumber == snapshotInstance }) {
+            part = match
+        } else {
+            part = candidates.first!
         }
 
         let clampedValue = max(0, min(snapshot.quantityHave, part.quantityNeeded))
@@ -441,24 +523,24 @@ extension InventorySnapshot {
         }
     }
 
-    private func makePartLookup(from parts: [Part]) -> [String: Part] {
-        var lookup: [String: Part] = [:]
+    private func makePartLookup(from parts: [Part]) -> [String: [Part]] {
+        var lookup: [String: [Part]] = [:]
         for part in parts {
             insertPart(part, into: &lookup)
         }
+
+        for key in lookup.keys {
+            lookup[key]?.sort { $0.instanceNumber < $1.instanceNumber }
+        }
+
         return lookup
     }
 
-    private func insertPart(_ part: Part, into lookup: inout [String: Part]) {
+    private func insertPart(_ part: Part, into lookup: inout [String: [Part]]) {
         let baseKey = "\(part.partID.lowercased())|\(part.colorID.lowercased())"
         let sectionKey = "\(baseKey)|\(part.inventorySection.rawValue.lowercased())"
 
-        if lookup[sectionKey] == nil {
-            lookup[sectionKey] = part
-        }
-
-        if lookup[baseKey] == nil {
-            lookup[baseKey] = part
-        }
+        lookup[sectionKey, default: []].append(part)
+        lookup[baseKey, default: []].append(part)
     }
 }

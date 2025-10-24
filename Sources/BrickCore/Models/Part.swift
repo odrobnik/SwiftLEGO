@@ -50,6 +50,7 @@ final class Part: Identifiable {
     var minifigure: Minifigure?
     @Relationship(deleteRule: .cascade, inverse: \Part.parentPart) var subparts: [Part] = []
     @Relationship(deleteRule: .nullify) var parentPart: Part?
+    var instanceNumber: Int = 1
 
     init(
         id: UUID = UUID(),
@@ -65,7 +66,8 @@ final class Part: Identifiable {
         set: BrickSet? = nil,
         minifigure: Minifigure? = nil,
         subparts: [Part] = [],
-        parentPart: Part? = nil
+        parentPart: Part? = nil,
+        instanceNumber: Int = 1
     ) {
         self.id = id
         self.partID = partID
@@ -81,6 +83,7 @@ final class Part: Identifiable {
         self.minifigure = minifigure
         self.subparts = subparts
         self.parentPart = parentPart
+        self.instanceNumber = instanceNumber
     }
 }
 
