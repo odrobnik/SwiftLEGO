@@ -92,20 +92,19 @@ struct ContentView: View {
     }
 
     private var currentSelectedSetID: PersistentIdentifier? {
-        switch path.last {
-        case .set(let id):
-            return id
-        case .filteredSet(let id, _, _, _):
-            return id
-        case .none:
-            return nil
+        guard let last = path.last else { return nil }
+        switch last {
+        case .set(let destination):
+            return destination.id
+        case .minifigure(let destination):
+            return destination.setID
         }
     }
 
     private func handleSidebarSetSelection(_ set: BrickSet) {
         guard let list = set.collection else { return }
         setSelectedList(list)
-        path = [.set(set.persistentModelID)]
+        path = [.set(.init(id: set.persistentModelID))]
     }
 
     private func handleSidebarCategorySelection(_ pathComponents: [String]?) {
@@ -121,21 +120,21 @@ struct ContentView: View {
     @ViewBuilder
     private func makeDestination(_ destination: Destination) -> some View {
         switch destination {
-        case .set(let setID):
-            if let set = fetchSet(with: setID) {
-                SetDetailView(brickSet: set)
+        case .set(let payload):
+            if let set = fetchSet(with: payload.id) {
+                SetDetailView(
+                    brickSet: set,
+                    initialSearchText: payload.searchQuery
+                )
             } else {
                 Text("Set unavailable")
                     .foregroundStyle(.secondary)
             }
-        case .filteredSet(let setID, _, _, let query):
-            if let set = fetchSet(with: setID) {
-                SetDetailView(
-                    brickSet: set,
-                    initialSearchText: query
-                )
+        case .minifigure(let payload):
+            if let minifigure = fetchMinifigure(with: payload.minifigureID) {
+                MinifigureDetailView(minifigure: minifigure)
             } else {
-                Text("Set unavailable")
+                Text("Minifigure unavailable")
                     .foregroundStyle(.secondary)
             }
         }
@@ -176,12 +175,47 @@ struct ContentView: View {
         return nil
     }
 
+    private func fetchMinifigure(with id: PersistentIdentifier) -> Minifigure? {
+        for list in lists {
+            for set in list.sets {
+                if let match = set.minifigures.first(where: { $0.persistentModelID == id }) {
+                    return match
+                }
+            }
+        }
+        return nil
+    }
+
 }
 
 extension ContentView {
     enum Destination: Hashable {
-        case set(PersistentIdentifier)
-        case filteredSet(PersistentIdentifier, partID: String, colorID: String, query: String)
+        case set(SetDestination)
+        case minifigure(MinifigureDestination)
+    }
+
+    struct SetDestination: Hashable {
+        let id: PersistentIdentifier
+        var partID: String?
+        var colorID: String?
+        var searchQuery: String?
+
+        init(
+            id: PersistentIdentifier,
+            partID: String? = nil,
+            colorID: String? = nil,
+            searchQuery: String? = nil
+        ) {
+            self.id = id
+            self.partID = partID
+            self.colorID = colorID
+            self.searchQuery = searchQuery
+        }
+    }
+
+    struct MinifigureDestination: Hashable {
+        let setID: PersistentIdentifier
+        let minifigureID: PersistentIdentifier
     }
 }
 

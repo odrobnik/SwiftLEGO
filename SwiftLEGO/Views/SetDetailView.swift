@@ -217,18 +217,13 @@ struct SetDetailView: View {
                 .help("Toggle missing parts filter")
             }
         }
-        .navigationDestination(for: Minifigure.self) { minifigure in
-            MinifigureDetailView(minifigure: minifigure)
-        }
     }
 
     private var minifigureSection: some View {
         Section("Minifigures") {
             ForEach(minifigureGroups) { group in
                 if group.instanceCount <= 1, let instance = group.instances.first {
-                    NavigationLink {
-                        MinifigureDetailView(minifigure: instance)
-                    } label: {
+                    NavigationLink(value: minifigureDestination(for: instance)) {
                         MinifigureInstanceRowView(
                             minifigure: instance,
                             includeInstanceSuffix: false
@@ -240,9 +235,7 @@ struct SetDetailView: View {
                         isExpanded: expansionBinding(for: group)
                     ) {
                         ForEach(group.instances) { minifigure in
-                            NavigationLink {
-                                MinifigureDetailView(minifigure: minifigure)
-                            } label: {
+                            NavigationLink(value: minifigureDestination(for: minifigure)) {
                                 MinifigureInstanceRowView(
                                     minifigure: minifigure,
                                     includeInstanceSuffix: true
@@ -263,6 +256,16 @@ struct SetDetailView: View {
                 }
             }
         }
+    }
+
+    private func minifigureDestination(for minifigure: Minifigure) -> ContentView.Destination {
+        let resolvedSetID = minifigure.set?.persistentModelID ?? brickSet.persistentModelID
+        return .minifigure(
+            .init(
+                setID: resolvedSetID,
+                minifigureID: minifigure.persistentModelID
+            )
+        )
     }
 
     private var headerSection: some View {
@@ -635,26 +638,42 @@ private struct MinifigureGroupRow: View {
 
     var body: some View {
         if group.instanceCount <= 1, let instance = group.instances.first {
-            NavigationLink(value: instance) {
+            if let destination = destination(for: instance) {
+                NavigationLink(value: destination) {
+                    MinifigureInstanceRowView(
+                        minifigure: instance,
+                        includeInstanceSuffix: false
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
                 MinifigureInstanceRowView(
                     minifigure: instance,
                     includeInstanceSuffix: false
                 )
             }
-            .buttonStyle(.plain)
         } else {
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(spacing: 0) {
                     ForEach(group.instances) { minifigure in
-                        NavigationLink(value: minifigure) {
+                        if let destination = destination(for: minifigure) {
+                            NavigationLink(value: destination) {
+                                MinifigureInstanceRowView(
+                                    minifigure: minifigure,
+                                    includeInstanceSuffix: true
+                                )
+                                .padding(.leading, 12)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.vertical, 4)
+                        } else {
                             MinifigureInstanceRowView(
                                 minifigure: minifigure,
                                 includeInstanceSuffix: true
                             )
                             .padding(.leading, 12)
+                            .padding(.vertical, 4)
                         }
-                        .buttonStyle(.plain)
-                        .padding(.vertical, 4)
                     }
                 }
                 .padding(.top, 6)
@@ -707,6 +726,11 @@ private struct MinifigureGroupRow: View {
                 try? modelContext.save()
             }
         }
+    }
+
+    private func destination(for minifigure: Minifigure) -> ContentView.Destination? {
+        guard let setID = minifigure.set?.persistentModelID else { return nil }
+        return .minifigure(.init(setID: setID, minifigureID: minifigure.persistentModelID))
     }
 }
 

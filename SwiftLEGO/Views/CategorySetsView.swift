@@ -74,7 +74,7 @@ struct CategorySetsView: View {
                             LazyVGrid(columns: adaptiveColumns, spacing: 16) {
                                 ForEach(group.sets) { set in
                                     Button {
-                                        onNavigate(.set(set.persistentModelID))
+                                        onNavigate(.set(.init(id: set.persistentModelID)))
                                     } label: {
                                         SetCardView(brickSet: set)
                                             .overlay(alignment: .topTrailing) {

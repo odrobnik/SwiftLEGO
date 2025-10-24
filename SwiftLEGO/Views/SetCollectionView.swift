@@ -182,7 +182,7 @@ struct SetCollectionView: View {
                             LazyVGrid(columns: adaptiveColumns, spacing: 16) {
                                 ForEach(group.sets) { set in
                                     Button {
-                                        onNavigate(.set(set.persistentModelID))
+                                        onNavigate(.set(.init(id: set.persistentModelID)))
                                     } label: {
                                         SetCardView(brickSet: set)
                                             .overlay(alignment: .topTrailing) {
@@ -276,7 +276,7 @@ struct SetCollectionView: View {
                     LazyVGrid(columns: adaptiveColumns, spacing: 16) {
                         ForEach(group.sets) { set in
                             Button {
-                                onNavigate(.set(set.persistentModelID))
+                                onNavigate(.set(.init(id: set.persistentModelID)))
                             } label: {
                                 SetCardView(brickSet: set)
                                     .overlay(alignment: .topTrailing) {
@@ -335,11 +335,13 @@ struct SetCollectionView: View {
                         contextDescription: entry.contextDescription,
                         onShowSet: {
                             onNavigate(
-                                .filteredSet(
-                                    entry.set.persistentModelID,
-                                    partID: entry.displayPart.partID,
-                                    colorID: entry.displayPart.colorID,
-                                    query: effectiveSearchText
+                                .set(
+                                    .init(
+                                        id: entry.set.persistentModelID,
+                                        partID: entry.displayPart.partID,
+                                        colorID: entry.displayPart.colorID,
+                                        searchQuery: effectiveSearchText
+                                    )
                                 )
                             )
                         }
@@ -374,11 +376,13 @@ struct SetCollectionView: View {
                         minifigure: entry.minifigure,
                         onShowSet: {
                             onNavigate(
-                                .filteredSet(
-                                    entry.set.persistentModelID,
-                                    partID: entry.minifigure.identifier,
-                                    colorID: "",
-                                    query: effectiveSearchText
+                                .set(
+                                    .init(
+                                        id: entry.set.persistentModelID,
+                                        partID: entry.minifigure.identifier,
+                                        colorID: "",
+                                        searchQuery: effectiveSearchText
+                                    )
                                 )
                             )
                         }
