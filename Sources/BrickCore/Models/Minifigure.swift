@@ -79,11 +79,22 @@ extension Minifigure {
 }
 
 extension Minifigure {
-    var displayIdentifierWithInstance: String {
-        "\(identifier)#\(instanceNumber)"
+    private var siblingInstanceCount: Int {
+        guard let set else { return 1 }
+        return set.minifigures.filter { $0.identifier.caseInsensitiveCompare(identifier) == .orderedSame }.count
     }
 
-    var displayNameWithInstance: String {
-        instanceNumber > 1 ? "\(name) #\(instanceNumber)" : name
+    var shouldDisplayInstanceSuffix: Bool {
+        siblingInstanceCount > 1
+    }
+
+    func displayIdentifier(includeInstanceSuffix: Bool? = nil) -> String {
+        let include = includeInstanceSuffix ?? shouldDisplayInstanceSuffix
+        return include ? "\(identifier)#\(instanceNumber)" : identifier
+    }
+
+    func displayName(includeInstanceSuffix: Bool? = nil) -> String {
+        let include = includeInstanceSuffix ?? shouldDisplayInstanceSuffix
+        return include ? "\(name) #\(instanceNumber)" : name
     }
 }

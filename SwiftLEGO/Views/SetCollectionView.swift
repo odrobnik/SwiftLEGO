@@ -5,6 +5,7 @@ struct SetCollectionView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var list: CollectionList
     let onNavigate: (ContentView.Destination) -> Void
+    private let brickLinkService = BrickLinkService()
     @State private var showingAddSetSheet = false
     @State private var showingBulkAddSheet = false
     @State private var setBeingRenamed: BrickSet?
@@ -14,6 +15,8 @@ struct SetCollectionView: View {
     @State private var labelPrintTarget: BrickSet?
     @State private var partSearchResults: [PartSearchEntry] = []
     @State private var minifigureSearchResults: [MinifigureSearchEntry] = []
+    @State private var refreshingSetIDs: Set<PersistentIdentifier> = []
+    @State private var refreshError: RefreshError?
 
     init(
         list: CollectionList,
@@ -70,6 +73,11 @@ struct SetCollectionView: View {
     private struct SearchTaskKey: Equatable {
         let query: String
         let scope: SearchScope
+    }
+
+    private struct RefreshError: Identifiable {
+        let id = UUID()
+        let message: String
     }
 
     private var searchTaskKey: SearchTaskKey {
@@ -145,6 +153,13 @@ struct SetCollectionView: View {
         .sheet(item: $labelPrintTarget) { set in
             LabelPrintSheet(brickSet: set)
         }
+        .alert(item: $refreshError) { alert in
+            Alert(
+                title: Text("Refresh Failed"),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     private var gridView: some View {
@@ -170,9 +185,20 @@ struct SetCollectionView: View {
                                         onNavigate(.set(set.persistentModelID))
                                     } label: {
                                         SetCardView(brickSet: set)
+                                            .overlay(alignment: .topTrailing) {
+                                                if refreshingSetIDs.contains(set.persistentModelID) {
+                                                    ProgressView()
+                                                        .controlSize(.mini)
+                                                        .padding(6)
+                                                }
+                                            }
                                     }
                                     .buttonStyle(.plain)
                                     .contextMenu {
+                                        Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
+                                            refreshInventory(for: set)
+                                        }
+                                        .disabled(refreshingSetIDs.contains(set.persistentModelID))
                                         Button("Print Label…", systemImage: "printer") {
                                             labelPrintTarget = set
                                         }
@@ -253,9 +279,20 @@ struct SetCollectionView: View {
                                 onNavigate(.set(set.persistentModelID))
                             } label: {
                                 SetCardView(brickSet: set)
+                                    .overlay(alignment: .topTrailing) {
+                                        if refreshingSetIDs.contains(set.persistentModelID) {
+                                            ProgressView()
+                                                .controlSize(.mini)
+                                                .padding(6)
+                                        }
+                                    }
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
+                                Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
+                                    refreshInventory(for: set)
+                                }
+                                .disabled(refreshingSetIDs.contains(set.persistentModelID))
                                 Button("Print Label…", systemImage: "printer") {
                                     labelPrintTarget = set
                                 }
@@ -432,6 +469,38 @@ struct SetCollectionView: View {
 
     private func sectionTitle(for path: [String]) -> String {
         path.joined(separator: " / ")
+    }
+
+    private func refreshInventory(for set: BrickSet) {
+        let identifier = set.persistentModelID
+        guard !refreshingSetIDs.contains(identifier) else { return }
+        refreshingSetIDs.insert(identifier)
+
+        Task {
+            do {
+                try await SetImportUtilities.refreshSetFromBrickLink(
+                    set: set,
+                    modelContext: modelContext,
+                    service: brickLinkService
+                )
+            } catch {
+                await MainActor.run {
+                    refreshError = RefreshError(message: refreshErrorMessage(for: error))
+                }
+            }
+
+            await MainActor.run {
+                refreshingSetIDs.remove(identifier)
+            }
+        }
+    }
+
+    private func refreshErrorMessage(for error: Error) -> String {
+        if let refreshError = error as? SetImportUtilities.RefreshError {
+            return refreshError.localizedDescription
+        }
+
+        return error.localizedDescription
     }
 
     private func delete(_ set: BrickSet) {

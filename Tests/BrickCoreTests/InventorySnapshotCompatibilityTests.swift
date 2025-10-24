@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import BrickCore
 
@@ -192,5 +193,131 @@ struct InventorySnapshotCompatibilityTests {
         set.minifigures = [figureOne, figureTwo]
 
         return (list, set, figureOne, figureTwo, partOne, partTwo)
+    }
+
+    @Test @MainActor
+    func refreshSetPreservesQuantities() throws {
+        let list = CollectionList(name: "Test List")
+        let set = BrickSet(setNumber: "1234-1", name: "Sample Set")
+        set.collection = list
+        list.sets = [set]
+
+        let topLevelPart = Part(
+            partID: "3001",
+            name: "Brick 2 x 4",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 2,
+            quantityHave: 1,
+            inventorySection: .regular,
+            set: set,
+            instanceNumber: 1
+        )
+
+        let minifigure = Minifigure(
+            identifier: "hp001",
+            name: "Sample Figure",
+            quantityNeeded: 1,
+            quantityHave: 1,
+            set: set,
+            instanceNumber: 1
+        )
+
+        let minifigurePart = Part(
+            partID: "86038",
+            name: "Cape",
+            colorID: "0",
+            colorName: "Black",
+            quantityNeeded: 1,
+            quantityHave: 1,
+            inventorySection: .regular,
+            minifigure: minifigure,
+            instanceNumber: 1
+        )
+
+        minifigure.parts = [minifigurePart]
+        set.parts = [topLevelPart]
+        set.minifigures = [minifigure]
+
+        let partPayload = BrickLinkPartPayload(
+            partID: "3001",
+            name: "Brick 2 x 4",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 2,
+            instanceNumber: nil,
+            imageURL: nil,
+            partURL: nil,
+            inventorySection: .regular,
+            subparts: []
+        )
+
+        let minifigurePartPayload = BrickLinkPartPayload(
+            partID: "86038",
+            name: "Cape",
+            colorID: "0",
+            colorName: "Black",
+            quantityNeeded: 1,
+            instanceNumber: nil,
+            imageURL: nil,
+            partURL: nil,
+            inventorySection: .regular,
+            subparts: []
+        )
+
+        let minifigurePayload = BrickLinkMinifigurePayload(
+            identifier: "hp001",
+            name: "Sample Figure",
+            quantityNeeded: 1,
+            instanceNumber: nil,
+            imageURL: nil,
+            catalogURL: nil,
+            inventoryURL: nil,
+            categories: [],
+            parts: [minifigurePartPayload]
+        )
+
+        let refreshPayload = BrickLinkSetPayload(
+            setNumber: set.setNumber,
+            name: set.name,
+            thumbnailURL: nil,
+            parts: [partPayload],
+            categories: [],
+            minifigures: [minifigurePayload]
+        )
+
+        let schema = Schema([
+            CollectionList.self,
+            BrickSet.self,
+            Part.self,
+            Minifigure.self,
+            MinifigCategory.self
+        ])
+
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+
+        let context = ModelContext(container)
+        context.insert(list)
+        try context.save()
+
+        let resolvedSnapshot = InventorySnapshot.make(from: [list])
+        let previousSetSnapshot = resolvedSnapshot.sets.first { $0.setNumber == set.setNumber }
+
+        SetImportUtilities.refreshSet(
+            set: set,
+            list: list,
+            modelContext: context,
+            payload: refreshPayload,
+            previousSnapshot: previousSetSnapshot
+        )
+
+        let refreshedPart = set.parts.first
+        let refreshedMinifigure = set.minifigures.first
+        let refreshedMinifigurePart = refreshedMinifigure?.parts.first
+
+        #expect(refreshedPart?.quantityHave == 1)
+        #expect(refreshedMinifigure?.quantityHave == 1)
+        #expect(refreshedMinifigurePart?.quantityHave == 1)
     }
 }

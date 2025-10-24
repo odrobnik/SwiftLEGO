@@ -8,12 +8,20 @@ struct CategorySetsView: View {
     let selectedSetID: PersistentIdentifier?
     let onNavigate: (ContentView.Destination) -> Void
 
+    private let brickLinkService = BrickLinkService()
     @State private var setBeingRenamed: BrickSet?
     @State private var labelPrintTarget: BrickSet?
+    @State private var refreshingSetIDs: Set<PersistentIdentifier> = []
+    @State private var refreshError: RefreshAlert?
 
     private let adaptiveColumns = [
         GridItem(.adaptive(minimum: 220), spacing: 16)
     ]
+
+    private struct RefreshAlert: Identifiable {
+        let id = UUID()
+        let message: String
+    }
 
     private var title: String {
         categoryPath.joined(separator: " / ")
@@ -69,9 +77,20 @@ struct CategorySetsView: View {
                                         onNavigate(.set(set.persistentModelID))
                                     } label: {
                                         SetCardView(brickSet: set)
+                                            .overlay(alignment: .topTrailing) {
+                                                if refreshingSetIDs.contains(set.persistentModelID) {
+                                                    ProgressView()
+                                                        .controlSize(.mini)
+                                                        .padding(6)
+                                                }
+                                            }
                                     }
                                     .buttonStyle(.plain)
                                     .contextMenu {
+                                        Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
+                                            refreshInventory(for: set)
+                                        }
+                                        .disabled(refreshingSetIDs.contains(set.persistentModelID))
                                         Button("Print Label…", systemImage: "printer") {
                                             labelPrintTarget = set
                                         }
@@ -101,6 +120,45 @@ struct CategorySetsView: View {
         .sheet(item: $labelPrintTarget) { set in
             LabelPrintSheet(brickSet: set)
         }
+        .alert(item: $refreshError) { alert in
+            Alert(
+                title: Text("Refresh Failed"),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+
+    private func refreshInventory(for set: BrickSet) {
+        let identifier = set.persistentModelID
+        guard !refreshingSetIDs.contains(identifier) else { return }
+        refreshingSetIDs.insert(identifier)
+
+        Task {
+            do {
+                try await SetImportUtilities.refreshSetFromBrickLink(
+                    set: set,
+                    modelContext: modelContext,
+                    service: brickLinkService
+                )
+            } catch {
+                await MainActor.run {
+                    refreshError = RefreshAlert(message: refreshErrorMessage(for: error))
+                }
+            }
+
+            await MainActor.run {
+                refreshingSetIDs.remove(identifier)
+            }
+        }
+    }
+
+    private func refreshErrorMessage(for error: Error) -> String {
+        if let refreshError = error as? SetImportUtilities.RefreshError {
+            return refreshError.localizedDescription
+        }
+
+        return error.localizedDescription
     }
 
     private func delete(_ set: BrickSet) {

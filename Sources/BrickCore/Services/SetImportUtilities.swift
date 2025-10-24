@@ -303,4 +303,116 @@ enum SetImportUtilities {
         minifigure.parts = partModels
         return minifigure
     }
+
+    @MainActor
+    static func refreshSet(
+        set: BrickSet,
+        list: CollectionList,
+        modelContext: ModelContext,
+        payload: BrickLinkSetPayload,
+        previousSnapshot: InventorySnapshot.SetSnapshot?
+    ) {
+        let existingParts = set.parts
+        let existingMinifigures = set.minifigures
+        let existingCategories = set.categories
+
+        for part in existingParts {
+            modelContext.delete(part)
+        }
+
+        for minifigure in existingMinifigures {
+            modelContext.delete(minifigure)
+        }
+
+        for category in existingCategories {
+            modelContext.delete(category)
+        }
+
+        let aggregatedParts = aggregateParts(payload.parts)
+        let newParts = aggregatedParts.map {
+            makePartModel(
+                from: $0,
+                set: set,
+                minifigure: nil,
+                parentPart: nil
+            )
+        }
+
+        var categoryModels: [SetCategory] = []
+        var previousCategory: SetCategory?
+
+        for (index, category) in payload.categories.enumerated() {
+            let categoryModel = SetCategory(
+                categoryID: category.id,
+                name: category.name,
+                sortOrder: index,
+                set: set,
+                parent: previousCategory
+            )
+
+            previousCategory?.children.append(categoryModel)
+            categoryModels.append(categoryModel)
+            previousCategory = categoryModel
+        }
+
+        let minifigureModels = makeMinifigureModels(
+            from: payload.minifigures,
+            set: set
+        )
+
+        if let thumbnailURL = payload.thumbnailURL?.absoluteString {
+            set.thumbnailURLString = thumbnailURL
+        }
+
+        set.parts = newParts
+        set.categories = categoryModels
+        set.minifigures = minifigureModels
+
+        try? modelContext.save()
+
+        if let snapshot = previousSnapshot {
+            let inventorySnapshot = InventorySnapshot(sets: [snapshot])
+            _ = inventorySnapshot.apply(to: [list])
+            try? modelContext.save()
+        }
+    }
+
+    enum RefreshError: LocalizedError {
+        case missingCollection
+
+        var errorDescription: String? {
+            switch self {
+            case .missingCollection:
+                return "This set is not assigned to a list, so it can’t be refreshed yet."
+            }
+        }
+    }
+
+    static func refreshSetFromBrickLink(
+        set: BrickSet,
+        modelContext: ModelContext,
+        service: BrickLinkService
+    ) async throws {
+        let setInfo = await contextInfo(for: set)
+
+        guard let list = setInfo.list else {
+            throw RefreshError.missingCollection
+        }
+
+        let previousSnapshot = await InventorySnapshot.snapshot(for: set, in: list)
+        let payload = try await service.fetchSetDetails(for: setInfo.setNumber)
+
+        await refreshSet(
+            set: set,
+            list: list,
+            modelContext: modelContext,
+            payload: payload,
+            previousSnapshot: previousSnapshot
+        )
+    }
+
+    @MainActor
+    private static func contextInfo(for set: BrickSet) -> (list: CollectionList?, setNumber: String) {
+        (set.collection, set.setNumber)
+    }
 }

@@ -27,7 +27,7 @@ struct MinifigureSearchResultRow: View {
                     Text(minifigure.name)
                         .font(.headline)
 
-                    Text(minifigure.displayIdentifierWithInstance)
+                    Text(minifigure.displayIdentifier())
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

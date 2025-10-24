@@ -544,3 +544,21 @@ extension InventorySnapshot {
         lookup[baseKey, default: []].append(part)
     }
 }
+
+extension InventorySnapshot.SetSnapshot {
+    fileprivate func matches(_ set: BrickSet) -> Bool {
+        if let snapshotID = id, snapshotID == set.id {
+            return true
+        }
+
+        return setNumber.localizedCaseInsensitiveCompare(set.setNumber) == .orderedSame
+    }
+}
+
+extension InventorySnapshot {
+    @MainActor
+    static func snapshot(for set: BrickSet, in list: CollectionList) -> SetSnapshot? {
+        let inventorySnapshot = make(from: [list])
+        return inventorySnapshot.sets.first { $0.matches(set) }
+    }
+}

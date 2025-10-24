@@ -50,7 +50,7 @@ struct MinifigureDetailView: View {
         }
         .listStyle(.insetGrouped)
         .toolbarTitleDisplayMode(.inline)
-        .navigationTitle("\(minifigure.displayIdentifierWithInstance) \(minifigure.name)")
+        .navigationTitle("\(minifigure.displayIdentifier()) \(minifigure.displayName(includeInstanceSuffix: false))")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -76,11 +76,11 @@ struct MinifigureDetailView: View {
                 MinifigureThumbnail(minifigure: minifigure)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(minifigure.displayIdentifierWithInstance)
+                    Text(minifigure.displayIdentifier())
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    Text(minifigure.displayNameWithInstance)
+                    Text(minifigure.displayName())
                         .font(.title2.weight(.bold))
                         .foregroundStyle(.primary)
 

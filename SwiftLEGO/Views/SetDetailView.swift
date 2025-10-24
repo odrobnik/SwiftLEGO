@@ -10,12 +10,16 @@ struct SetDetailView: View {
     ]
 
     @Environment(\.modelContext) private var modelContext
+    private let brickLinkService = BrickLinkService()
     @Bindable var brickSet: BrickSet
     @State private var selectedSection: Part.InventorySection
     @State private var searchText: String = ""
     @State private var effectiveSearchText: String = ""
     @State private var showMissingOnly: Bool = false
     @State private var isShowingLabelPrintSheet: Bool = false
+    @State private var isRefreshingInventory: Bool = false
+    @State private var refreshAlert: RefreshAlert?
+    @State private var presentedMinifigure: Minifigure?
 
     init(
         brickSet: BrickSet,
@@ -155,9 +159,30 @@ struct SetDetailView: View {
         .sheet(isPresented: $isShowingLabelPrintSheet) {
             LabelPrintSheet(brickSet: brickSet)
         }
+        .alert(item: $refreshAlert) { alert in
+            Alert(
+                title: Text("Refresh Failed"),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if isRefreshingInventory {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("Refreshing inventory")
+                } else {
+                    Button {
+                        refreshInventory()
+                    } label: {
+                        Label("Refresh from BrickLink", systemImage: "arrow.clockwise")
+                    }
+                    .help("Re-fetch parts and minifigures from BrickLink")
+                }
+            }
             
             ToolbarItemGroup(placement: .bottomBar) {
                 Picker("Inventory Section", selection: $selectedSection) {
@@ -192,6 +217,9 @@ struct SetDetailView: View {
                 .help("Toggle missing parts filter")
             }
         }
+        .navigationDestination(item: $presentedMinifigure) { minifigure in
+            MinifigureDetailView(minifigure: minifigure)
+        }
     }
 
     private var minifigureSection: some View {
@@ -200,7 +228,9 @@ struct SetDetailView: View {
                 MinifigureGroupRow(
                     group: group,
                     isFilteringMissing: showMissingOnly
-                )
+                ) { minifigure in
+                    presentedMinifigure = minifigure
+                }
             }
         }
     }
@@ -383,6 +413,37 @@ struct SetDetailView: View {
         await MainActor.run { effectiveSearchText = trimmed }
     }
 
+    private func refreshInventory() {
+        guard !isRefreshingInventory else { return }
+        isRefreshingInventory = true
+
+        Task {
+            do {
+                try await SetImportUtilities.refreshSetFromBrickLink(
+                    set: brickSet,
+                    modelContext: modelContext,
+                    service: brickLinkService
+                )
+            } catch {
+                await MainActor.run {
+                    refreshAlert = RefreshAlert(message: refreshErrorMessage(for: error))
+                }
+            }
+
+            await MainActor.run {
+                isRefreshingInventory = false
+            }
+        }
+    }
+
+    private func refreshErrorMessage(for error: Error) -> String {
+        if let refreshError = error as? SetImportUtilities.RefreshError {
+            return refreshError.localizedDescription
+        }
+
+        return error.localizedDescription
+    }
+
 }
 
 private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {
@@ -390,6 +451,11 @@ private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Boo
     let numericPrefix = partID.prefix { $0.isNumber }
     guard !numericPrefix.isEmpty else { return false }
     return String(numericPrefix).caseInsensitiveCompare(numericQuery) == .orderedSame
+}
+
+private struct RefreshAlert: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 private struct HeaderThumbnail: View {
@@ -476,23 +542,25 @@ private struct MinifigureGroupRow: View {
     @Environment(\.modelContext) private var modelContext
     let group: MinifigureGroup
     let isFilteringMissing: Bool
+    let onOpen: (Minifigure) -> Void
     @State private var isExpanded: Bool
 
-    init(group: MinifigureGroup, isFilteringMissing: Bool) {
+    init(group: MinifigureGroup, isFilteringMissing: Bool, onOpen: @escaping (Minifigure) -> Void) {
         self.group = group
         self.isFilteringMissing = isFilteringMissing
+        self.onOpen = onOpen
         let shouldExpand = group.instanceCount <= 1 || (isFilteringMissing && group.hasMissing)
         self._isExpanded = State(initialValue: shouldExpand)
     }
 
     var body: some View {
         if group.instanceCount <= 1, let instance = group.instances.first {
-            NavigationLink {
-                MinifigureDetailView(minifigure: instance)
+            Button {
+                onOpen(instance)
             } label: {
                 MinifigureInstanceRowView(
                     minifigure: instance,
-                    showInstanceIndicator: false
+                    includeInstanceSuffix: false
                 )
             }
             .buttonStyle(.plain)
@@ -500,12 +568,12 @@ private struct MinifigureGroupRow: View {
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(spacing: 0) {
                     ForEach(group.instances) { minifigure in
-                        NavigationLink {
-                            MinifigureDetailView(minifigure: minifigure)
+                        Button {
+                            onOpen(minifigure)
                         } label: {
                             MinifigureInstanceRowView(
                                 minifigure: minifigure,
-                                showInstanceIndicator: true
+                                includeInstanceSuffix: true
                             )
                             .padding(.leading, 12)
                         }
@@ -609,7 +677,7 @@ private struct MinifigureGroupSummaryView: View {
 private struct MinifigureInstanceRowView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var minifigure: Minifigure
-    let showInstanceIndicator: Bool
+    let includeInstanceSuffix: Bool
 
     private var quantityBinding: Binding<Int> {
         Binding(
@@ -626,17 +694,9 @@ private struct MinifigureInstanceRowView: View {
                 Text(minifigure.name)
                     .font(.headline)
 
-                HStack(spacing: 8) {
-                    Text(minifigure.displayIdentifierWithInstance)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    if showInstanceIndicator {
-                        Text("Instance \(minifigure.instanceNumber)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                Text(minifigure.displayIdentifier(includeInstanceSuffix: includeInstanceSuffix))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
