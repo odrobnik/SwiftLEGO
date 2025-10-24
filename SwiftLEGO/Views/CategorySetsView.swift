@@ -5,7 +5,6 @@ struct CategorySetsView: View {
     @Environment(\.modelContext) private var modelContext
     let categoryPath: [String]
     let sets: [BrickSet]
-    let selectedSetID: PersistentIdentifier?
     let onNavigate: (ContentView.Destination) -> Void
 
     private let brickLinkService = BrickLinkService()

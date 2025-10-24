@@ -15,8 +15,7 @@ struct ContentView: View {
                 selectionID: bindingSelectedListID,
                 selectedCategoryPath: $selectedCategoryPath,
                 onSetSelected: handleSidebarSetSelection(_:),
-                onCategorySelected: handleSidebarCategorySelection(_:),
-                selectedSetID: currentSelectedSetID
+                onCategorySelected: handleSidebarCategorySelection(_:)
             )
                 .background(Color(uiColor: .systemGroupedBackground))
         } detail: {
@@ -25,8 +24,7 @@ struct ContentView: View {
                     if let categoryPath = selectedCategoryPath {
                         CategorySetsView(
                             categoryPath: categoryPath,
-                            sets: setsMatchingCategory(path: categoryPath),
-                            selectedSetID: currentSelectedSetID
+                            sets: setsMatchingCategory(path: categoryPath)
                         ) { destination in
                             path.append(destination)
                         }
@@ -89,16 +87,6 @@ struct ContentView: View {
             selectedCategoryPath = nil
         }
         selectedListID = list?.persistentModelID
-    }
-
-    private var currentSelectedSetID: PersistentIdentifier? {
-        guard let last = path.last else { return nil }
-        switch last {
-        case .set(let destination):
-            return destination.id
-        case .minifigure(let destination):
-            return destination.setID
-        }
     }
 
     private func handleSidebarSetSelection(_ set: BrickSet) {

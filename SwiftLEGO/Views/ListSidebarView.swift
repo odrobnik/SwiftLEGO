@@ -20,7 +20,6 @@ struct ListSidebarView: View {
     @State private var pendingImportURL: URL?
     let onSetSelected: (BrickSet) -> Void
     let onCategorySelected: ([String]?) -> Void
-    let selectedSetID: PersistentIdentifier?
 
     private var listCountDescription: String {
         "\(lists.count) list\(lists.count == 1 ? "" : "s")"
