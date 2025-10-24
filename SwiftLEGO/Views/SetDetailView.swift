@@ -19,7 +19,7 @@ struct SetDetailView: View {
     @State private var isShowingLabelPrintSheet: Bool = false
     @State private var isRefreshingInventory: Bool = false
     @State private var refreshAlert: RefreshAlert?
-    @State private var presentedMinifigure: Minifigure?
+    @State private var minifigureGroupExpansion: [String: Bool] = [:]
 
     init(
         brickSet: BrickSet,
@@ -217,7 +217,7 @@ struct SetDetailView: View {
                 .help("Toggle missing parts filter")
             }
         }
-        .navigationDestination(item: $presentedMinifigure) { minifigure in
+        .navigationDestination(for: Minifigure.self) { minifigure in
             MinifigureDetailView(minifigure: minifigure)
         }
     }
@@ -225,11 +225,41 @@ struct SetDetailView: View {
     private var minifigureSection: some View {
         Section("Minifigures") {
             ForEach(minifigureGroups) { group in
-                MinifigureGroupRow(
-                    group: group,
-                    isFilteringMissing: showMissingOnly
-                ) { minifigure in
-                    presentedMinifigure = minifigure
+                if group.instanceCount <= 1, let instance = group.instances.first {
+                    NavigationLink {
+                        MinifigureDetailView(minifigure: instance)
+                    } label: {
+                        MinifigureInstanceRowView(
+                            minifigure: instance,
+                            includeInstanceSuffix: false
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    DisclosureGroup(
+                        isExpanded: expansionBinding(for: group)
+                    ) {
+                        ForEach(group.instances) { minifigure in
+                            NavigationLink {
+                                MinifigureDetailView(minifigure: minifigure)
+                            } label: {
+                                MinifigureInstanceRowView(
+                                    minifigure: minifigure,
+                                    includeInstanceSuffix: true
+                                )
+                                .padding(.leading, 12)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.vertical, 4)
+                        }
+                        .padding(.top, 6)
+                    } label: {
+                        MinifigureGroupSummaryView(
+                            group: group,
+                            quantityBinding: aggregateQuantityBinding(for: group)
+                        )
+                    }
+                    .padding(.vertical, 6)
                 }
             }
         }
@@ -287,6 +317,58 @@ struct SetDetailView: View {
         case .extra:
             return "Extras"
         }
+    }
+
+    private func aggregateQuantityBinding(for group: MinifigureGroup) -> Binding<Int> {
+        Binding(
+            get: { group.totalHave },
+            set: { updateQuantity(for: group, to: $0) }
+        )
+    }
+
+    private func updateQuantity(for group: MinifigureGroup, to newValue: Int) {
+        let totalNeeded = group.totalNeeded
+        let clamped = max(0, min(newValue, totalNeeded))
+        let current = group.totalHave
+        guard clamped != current else { return }
+
+        if clamped > current {
+            var remaining = clamped - current
+            withAnimation {
+                for figure in group.instances {
+                    guard remaining > 0 else { break }
+                    let capacity = figure.quantityNeeded - figure.quantityHave
+                    guard capacity > 0 else { continue }
+                    let addition = min(capacity, remaining)
+                    figure.quantityHave += addition
+                    remaining -= addition
+                }
+                try? modelContext.save()
+            }
+        } else {
+            var remaining = current - clamped
+            withAnimation {
+                for figure in group.instances.reversed() {
+                    guard remaining > 0 else { break }
+                    let reduction = min(figure.quantityHave, remaining)
+                    guard reduction > 0 else { continue }
+                    figure.quantityHave -= reduction
+                    remaining -= reduction
+                }
+                try? modelContext.save()
+            }
+        }
+    }
+
+    private func expansionBinding(for group: MinifigureGroup) -> Binding<Bool> {
+        Binding(
+            get: { minifigureGroupExpansion[group.id] ?? defaultExpansion(for: group) },
+            set: { minifigureGroupExpansion[group.id] = $0 }
+        )
+    }
+
+    private func defaultExpansion(for group: MinifigureGroup) -> Bool {
+        group.instanceCount <= 1 || (showMissingOnly && group.hasMissing)
     }
 
     private var shouldShowMinifigures: Bool {
@@ -542,22 +624,18 @@ private struct MinifigureGroupRow: View {
     @Environment(\.modelContext) private var modelContext
     let group: MinifigureGroup
     let isFilteringMissing: Bool
-    let onOpen: (Minifigure) -> Void
     @State private var isExpanded: Bool
 
-    init(group: MinifigureGroup, isFilteringMissing: Bool, onOpen: @escaping (Minifigure) -> Void) {
+    init(group: MinifigureGroup, isFilteringMissing: Bool) {
         self.group = group
         self.isFilteringMissing = isFilteringMissing
-        self.onOpen = onOpen
         let shouldExpand = group.instanceCount <= 1 || (isFilteringMissing && group.hasMissing)
         self._isExpanded = State(initialValue: shouldExpand)
     }
 
     var body: some View {
         if group.instanceCount <= 1, let instance = group.instances.first {
-            Button {
-                onOpen(instance)
-            } label: {
+            NavigationLink(value: instance) {
                 MinifigureInstanceRowView(
                     minifigure: instance,
                     includeInstanceSuffix: false
@@ -568,9 +646,7 @@ private struct MinifigureGroupRow: View {
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(spacing: 0) {
                     ForEach(group.instances) { minifigure in
-                        Button {
-                            onOpen(minifigure)
-                        } label: {
+                        NavigationLink(value: minifigure) {
                             MinifigureInstanceRowView(
                                 minifigure: minifigure,
                                 includeInstanceSuffix: true

@@ -98,3 +98,13 @@ extension Minifigure {
         return include ? "\(name) #\(instanceNumber)" : name
     }
 }
+
+extension Minifigure: Hashable {
+    public static func == (lhs: Minifigure, rhs: Minifigure) -> Bool {
+        lhs.persistentModelID == rhs.persistentModelID
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(persistentModelID)
+    }
+}
