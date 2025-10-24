@@ -4,11 +4,11 @@ import SwiftData
 struct SetCollectionView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var list: CollectionList
+    @Binding var searchText: String
     private let brickLinkService = BrickLinkService()
     @State private var showingAddSetSheet = false
     @State private var showingBulkAddSheet = false
     @State private var setBeingRenamed: BrickSet?
-    @State private var searchText: String = ""
     @State private var searchScope: SearchScope = .sets
     @State private var effectiveSearchText: String = ""
     @State private var labelPrintTarget: BrickSet?
@@ -17,8 +17,9 @@ struct SetCollectionView: View {
     @State private var refreshingSetIDs: Set<PersistentIdentifier> = []
     @State private var refreshError: RefreshError?
 
-    init(list: CollectionList) {
+    init(list: CollectionList, searchText: Binding<String>) {
         self._list = Bindable(list)
+        self._searchText = searchText
     }
 
     private var sortedSets: [BrickSet] {
@@ -319,11 +320,7 @@ struct SetCollectionView: View {
                 ForEach(groupedPartResults, id: \.colorName) { group in
                     Section(group.colorName) {
                 ForEach(group.entries) { entry in
-                    NavigationLink(value: ContentView.SetNavigation(
-                        set: entry.set,
-                        searchQuery: effectiveSearchText,
-                        section: entry.displayPart.inventorySection
-                    )) {
+                    NavigationLink(value: entry.set) {
                         PartSearchResultRow(
                             set: entry.set,
                             displayPart: entry.displayPart,
@@ -353,11 +350,7 @@ struct SetCollectionView: View {
                     .listRowSeparator(.hidden)
             } else {
                 ForEach(minifigureResults) { entry in
-                    NavigationLink(value: ContentView.SetNavigation(
-                        set: entry.set,
-                        searchQuery: effectiveSearchText,
-                        section: .regular
-                    )) {
+                    NavigationLink(value: entry.set) {
                         MinifigureSearchResultRow(
                             set: entry.set,
                             minifigure: entry.minifigure
@@ -1093,7 +1086,7 @@ private extension ThumbnailCacheError {
         .first!
 
     return NavigationStack {
-        SetCollectionView(list: list)
+        SetCollectionView(list: list, searchText: .constant(""))
     }
     .modelContainer(container)
 }

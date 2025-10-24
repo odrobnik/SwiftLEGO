@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var path = NavigationPath()
     @State private var selectedListID: PersistentIdentifier?
     @State private var selectedCategoryPath: [String]?
+    @State private var setCollectionSearchText: String = ""
     private let uncategorizedCategoryTitle = "Uncategorized"
 
     var body: some View {
@@ -28,10 +29,10 @@ struct ContentView: View {
                         )
                         .id(categoryPath.joined(separator: "|"))
                     } else if let list = selectedList {
-                        SetCollectionView(list: list)
+                        SetCollectionView(list: list, searchText: $setCollectionSearchText)
                         .id(list.persistentModelID)
                     } else if let first = lists.first {
-                        SetCollectionView(list: first)
+                        SetCollectionView(list: first, searchText: $setCollectionSearchText)
                         .task { setSelectedList(first) }
                     } else {
                         EmptyStateView(
@@ -42,12 +43,7 @@ struct ContentView: View {
                     }
                 }
                 .navigationDestination(for: BrickSet.self) { set in
-                    SetDetailView(brickSet: set)
-                }
-                .navigationDestination(for: SetNavigation.self) { navigation in
-                    SetDetailView(brickSet: navigation.set)
-                        .environment(\.setSearchQuery, navigation.searchQuery)
-                        .environment(\.setInitialSection, navigation.section)
+                    SetDetailView(brickSet: set, searchText: setCollectionSearchText)
                 }
                 .navigationDestination(for: Minifigure.self) { minifigure in
                     MinifigureDetailView(minifigure: minifigure)
@@ -135,14 +131,6 @@ struct ContentView: View {
         return path
     }
 
-}
-
-extension ContentView {
-    struct SetNavigation: Hashable {
-        let set: BrickSet
-        var searchQuery: String?
-        var section: Part.InventorySection?
-    }
 }
 
 #Preview("App Root") {

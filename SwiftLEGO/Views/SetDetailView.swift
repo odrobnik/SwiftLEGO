@@ -1,26 +1,6 @@
 import SwiftUI
 import SwiftData
 
-private struct SetSearchQueryKey: EnvironmentKey {
-    static let defaultValue: String? = nil
-}
-
-private struct SetInitialSectionKey: EnvironmentKey {
-    static let defaultValue: Part.InventorySection? = nil
-}
-
-extension EnvironmentValues {
-    var setSearchQuery: String? {
-        get { self[SetSearchQueryKey.self] }
-        set { self[SetSearchQueryKey.self] = newValue }
-    }
-    
-    var setInitialSection: Part.InventorySection? {
-        get { self[SetInitialSectionKey.self] }
-        set { self[SetInitialSectionKey.self] = newValue }
-    }
-}
-
 struct SetDetailView: View {
     private static let segmentedSections: [Part.InventorySection] = [
         .regular,
@@ -30,25 +10,20 @@ struct SetDetailView: View {
     ]
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.setSearchQuery) private var environmentSearchQuery
-    @Environment(\.setInitialSection) private var environmentInitialSection
     private let brickLinkService = BrickLinkService()
     @Bindable var brickSet: BrickSet
     @State private var selectedSection: Part.InventorySection
-    @State private var searchText: String = ""
-    @State private var effectiveSearchText: String = ""
+    @State private var searchText: String
     @State private var showMissingOnly: Bool = false
     @State private var isShowingLabelPrintSheet: Bool = false
     @State private var isRefreshingInventory: Bool = false
     @State private var refreshAlert: RefreshAlert?
     @State private var minifigureGroupExpansion: [String: Bool] = [:]
 
-    init(brickSet: BrickSet) {
+    init(brickSet: BrickSet, searchText: String = "") {
         self._brickSet = Bindable(brickSet)
-        // selectedSection and searchText will be initialized in onAppear
-        self._selectedSection = State(initialValue: .regular)
-        self._searchText = State(initialValue: "")
-        self._effectiveSearchText = State(initialValue: "")
+        self._selectedSection = State(initialValue: Self.initialSection(for: brickSet))
+        self._searchText = State(initialValue: searchText)
     }
 
     private var minifigureGroups: [MinifigureGroup] {
@@ -128,7 +103,7 @@ struct SetDetailView: View {
     }
 
     private var normalizedSearchQuery: String? {
-        let trimmed = effectiveSearchText
+        let trimmed = searchText
         return trimmed.isEmpty ? nil : trimmed.lowercased()
     }
 
@@ -183,19 +158,6 @@ struct SetDetailView: View {
         }
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
-        .onAppear {
-            // Initialize from environment values on first appearance
-            if let section = environmentInitialSection {
-                selectedSection = section
-            } else {
-                selectedSection = Self.initialSection(for: brickSet)
-            }
-            
-            if let query = environmentSearchQuery {
-                searchText = query
-                effectiveSearchText = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if isRefreshingInventory {
@@ -507,13 +469,13 @@ struct SetDetailView: View {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmed.isEmpty {
-            await MainActor.run { effectiveSearchText = "" }
+            await MainActor.run { searchText = "" }
             return
         }
 
         do { try await Task.sleep(nanoseconds: 200_000_000) } catch { return }
         guard !Task.isCancelled else { return }
-        await MainActor.run { effectiveSearchText = trimmed }
+        await MainActor.run { searchText = trimmed }
     }
 
     private func refreshInventory() {
@@ -1020,7 +982,7 @@ struct PartRowNavigationWrapper: View {
     let set = try! context.fetch(FetchDescriptor<BrickSet>()).first!
 
     return NavigationStack {
-        SetDetailView(brickSet: set)
+        SetDetailView(brickSet: set, searchText: "bla")
     }
     .modelContainer(container)
 }
