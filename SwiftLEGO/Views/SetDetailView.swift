@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if canImport(BrickCore)
+import BrickCore
+#endif
 
 struct SetDetailView: View {
     private static let segmentedSections: [Part.InventorySection] = [
@@ -324,6 +327,7 @@ struct SetDetailView: View {
                     guard capacity > 0 else { continue }
                     let addition = min(capacity, remaining)
                     figure.quantityHave += addition
+                    figure.synchronizeParts(to: figure.quantityHave)
                     remaining -= addition
                 }
                 try? modelContext.save()
@@ -336,6 +340,7 @@ struct SetDetailView: View {
                     let reduction = min(figure.quantityHave, remaining)
                     guard reduction > 0 else { continue }
                     figure.quantityHave -= reduction
+                    figure.synchronizeParts(to: figure.quantityHave)
                     remaining -= reduction
                 }
                 try? modelContext.save()
@@ -780,6 +785,7 @@ private struct MinifigureInstanceRowView: View {
 
         let applyChange = {
             minifigure.quantityHave = clamped
+            _minifigure.wrappedValue.synchronizeParts(to: clamped)
             try? modelContext.save()
         }
 
@@ -885,6 +891,9 @@ struct PartRowView: View {
                 let shouldAnimate = isFilteringMissing && part.quantityHave < part.quantityNeeded
                 let update = {
                     part.quantityHave = part.quantityNeeded
+                    let model = _part.wrappedValue
+                    model.synchronizeSubparts(to: part.quantityNeeded)
+                    model.propagateCompletionUpwardsIfNeeded()
                     try? modelContext.save()
                 }
 
@@ -950,6 +959,9 @@ struct PartRowView: View {
 
         let update = {
             part.quantityHave = clampedValue
+            let model = _part.wrappedValue
+            model.synchronizeSubparts(to: clampedValue)
+            model.propagateCompletionUpwardsIfNeeded()
             try? modelContext.save()
         }
 

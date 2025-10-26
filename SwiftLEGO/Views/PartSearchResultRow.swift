@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if canImport(BrickCore)
+import BrickCore
+#endif
 
 struct PartSearchResultRow: View {
     @Environment(\.modelContext) private var modelContext
@@ -155,6 +158,8 @@ struct PartSearchResultRow: View {
 
         let applyChange = {
             part.quantityHave = clamped
+            part.synchronizeSubparts(to: clamped)
+            part.propagateCompletionUpwardsIfNeeded()
             try? modelContext.save()
         }
 

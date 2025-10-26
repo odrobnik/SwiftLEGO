@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if canImport(BrickCore)
+import BrickCore
+#endif
 
 struct MinifigureDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -123,6 +126,7 @@ struct MinifigureDetailView: View {
 
         withAnimation {
             minifigure.quantityHave = clamped
+            _minifigure.wrappedValue.synchronizeParts(to: clamped)
             try? modelContext.save()
         }
     }

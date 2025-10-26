@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if canImport(BrickCore)
+import BrickCore
+#endif
 
 struct MinifigureSearchResultRow: View {
     @Environment(\.modelContext) private var modelContext
@@ -75,6 +78,7 @@ struct MinifigureSearchResultRow: View {
 
         let applyChange = {
             minifigure.quantityHave = clamped
+            _minifigure.wrappedValue.synchronizeParts(to: clamped)
             try? modelContext.save()
         }
 
