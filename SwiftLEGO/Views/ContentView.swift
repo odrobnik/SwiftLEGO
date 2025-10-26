@@ -45,6 +45,14 @@ struct ContentView: View {
                 .navigationDestination(for: BrickSet.self) { set in
                     SetDetailView(brickSet: set, searchText: setCollectionSearchText)
                 }
+                .navigationDestination(for: SearchResult.self) { result in
+                    SetDetailView(
+                        brickSet: result.set,
+                        searchText: result.searchQuery,
+                        initialSection: result.section
+                    )
+                    .environment(\.setDetailShouldPropagateSearchFilter, true)
+                }
                 .navigationDestination(for: Minifigure.self) { minifigure in
                     MinifigureDetailView(minifigure: minifigure)
                 }

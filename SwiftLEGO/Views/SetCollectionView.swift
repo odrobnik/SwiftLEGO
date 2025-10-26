@@ -319,15 +319,21 @@ struct SetCollectionView: View {
             } else {
                 ForEach(groupedPartResults, id: \.colorName) { group in
                     Section(group.colorName) {
-                ForEach(group.entries) { entry in
-                    NavigationLink(value: entry.set) {
-                        PartSearchResultRow(
-                            set: entry.set,
-                            displayPart: entry.displayPart,
-                            matchingParts: entry.matchingParts,
-                            contextDescription: entry.contextDescription
-                        )
-                    }
+                        ForEach(group.entries) { entry in
+                            NavigationLink(
+                                value: SearchResult(
+                                    set: entry.set,
+                                    searchQuery: trimmedSearchText,
+                                    section: entry.displayPart.inventorySection
+                                )
+                            ) {
+                                PartSearchResultRow(
+                                    set: entry.set,
+                                    displayPart: entry.displayPart,
+                                    matchingParts: entry.matchingParts,
+                                    contextDescription: entry.contextDescription
+                                )
+                            }
                         }
                     }
                 }
@@ -350,7 +356,13 @@ struct SetCollectionView: View {
                     .listRowSeparator(.hidden)
             } else {
                 ForEach(minifigureResults) { entry in
-                    NavigationLink(value: entry.set) {
+                    NavigationLink(
+                        value: SearchResult(
+                            set: entry.set,
+                            searchQuery: trimmedSearchText,
+                            section: .regular
+                        )
+                    ) {
                         MinifigureSearchResultRow(
                             set: entry.set,
                             minifigure: entry.minifigure

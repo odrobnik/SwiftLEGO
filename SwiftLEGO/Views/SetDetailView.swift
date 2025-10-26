@@ -4,6 +4,17 @@ import SwiftData
 import BrickCore
 #endif
 
+private struct SetDetailShouldPropagateSearchFilterKey: EnvironmentKey {
+    static let defaultValue: Bool = false
+}
+
+extension EnvironmentValues {
+    var setDetailShouldPropagateSearchFilter: Bool {
+        get { self[SetDetailShouldPropagateSearchFilterKey.self] }
+        set { self[SetDetailShouldPropagateSearchFilterKey.self] = newValue }
+    }
+}
+
 struct SetDetailView: View {
     private static let segmentedSections: [Part.InventorySection] = [
         .regular,
@@ -14,18 +25,24 @@ struct SetDetailView: View {
 
     @Environment(\.modelContext) private var modelContext
     private let brickLinkService = BrickLinkService()
+    @Environment(\.setDetailShouldPropagateSearchFilter) private var shouldPropagateSearchFilter
     @Bindable var brickSet: BrickSet
     @State private var selectedSection: Part.InventorySection
     @State private var searchText: String
+    @State private var didApplySearchPropagationRule = false
     @State private var showMissingOnly: Bool = false
     @State private var isShowingLabelPrintSheet: Bool = false
     @State private var isRefreshingInventory: Bool = false
     @State private var refreshAlert: RefreshAlert?
     @State private var minifigureGroupExpansion: [String: Bool] = [:]
 
-    init(brickSet: BrickSet, searchText: String = "") {
+    init(
+        brickSet: BrickSet,
+        searchText: String = "",
+        initialSection: Part.InventorySection? = nil
+    ) {
         self._brickSet = Bindable(brickSet)
-        self._selectedSection = State(initialValue: Self.initialSection(for: brickSet))
+        self._selectedSection = State(initialValue: initialSection ?? Self.initialSection(for: brickSet))
         self._searchText = State(initialValue: searchText)
     }
 
@@ -148,6 +165,13 @@ struct SetDetailView: View {
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search parts")
         .task(id: searchText) {
             await updateSearchQuery()
+        }
+        .onAppear {
+            guard !didApplySearchPropagationRule else { return }
+            didApplySearchPropagationRule = true
+            if !shouldPropagateSearchFilter, !searchText.isEmpty {
+                searchText = ""
+            }
         }
         .sheet(isPresented: $isShowingLabelPrintSheet) {
             LabelPrintSheet(brickSet: brickSet)
@@ -994,7 +1018,7 @@ struct PartRowNavigationWrapper: View {
     let set = try! context.fetch(FetchDescriptor<BrickSet>()).first!
 
     return NavigationStack {
-        SetDetailView(brickSet: set, searchText: "bla")
+        SetDetailView(brickSet: set, searchText: "bla", initialSection: .regular)
     }
     .modelContainer(container)
 }
