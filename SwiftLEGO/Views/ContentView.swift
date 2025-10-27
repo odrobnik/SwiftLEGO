@@ -7,7 +7,6 @@ struct ContentView: View {
     @State private var path = NavigationPath()
     @State private var selectedListID: PersistentIdentifier?
     @State private var selectedCategoryPath: [String]?
-    @State private var setCollectionSearchText: String = ""
     private let uncategorizedCategoryTitle = "Uncategorized"
 
     var body: some View {
@@ -29,10 +28,10 @@ struct ContentView: View {
                         )
                         .id(categoryPath.joined(separator: "|"))
                     } else if let list = selectedList {
-                        SetCollectionView(list: list, searchText: $setCollectionSearchText)
+                        SetCollectionView(list: list)
                         .id(list.persistentModelID)
                     } else if let first = lists.first {
-                        SetCollectionView(list: first, searchText: $setCollectionSearchText)
+                        SetCollectionView(list: first)
                         .task { setSelectedList(first) }
                     } else {
                         EmptyStateView(
@@ -43,7 +42,7 @@ struct ContentView: View {
                     }
                 }
                 .navigationDestination(for: BrickSet.self) { set in
-                    SetDetailView(brickSet: set, searchText: setCollectionSearchText)
+                    SetDetailView(brickSet: set)
                 }
                 .navigationDestination(for: SearchResult.self) { result in
                     SetDetailView(

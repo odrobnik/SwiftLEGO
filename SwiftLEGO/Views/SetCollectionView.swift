@@ -4,7 +4,7 @@ import SwiftData
 struct SetCollectionView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var list: CollectionList
-    @Binding var searchText: String
+    @State private var searchText: String = ""
     private let brickLinkService = BrickLinkService()
     @State private var showingAddSetSheet = false
     @State private var showingBulkAddSheet = false
@@ -17,9 +17,8 @@ struct SetCollectionView: View {
     @State private var refreshingSetIDs: Set<PersistentIdentifier> = []
     @State private var refreshError: RefreshError?
 
-    init(list: CollectionList, searchText: Binding<String>) {
+    init(list: CollectionList) {
         self._list = Bindable(list)
-        self._searchText = searchText
     }
 
     private var sortedSets: [BrickSet] {
@@ -1098,7 +1097,7 @@ private extension ThumbnailCacheError {
         .first!
 
     return NavigationStack {
-        SetCollectionView(list: list, searchText: .constant(""))
+        SetCollectionView(list: list)
     }
     .modelContainer(container)
 }
