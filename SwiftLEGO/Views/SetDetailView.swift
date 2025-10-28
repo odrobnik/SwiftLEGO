@@ -29,6 +29,7 @@ struct SetDetailView: View {
     @Bindable var brickSet: BrickSet
     @State private var selectedSection: Part.InventorySection
     @State private var searchText: String
+    @State private var effectiveSearchText: String
     @State private var didApplySearchPropagationRule = false
     @State private var showMissingOnly: Bool = false
     @State private var isShowingLabelPrintSheet: Bool = false
@@ -44,6 +45,7 @@ struct SetDetailView: View {
         self._brickSet = Bindable(brickSet)
         self._selectedSection = State(initialValue: initialSection ?? Self.initialSection(for: brickSet))
         self._searchText = State(initialValue: searchText)
+        self._effectiveSearchText = State(initialValue: searchText.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     private var minifigureGroups: [MinifigureGroup] {
@@ -123,7 +125,7 @@ struct SetDetailView: View {
     }
 
     private var normalizedSearchQuery: String? {
-        let trimmed = searchText
+        let trimmed = effectiveSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed.lowercased()
     }
 
@@ -498,13 +500,13 @@ struct SetDetailView: View {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmed.isEmpty {
-            await MainActor.run { searchText = "" }
+            await MainActor.run { effectiveSearchText = "" }
             return
         }
 
         do { try await Task.sleep(nanoseconds: 200_000_000) } catch { return }
         guard !Task.isCancelled else { return }
-        await MainActor.run { searchText = trimmed }
+        await MainActor.run { effectiveSearchText = trimmed }
     }
 
     private func refreshInventory() {
