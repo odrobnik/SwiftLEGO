@@ -1,3 +1,6 @@
+#if canImport(BrickCore)
+import BrickCore
+#endif
 import SwiftUI
 import SwiftData
 
@@ -61,6 +64,9 @@ struct ContentView: View {
             ensureSelection()
         }
         .task {
+            #if canImport(BrickCore)
+            await BrickColorRefreshManager.shared.refreshIfNeeded(using: modelContext)
+            #endif
             ensureSelection()
         }
     }

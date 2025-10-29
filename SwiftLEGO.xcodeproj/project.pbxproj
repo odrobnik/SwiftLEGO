@@ -25,6 +25,8 @@
 		7c8d9e0f1a2b3456789abcde /* InventorySnapshotDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4a5b6c7d8e9f0123456789ab /* InventorySnapshotDocument.swift */; };
 		88bb99cc00ddeeff11aa22bb /* String+Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = bca132def5468790fedcba97 /* String+Markdown.swift */; };
 		99cc00ddeeff11aa22bb33cc /* WebKitBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = cab231edf6547890fedcba96 /* WebKitBrowser.swift */; };
+		AA11223344556677889900CC /* BrickColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677889900DD /* BrickColor.swift */; };
+		CC11223344556677889900EE /* BrickColorRefreshManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD11223344556677889900FF /* BrickColorRefreshManager.swift */; };
 		A7AB6DDF2E945E6300C813E2 /* HTMLParser in Frameworks */ = {isa = PBXBuildFile; productRef = FEEDBEEFCAFEDADA12345678 /* HTMLParser */; };
 		E126552B7EF340CD8F078047 /* MinifigCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A75EB7C37AF549DCAD01EEAC /* MinifigCategory.swift */; };
 		E5A0B9F2C972428BA662CEB6 /* Minifigure.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEB699C7264945E8ADAE7CA4 /* Minifigure.swift */; };
@@ -56,6 +58,8 @@
 		e1f2a3b4c5d6401298765434 /* DomNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomNode.swift; sourceTree = "<group>"; };
 		f18655541b944772b8a0b924 /* SwiftLEGOModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLEGOModelContainer.swift; sourceTree = "<group>"; };
 		f1e2d3c4b5a6401298765435 /* DomText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomText.swift; sourceTree = "<group>"; };
+		BB11223344556677889900DD /* BrickColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickColor.swift; sourceTree = "<group>"; };
+		DD11223344556677889900FF /* BrickColorRefreshManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickColorRefreshManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -113,6 +117,7 @@
 			isa = PBXGroup;
 			children = (
 				87e2ca925daf41bd8f822bb3 /* BrickLinkService.swift */,
+				DD11223344556677889900FF /* BrickColorRefreshManager.swift */,
 				00AABBCCDDEEFF0011223345 /* ThumbnailCacheManager.swift */,
 				3c4d5e6f708192a3b4c5d6e7 /* SetImportUtilities.swift */,
 				5f3c1a2b4d6e7f8091a2b3c4 /* InventorySnapshot.swift */,
@@ -134,6 +139,7 @@
 			children = (
 				46ad3394cab847e4b893b19f /* CollectionList.swift */,
 				5dc696c200de4abbadd5dc07 /* BrickSet.swift */,
+				BB11223344556677889900DD /* BrickColor.swift */,
 				9c8d7e6f5a4b3c2d1e0f9a8b /* SetCategory.swift */,
 				A75EB7C37AF549DCAD01EEAC /* MinifigCategory.swift */,
 				BEB699C7264945E8ADAE7CA4 /* Minifigure.swift */,
@@ -261,6 +267,7 @@
 				00223344556677889900AABD /* UTType+SwiftLEGO.swift in Sources */,
 				aa759d4131464a139628de43 /* CollectionList.swift in Sources */,
 				360f6b44ed3545d98f309e88 /* BrickSet.swift in Sources */,
+				AA11223344556677889900CC /* BrickColor.swift in Sources */,
 				0147f5a9b2c34d8e9f0a1b2c /* SetCategory.swift in Sources */,
 				003b71505824429e8f563e5a /* Part.swift in Sources */,
 				E5A0B9F2C972428BA662CEB6 /* Minifigure.swift in Sources */,
