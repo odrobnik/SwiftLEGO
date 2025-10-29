@@ -1,20 +1,36 @@
 import Foundation
 
-struct BrickLinkColorGuideEntry: Sendable, Equatable {
-    let brickLinkColorID: Int
-    let brickLinkName: String
-    let legoColorName: String?
-    let legoColorID: Int?
-    let hexColor: String?
+public struct BrickLinkColorGuideEntry: Sendable, Equatable {
+    public let brickLinkColorID: Int
+    public let brickLinkName: String
+    public let legoColorName: String?
+    public let legoColorID: Int?
+    public let hexColor: String?
+
+    public init(
+        brickLinkColorID: Int,
+        brickLinkName: String,
+        legoColorName: String?,
+        legoColorID: Int?,
+        hexColor: String?
+    ) {
+        self.brickLinkColorID = brickLinkColorID
+        self.brickLinkName = brickLinkName
+        self.legoColorName = legoColorName
+        self.legoColorID = legoColorID
+        self.hexColor = hexColor
+    }
 }
 
-actor BrickLinkColorGuideService {
-    enum ColorGuideError: Error {
+public actor BrickLinkColorGuideService {
+    public enum ColorGuideError: Error {
         case invalidResponse
         case tableNotFound
     }
 
-    func fetchColorGuide(locale: String = "en-us") async throws -> [BrickLinkColorGuideEntry] {
+    public init() {}
+
+    public func fetchColorGuide(locale: String = "en-us") async throws -> [BrickLinkColorGuideEntry] {
         let localeLowercased = locale.lowercased()
         guard let url = URL(string: "https://v2.bricklink.com/\(localeLowercased)/catalog/color-guide") else {
             throw ColorGuideError.invalidResponse
@@ -24,7 +40,7 @@ actor BrickLinkColorGuideService {
         return try await parseColorGuide(htmlData: data, baseURL: url)
     }
 
-    func parseColorGuide(htmlData: Data, baseURL: URL) async throws -> [BrickLinkColorGuideEntry] {
+    public func parseColorGuide(htmlData: Data, baseURL: URL) async throws -> [BrickLinkColorGuideEntry] {
         let domBuilder = try await DomBuilder(html: htmlData, baseURL: baseURL)
         guard let root = domBuilder.root else {
             throw ColorGuideError.invalidResponse

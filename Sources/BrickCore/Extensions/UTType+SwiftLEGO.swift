@@ -1,6 +1,6 @@
 import UniformTypeIdentifiers
 
-extension UTType {
+public extension UTType {
     static let legoInventory: UTType = {
         if let type = UTType(filenameExtension: "lego", conformingTo: .json) {
             return type

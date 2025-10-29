@@ -2,15 +2,15 @@ import Foundation
 import SwiftData
 
 @Model
-final class BrickColor {
-    @Attribute(.unique) var brickLinkColorID: Int
-    var brickLinkName: String
-    var legoColorName: String?
-    var legoColorID: Int?
-    var hexColor: String?
-    var updatedAt: Date
+public final class BrickColor {
+    @Attribute(.unique) public var brickLinkColorID: Int
+    public var brickLinkName: String
+    public var legoColorName: String?
+    public var legoColorID: Int?
+    public var hexColor: String?
+    public var updatedAt: Date
 
-    init(
+    public init(
         brickLinkColorID: Int,
         brickLinkName: String,
         legoColorName: String?,

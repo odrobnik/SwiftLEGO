@@ -2,16 +2,16 @@ import Foundation
 import SwiftData
 
 @Model
-final class MinifigCategory: Identifiable {
-    @Attribute(.unique) var id: UUID
-    var categoryID: String?
-    var name: String
-    var sortOrder: Int
-    var minifigure: Minifigure?
-    @Relationship(deleteRule: .nullify) var parent: MinifigCategory?
-    @Relationship(deleteRule: .cascade, inverse: \MinifigCategory.parent) var children: [MinifigCategory]
+public final class MinifigCategory: Identifiable {
+    @Attribute(.unique) public var id: UUID
+    public var categoryID: String?
+    public var name: String
+    public var sortOrder: Int
+    public var minifigure: Minifigure?
+    @Relationship(deleteRule: .nullify) public var parent: MinifigCategory?
+    @Relationship(deleteRule: .cascade, inverse: \MinifigCategory.parent) public var children: [MinifigCategory]
 
-    init(
+    public init(
         id: UUID = UUID(),
         categoryID: String? = nil,
         name: String,
@@ -30,7 +30,7 @@ final class MinifigCategory: Identifiable {
     }
 }
 
-extension Array where Element == MinifigCategory {
+public extension Array where Element == MinifigCategory {
     func sortedByOrder() -> [MinifigCategory] {
         sorted { lhs, rhs in
             if lhs.sortOrder == rhs.sortOrder {

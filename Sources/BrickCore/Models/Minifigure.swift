@@ -2,21 +2,21 @@ import Foundation
 import SwiftData
 
 @Model
-final class Minifigure: Identifiable {
-    @Attribute(.unique) var id: UUID
-    var identifier: String
-    var name: String
-    var quantityNeeded: Int
-    var quantityHave: Int
-    var imageURLString: String?
-    var catalogURLString: String?
-    var inventoryURLString: String?
-    var set: BrickSet?
-    @Relationship(deleteRule: .cascade, inverse: \Part.minifigure) var parts: [Part]
-    @Relationship(deleteRule: .cascade, inverse: \MinifigCategory.minifigure) var categories: [MinifigCategory]
-    var instanceNumber: Int = 1
+public final class Minifigure: Identifiable {
+    @Attribute(.unique) public var id: UUID
+    public var identifier: String
+    public var name: String
+    public var quantityNeeded: Int
+    public var quantityHave: Int
+    public var imageURLString: String?
+    public var catalogURLString: String?
+    public var inventoryURLString: String?
+    public var set: BrickSet?
+    @Relationship(deleteRule: .cascade, inverse: \Part.minifigure) public var parts: [Part]
+    @Relationship(deleteRule: .cascade, inverse: \MinifigCategory.minifigure) public var categories: [MinifigCategory]
+    public var instanceNumber: Int = 1
 
-    init(
+    public init(
         id: UUID = UUID(),
         identifier: String,
         name: String,
@@ -45,7 +45,7 @@ final class Minifigure: Identifiable {
     }
 }
 
-extension Minifigure {
+public extension Minifigure {
     var imageURL: URL? {
         guard let imageURLString else { return nil }
         return URL(string: imageURLString)
@@ -62,7 +62,7 @@ extension Minifigure {
     }
 }
 
-extension Minifigure {
+public extension Minifigure {
     func normalizedCategoryPath(uncategorizedTitle: String) -> [String] {
         var names = categories
             .sortedByOrder()
@@ -78,7 +78,7 @@ extension Minifigure {
     }
 }
 
-extension Minifigure {
+public extension Minifigure {
     private var siblingInstanceCount: Int {
         guard let set else { return 1 }
         return set.minifigures.filter { $0.identifier.caseInsensitiveCompare(identifier) == .orderedSame }.count

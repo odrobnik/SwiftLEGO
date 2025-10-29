@@ -1,8 +1,8 @@
 import Foundation
 import CryptoKit
 
-actor ThumbnailCacheManager {
-    static let shared = ThumbnailCacheManager()
+public actor ThumbnailCacheManager {
+    public static let shared = ThumbnailCacheManager()
 
     private let maxConcurrentDownloads: Int
     private let session: URLSession
@@ -18,7 +18,7 @@ actor ThumbnailCacheManager {
     private var availablePermits: Int
     private var waitingContinuations: [CheckedContinuation<Void, Never>] = []
 
-    init(
+    public init(
         maxConcurrentDownloads: Int = 4,
         session: URLSession = .shared,
         fileManager: FileManager = .default
@@ -39,7 +39,7 @@ actor ThumbnailCacheManager {
         }
     }
 
-    func data(for url: URL) async throws -> Data {
+    public func data(for url: URL) async throws -> Data {
         if let cached = memoryCache[url] {
             updateMemoryOrder(for: url)
             return cached
@@ -156,7 +156,7 @@ actor ThumbnailCacheManager {
         }
     }
 
-    func removeCachedData(for url: URL) {
+    public func removeCachedData(for url: URL) {
         memoryCache.removeValue(forKey: url)
         memoryCacheOrder.removeAll(where: { $0 == url })
         let destination = fileURL(for: url)
@@ -175,7 +175,7 @@ actor ThumbnailCacheManager {
     }
 }
 
-enum ThumbnailCacheError: Error {
+public enum ThumbnailCacheError: Error {
     case invalidResponse(statusCode: Int?)
     case emptyData
     case managerDeallocated

@@ -1,9 +1,9 @@
 import Foundation
 import SwiftData
 
-enum SetImportUtilities {
+public enum SetImportUtilities {
     /// Normalizes BrickLink set numbers by ensuring they include a `-` suffix when missing.
-    static func normalizedSetNumber(_ raw: String) -> String {
+    public static func normalizedSetNumber(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmed.isEmpty else { return trimmed }
@@ -16,7 +16,7 @@ enum SetImportUtilities {
     }
 
     /// Aggregates parts sharing the same partID/colorID and sorts them for stable presentation.
-    static func aggregateParts(_ parts: [BrickLinkPartPayload]) -> [BrickLinkPartPayload] {
+    public static func aggregateParts(_ parts: [BrickLinkPartPayload]) -> [BrickLinkPartPayload] {
         struct PartGroupKey: Hashable {
             let partID: String
             let colorID: String
@@ -119,7 +119,7 @@ enum SetImportUtilities {
         return part
     }
 
-    static func partPayloads(from parts: [Part]) -> [BrickLinkPartPayload] {
+    public static func partPayloads(from parts: [Part]) -> [BrickLinkPartPayload] {
         parts.map {
             BrickLinkPartPayload(
                 partID: $0.partID,
@@ -136,7 +136,7 @@ enum SetImportUtilities {
         }
     }
 
-    static func categoryPayloads(from categories: [SetCategory]) -> [SetCategoryPayload] {
+    public static func categoryPayloads(from categories: [SetCategory]) -> [SetCategoryPayload] {
         categories
             .sortedByOrder()
             .map { category in
@@ -147,7 +147,7 @@ enum SetImportUtilities {
             }
     }
 
-    static func minifigurePayloads(from minifigures: [Minifigure]) -> [BrickLinkMinifigurePayload] {
+    public static func minifigurePayloads(from minifigures: [Minifigure]) -> [BrickLinkMinifigurePayload] {
         minifigures.map { minifigure in
             BrickLinkMinifigurePayload(
                 identifier: minifigure.identifier,
@@ -169,7 +169,7 @@ enum SetImportUtilities {
     }
 
     @MainActor
-    static func persistSet(
+    public static func persistSet(
         list: CollectionList,
         modelContext: ModelContext,
         setNumber: String,
@@ -305,7 +305,7 @@ enum SetImportUtilities {
     }
 
     @MainActor
-    static func refreshSet(
+    public static func refreshSet(
         set: BrickSet,
         list: CollectionList,
         modelContext: ModelContext,
@@ -377,10 +377,10 @@ enum SetImportUtilities {
         }
     }
 
-    enum RefreshError: LocalizedError {
+    public enum RefreshError: LocalizedError {
         case missingCollection
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .missingCollection:
                 return "This set is not assigned to a list, so it can’t be refreshed yet."
@@ -388,7 +388,7 @@ enum SetImportUtilities {
         }
     }
 
-    static func refreshSetFromBrickLink(
+    public static func refreshSetFromBrickLink(
         set: BrickSet,
         modelContext: ModelContext,
         service: BrickLinkService

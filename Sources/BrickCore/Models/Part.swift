@@ -2,14 +2,14 @@ import Foundation
 import SwiftData
 
 @Model
-final class Part: Identifiable {
-    enum InventorySection: String, Codable, CaseIterable, Sendable {
+public final class Part: Identifiable {
+    public enum InventorySection: String, Codable, CaseIterable, Sendable {
         case regular
         case counterpart
         case extra
         case alternate
 
-        var displayTitle: String {
+        public var displayTitle: String {
             switch self {
             case .regular:
                 return "Regular Items"
@@ -22,7 +22,7 @@ final class Part: Identifiable {
             }
         }
 
-        var sortOrder: Int {
+        public var sortOrder: Int {
             switch self {
             case .regular:
                 return 0
@@ -36,23 +36,23 @@ final class Part: Identifiable {
         }
     }
 
-    @Attribute(.unique) var id: UUID
-    var partID: String
-    var name: String
-    var colorID: String
-    var colorName: String
-    var quantityNeeded: Int
-    var quantityHave: Int
-    var imageURLString: String?
-    var partURLString: String?
-    var inventorySectionRawValue: String = InventorySection.regular.rawValue
-    var set: BrickSet?
-    var minifigure: Minifigure?
-    @Relationship(deleteRule: .cascade, inverse: \Part.parentPart) var subparts: [Part] = []
-    @Relationship(deleteRule: .nullify) var parentPart: Part?
-    var instanceNumber: Int = 1
+    @Attribute(.unique) public var id: UUID
+    public var partID: String
+    public var name: String
+    public var colorID: String
+    public var colorName: String
+    public var quantityNeeded: Int
+    public var quantityHave: Int
+    public var imageURLString: String?
+    public var partURLString: String?
+    public var inventorySectionRawValue: String = InventorySection.regular.rawValue
+    public var set: BrickSet?
+    public var minifigure: Minifigure?
+    @Relationship(deleteRule: .cascade, inverse: \Part.parentPart) public var subparts: [Part] = []
+    @Relationship(deleteRule: .nullify) public var parentPart: Part?
+    public var instanceNumber: Int = 1
 
-    init(
+    public init(
         id: UUID = UUID(),
         partID: String,
         name: String,
@@ -87,7 +87,7 @@ final class Part: Identifiable {
     }
 }
 
-extension Part {
+public extension Part {
     var imageURL: URL? {
         guard let imageURLString else { return nil }
         return URL(string: imageURLString)

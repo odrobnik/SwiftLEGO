@@ -1,53 +1,129 @@
 import Foundation
 
-struct BrickLinkSetPayload: Sendable {
-    let setNumber: String
-    let name: String
-    let thumbnailURL: URL?
-    let parts: [BrickLinkPartPayload]
-    let categories: [SetCategoryPayload]
-    let minifigures: [BrickLinkMinifigurePayload]
+public struct BrickLinkSetPayload: Sendable {
+    public let setNumber: String
+    public let name: String
+    public let thumbnailURL: URL?
+    public let parts: [BrickLinkPartPayload]
+    public let categories: [SetCategoryPayload]
+    public let minifigures: [BrickLinkMinifigurePayload]
+
+    public init(
+        setNumber: String,
+        name: String,
+        thumbnailURL: URL? = nil,
+        parts: [BrickLinkPartPayload],
+        categories: [SetCategoryPayload],
+        minifigures: [BrickLinkMinifigurePayload]
+    ) {
+        self.setNumber = setNumber
+        self.name = name
+        self.thumbnailURL = thumbnailURL
+        self.parts = parts
+        self.categories = categories
+        self.minifigures = minifigures
+    }
 }
 
-struct BrickLinkPartPayload: Sendable {
-    let partID: String
-    let name: String
-    let colorID: String
-    let colorName: String
-    let quantityNeeded: Int
-    let instanceNumber: Int?
-    let imageURL: URL?
-    let partURL: URL?
-    let inventorySection: Part.InventorySection
-    let subparts: [BrickLinkPartPayload]
+public struct BrickLinkPartPayload: Sendable {
+    public let partID: String
+    public let name: String
+    public let colorID: String
+    public let colorName: String
+    public let quantityNeeded: Int
+    public let instanceNumber: Int?
+    public let imageURL: URL?
+    public let partURL: URL?
+    public let inventorySection: Part.InventorySection
+    public let subparts: [BrickLinkPartPayload]
+
+    public init(
+        partID: String,
+        name: String,
+        colorID: String,
+        colorName: String,
+        quantityNeeded: Int,
+        instanceNumber: Int? = nil,
+        imageURL: URL? = nil,
+        partURL: URL? = nil,
+        inventorySection: Part.InventorySection,
+        subparts: [BrickLinkPartPayload] = []
+    ) {
+        self.partID = partID
+        self.name = name
+        self.colorID = colorID
+        self.colorName = colorName
+        self.quantityNeeded = quantityNeeded
+        self.instanceNumber = instanceNumber
+        self.imageURL = imageURL
+        self.partURL = partURL
+        self.inventorySection = inventorySection
+        self.subparts = subparts
+    }
 }
 
-struct SetCategoryPayload: Sendable, Equatable {
-    let id: String?
-    let name: String
+public struct SetCategoryPayload: Sendable, Equatable {
+    public let id: String?
+    public let name: String
+
+    public init(id: String? = nil, name: String) {
+        self.id = id
+        self.name = name
+    }
 }
 
-struct BrickLinkMinifigurePayload: Sendable {
-    let identifier: String
-    let name: String
-    let quantityNeeded: Int
-    let instanceNumber: Int?
-    let imageURL: URL?
-    let catalogURL: URL?
-    let inventoryURL: URL?
-    let categories: [MinifigCategoryPayload]
-    let parts: [BrickLinkPartPayload]
+public struct BrickLinkMinifigurePayload: Sendable {
+    public let identifier: String
+    public let name: String
+    public let quantityNeeded: Int
+    public let instanceNumber: Int?
+    public let imageURL: URL?
+    public let catalogURL: URL?
+    public let inventoryURL: URL?
+    public let categories: [MinifigCategoryPayload]
+    public let parts: [BrickLinkPartPayload]
+
+    public init(
+        identifier: String,
+        name: String,
+        quantityNeeded: Int,
+        instanceNumber: Int? = nil,
+        imageURL: URL? = nil,
+        catalogURL: URL? = nil,
+        inventoryURL: URL? = nil,
+        categories: [MinifigCategoryPayload] = [],
+        parts: [BrickLinkPartPayload] = []
+    ) {
+        self.identifier = identifier
+        self.name = name
+        self.quantityNeeded = quantityNeeded
+        self.instanceNumber = instanceNumber
+        self.imageURL = imageURL
+        self.catalogURL = catalogURL
+        self.inventoryURL = inventoryURL
+        self.categories = categories
+        self.parts = parts
+    }
 }
 
-struct MinifigCategoryPayload: Sendable, Equatable {
-    let id: String?
-    let name: String
+public struct MinifigCategoryPayload: Sendable, Equatable {
+    public let id: String?
+    public let name: String
+
+    public init(id: String?, name: String) {
+        self.id = id
+        self.name = name
+    }
 }
 
-actor BrickLinkService {
-    private let inventoryService = BrickLinkInventoryService()
+public actor BrickLinkService {
+    private let inventoryService: BrickLinkInventoryService
 
-    func fetchSetDetails(for setNumber: String) async throws -> BrickLinkSetPayload {
+    public init(inventoryService: BrickLinkInventoryService = BrickLinkInventoryService()) {
+        self.inventoryService = inventoryService
+    }
+
+    public func fetchSetDetails(for setNumber: String) async throws -> BrickLinkSetPayload {
         let inventory = try await inventoryService.fetchInventory(for: setNumber)
 
         let parts = inventory.parts.map { part in

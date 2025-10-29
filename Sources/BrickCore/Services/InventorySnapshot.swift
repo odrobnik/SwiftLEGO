@@ -1,17 +1,17 @@
 import Foundation
 import SwiftData
 
-struct InventorySnapshot: Codable, Sendable {
-    struct SetSnapshot: Codable, Sendable {
-        struct PartSnapshot: Codable, Sendable {
-            let partID: String
-            let colorID: String
-            let quantityHave: Int
-            let inventorySection: String?
-            let instanceNumber: Int?
-            let subparts: [PartSnapshot]?
+public struct InventorySnapshot: Codable, Sendable {
+    public struct SetSnapshot: Codable, Sendable {
+        public struct PartSnapshot: Codable, Sendable {
+            public let partID: String
+            public let colorID: String
+            public let quantityHave: Int
+            public let inventorySection: String?
+            public let instanceNumber: Int?
+            public let subparts: [PartSnapshot]?
 
-            init(
+            public init(
                 partID: String,
                 colorID: String,
                 quantityHave: Int,
@@ -45,11 +45,11 @@ struct InventorySnapshot: Codable, Sendable {
             }
         }
 
-        struct MinifigureSnapshot: Codable, Sendable {
-            let identifier: String
-            let quantityHave: Int
-            let instanceNumber: Int?
-            let parts: [PartSnapshot]
+        public struct MinifigureSnapshot: Codable, Sendable {
+            public let identifier: String
+            public let quantityHave: Int
+            public let instanceNumber: Int?
+            public let parts: [PartSnapshot]
 
             private enum CodingKeys: String, CodingKey {
                 case identifier
@@ -58,7 +58,7 @@ struct InventorySnapshot: Codable, Sendable {
                 case parts
             }
 
-            init(
+            public init(
                 identifier: String,
                 quantityHave: Int,
                 instanceNumber: Int?,
@@ -70,7 +70,7 @@ struct InventorySnapshot: Codable, Sendable {
                 self.parts = parts
             }
 
-            init(from decoder: Decoder) throws {
+            public init(from decoder: Decoder) throws {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
                 identifier = try container.decode(String.self, forKey: .identifier)
                 quantityHave = try container.decode(Int.self, forKey: .quantityHave)
@@ -78,7 +78,7 @@ struct InventorySnapshot: Codable, Sendable {
                 parts = try container.decode([PartSnapshot].self, forKey: .parts)
             }
 
-            func encode(to encoder: Encoder) throws {
+            public func encode(to encoder: Encoder) throws {
                 var container = encoder.container(keyedBy: CodingKeys.self)
                 try container.encode(identifier, forKey: .identifier)
                 try container.encode(quantityHave, forKey: .quantityHave)
@@ -87,12 +87,12 @@ struct InventorySnapshot: Codable, Sendable {
             }
         }
 
-        let id: UUID?
-        let setNumber: String
-        let name: String?
-        let thumbnailURLString: String?
-        let parts: [PartSnapshot]
-        let minifigures: [MinifigureSnapshot]
+        public let id: UUID?
+        public let setNumber: String
+        public let name: String?
+        public let thumbnailURLString: String?
+        public let parts: [PartSnapshot]
+        public let minifigures: [MinifigureSnapshot]
 
         private enum CodingKeys: String, CodingKey {
             case id
@@ -103,7 +103,7 @@ struct InventorySnapshot: Codable, Sendable {
             case minifigures
         }
 
-        init(
+        public init(
             id: UUID? = nil,
             setNumber: String,
             name: String? = nil,
@@ -119,7 +119,7 @@ struct InventorySnapshot: Codable, Sendable {
             self.minifigures = minifigures
         }
 
-        init(from decoder: Decoder) throws {
+        public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             id = try container.decodeIfPresent(UUID.self, forKey: .id)
             setNumber = try container.decode(String.self, forKey: .setNumber)
@@ -129,7 +129,7 @@ struct InventorySnapshot: Codable, Sendable {
             minifigures = try container.decodeIfPresent([MinifigureSnapshot].self, forKey: .minifigures) ?? []
         }
 
-        func encode(to encoder: Encoder) throws {
+        public func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encodeIfPresent(id, forKey: .id)
             try container.encode(setNumber, forKey: .setNumber)
@@ -146,10 +146,10 @@ struct InventorySnapshot: Codable, Sendable {
         }
     }
 
-    struct ListSnapshot: Codable, Sendable {
-        let id: UUID?
-        let name: String
-        let sets: [SetSnapshot]
+    public struct ListSnapshot: Codable, Sendable {
+        public let id: UUID?
+        public let name: String
+        public let sets: [SetSnapshot]
 
         private enum CodingKeys: String, CodingKey {
             case id
@@ -157,20 +157,20 @@ struct InventorySnapshot: Codable, Sendable {
             case sets
         }
 
-        init(id: UUID? = nil, name: String, sets: [SetSnapshot]) {
+        public init(id: UUID? = nil, name: String, sets: [SetSnapshot]) {
             self.id = id
             self.name = name
             self.sets = sets
         }
 
-        init(from decoder: Decoder) throws {
+        public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             id = try container.decodeIfPresent(UUID.self, forKey: .id)
             name = try container.decode(String.self, forKey: .name)
             sets = try container.decodeIfPresent([SetSnapshot].self, forKey: .sets) ?? []
         }
 
-        func encode(to encoder: Encoder) throws {
+        public func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encodeIfPresent(id, forKey: .id)
             try container.encode(name, forKey: .name)
@@ -180,56 +180,68 @@ struct InventorySnapshot: Codable, Sendable {
         }
     }
 
-    struct ApplyResult: Sendable {
-        let updatedPartCount: Int
-        let matchedSetCount: Int
-        let unmatchedSetNumbers: [String]
-        let unmatchedPartCount: Int
+    public struct ApplyResult: Sendable {
+        public let updatedPartCount: Int
+        public let matchedSetCount: Int
+        public let unmatchedSetNumbers: [String]
+        public let unmatchedPartCount: Int
 
-        var summaryDescription: String {
+        public var summaryDescription: String {
             var components: [String] = []
             if updatedPartCount > 0 {
-                components.append("Updated \(updatedPartCount) part\(updatedPartCount == 1 ? "" : "s") across \(matchedSetCount) set\(matchedSetCount == 1 ? "" : "s")")
+                components.append(
+                    String(
+                        localized: "Updated ^[\(updatedPartCount) part](inflect: true) across ^[\(matchedSetCount) set](inflect: true)"
+                    )
+                )
             } else if matchedSetCount > 0 {
-                components.append("Verified \(matchedSetCount) set\(matchedSetCount == 1 ? "" : "s"); no part quantity changes required")
+                components.append(
+                    String(
+                        localized: "Verified ^[\(matchedSetCount) set](inflect: true); no part quantity changes required"
+                    )
+                )
             } else {
-                components.append("No sets matched the import file")
+                components.append(String(localized: "No sets matched the import file"))
             }
 
             if !unmatchedSetNumbers.isEmpty {
-                components.append("Skipped \(unmatchedSetNumbers.count) missing set\(unmatchedSetNumbers.count == 1 ? "" : "s")")
+                components.append(
+                    String(localized: "Skipped ^[\(unmatchedSetNumbers.count) missing set](inflect: true)")
+                )
             }
 
             if unmatchedPartCount > 0 {
-                components.append("Ignored \(unmatchedPartCount) unmatched part\(unmatchedPartCount == 1 ? "" : "s")")
+                components.append(
+                    String(localized: "Ignored ^[\(unmatchedPartCount) unmatched part](inflect: true)")
+                )
             }
 
             return components.joined(separator: "\n")
         }
     }
 
-    static let empty = InventorySnapshot(sets: [], lists: [])
+    public static let empty = InventorySnapshot(sets: [], lists: [])
 
-    let sets: [SetSnapshot]
-    let lists: [ListSnapshot]
+    public let sets: [SetSnapshot]
+    public let lists: [ListSnapshot]
 
     private enum CodingKeys: String, CodingKey {
         case sets
         case lists
     }
 
-    init(sets: [SetSnapshot], lists: [ListSnapshot] = []) {
+    public init(sets: [SetSnapshot], lists: [ListSnapshot] = []) {
         self.sets = sets
         self.lists = lists
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         sets = try container.decodeIfPresent([SetSnapshot].self, forKey: .sets) ?? []
         lists = try container.decodeIfPresent([ListSnapshot].self, forKey: .lists) ?? []
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         if !sets.isEmpty {
             try container.encode(sets, forKey: .sets)
@@ -242,7 +254,7 @@ struct InventorySnapshot: Codable, Sendable {
 
 extension InventorySnapshot {
     @MainActor
-    static func make(from lists: [CollectionList]) -> InventorySnapshot {
+    public static func make(from lists: [CollectionList]) -> InventorySnapshot {
         let allSets = lists
             .flatMap { $0.sets }
             .sorted(by: setSortComparator)
@@ -259,7 +271,7 @@ extension InventorySnapshot {
     }
 
     @MainActor
-    func apply(to lists: [CollectionList]) -> ApplyResult {
+    public func apply(to lists: [CollectionList]) -> ApplyResult {
         let allSets = lists.flatMap { $0.sets }
         var setLookup: [String: BrickSet] = [:]
 
@@ -557,7 +569,7 @@ extension InventorySnapshot.SetSnapshot {
 
 extension InventorySnapshot {
     @MainActor
-    static func snapshot(for set: BrickSet, in list: CollectionList) -> SetSnapshot? {
+    public static func snapshot(for set: BrickSet, in list: CollectionList) -> SetSnapshot? {
         let inventorySnapshot = make(from: [list])
         return inventorySnapshot.sets.first { $0.matches(set) }
     }

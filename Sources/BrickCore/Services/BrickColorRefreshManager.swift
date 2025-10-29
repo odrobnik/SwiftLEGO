@@ -2,8 +2,8 @@ import Foundation
 import SwiftData
 
 @MainActor
-final class BrickColorRefreshManager {
-    static let shared = BrickColorRefreshManager()
+public final class BrickColorRefreshManager {
+    public static let shared = BrickColorRefreshManager()
 
     private let userDefaults: UserDefaults
     private let service: BrickLinkColorGuideService
@@ -12,7 +12,7 @@ final class BrickColorRefreshManager {
 
     private var isRefreshing = false
 
-    init(
+    public init(
         userDefaults: UserDefaults = .standard,
         service: BrickLinkColorGuideService = BrickLinkColorGuideService(),
         refreshInterval: TimeInterval = 7 * 24 * 60 * 60
@@ -22,7 +22,7 @@ final class BrickColorRefreshManager {
         self.refreshInterval = refreshInterval
     }
 
-    func refreshIfNeeded(using modelContext: ModelContext, locale: Locale = .current) async {
+    public func refreshIfNeeded(using modelContext: ModelContext, locale: Locale = .current) async {
         guard !isRefreshing else { return }
 
         var descriptor = FetchDescriptor<BrickColor>()

@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-extension Part {
+public extension Part {
     func synchronizeSubparts(to parentUnits: Int) {
         guard !subparts.isEmpty else { return }
 
@@ -24,6 +24,7 @@ extension Part {
             owningFigure.updateCompletionFromPartsIfNeeded()
         }
     }
+
     func updateCompletionFromSubpartsIfNeeded() {
         guard let completedUnits = completedUnitsFromSubparts(),
               completedUnits > quantityHave else { return }
@@ -66,7 +67,7 @@ extension Part {
 }
 
 @MainActor
-extension Minifigure {
+public extension Minifigure {
     func synchronizeParts(to figureUnits: Int) {
         guard !parts.isEmpty else { return }
 
@@ -88,6 +89,7 @@ extension Minifigure {
 
         quantityHave = completedUnits
     }
+
     private func desiredQuantity(for part: Part, figureUnits: Int, figureTotalNeeded: Int) -> Int {
         guard figureUnits > 0 else { return 0 }
         let partTotalNeeded = part.quantityNeeded

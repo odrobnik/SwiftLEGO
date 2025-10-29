@@ -1,8 +1,8 @@
 import Foundation
 import SwiftData
 
-enum SwiftLEGOModelContainer {
-    static let shared: ModelContainer = {
+public enum SwiftLEGOModelContainer {
+    public static let shared: ModelContainer = {
         do {
             return try createContainer()
         } catch {
@@ -10,13 +10,20 @@ enum SwiftLEGOModelContainer {
         }
     }()
 
-    static let preview: ModelContainer = {
+    public static let preview: ModelContainer = {
         do {
             return try createContainer(inMemory: true, preloadSampleData: true)
         } catch {
             fatalError("Unable to set up preview container: \(error)")
         }
     }()
+
+    public static func makeContainer(
+        inMemory: Bool = false,
+        preloadSampleData: Bool = false
+    ) throws -> ModelContainer {
+        try createContainer(inMemory: inMemory, preloadSampleData: preloadSampleData)
+    }
 
     private static func createContainer(
         inMemory: Bool = false,

@@ -2,16 +2,16 @@ import Foundation
 import SwiftData
 
 @Model
-final class SetCategory: Identifiable {
-    @Attribute(.unique) var id: UUID
-    var categoryID: String?
-    var name: String
-    var sortOrder: Int
-    var set: BrickSet?
-    @Relationship(deleteRule: .nullify) var parent: SetCategory?
-    @Relationship(deleteRule: .cascade, inverse: \SetCategory.parent) var children: [SetCategory]
+public final class SetCategory: Identifiable {
+    @Attribute(.unique) public var id: UUID
+    public var categoryID: String?
+    public var name: String
+    public var sortOrder: Int
+    public var set: BrickSet?
+    @Relationship(deleteRule: .nullify) public var parent: SetCategory?
+    @Relationship(deleteRule: .cascade, inverse: \SetCategory.parent) public var children: [SetCategory]
 
-    init(
+    public init(
         id: UUID = UUID(),
         categoryID: String? = nil,
         name: String,
@@ -30,7 +30,7 @@ final class SetCategory: Identifiable {
     }
 }
 
-extension Array where Element == SetCategory {
+public extension Array where Element == SetCategory {
     func sortedByOrder() -> [SetCategory] {
         sorted { lhs, rhs in
             if lhs.sortOrder == rhs.sortOrder {
@@ -41,7 +41,7 @@ extension Array where Element == SetCategory {
     }
 }
 
-extension BrickSet {
+public extension BrickSet {
     func normalizedCategoryPath(uncategorizedTitle: String) -> [String] {
         var names = categories
             .sortedByOrder()

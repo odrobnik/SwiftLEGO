@@ -1,9 +1,9 @@
 import Foundation
 import SwiftData
 
-enum ColorImportUtilities {
+public enum ColorImportUtilities {
     @MainActor
-    static func refreshBrickLinkColors(
+    public static func refreshBrickLinkColors(
         modelContext: ModelContext,
         locale: String = "en-us",
         service: BrickLinkColorGuideService = BrickLinkColorGuideService()
@@ -13,7 +13,7 @@ enum ColorImportUtilities {
     }
 
     @MainActor
-    static func persist(
+    public static func persist(
         _ entries: [BrickLinkColorGuideEntry],
         in modelContext: ModelContext
     ) throws -> [BrickColor] {
