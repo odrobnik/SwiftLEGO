@@ -4,6 +4,7 @@ import AppKit
 #else
 import UIKit
 #endif
+import BrickCore
 
 enum ThumbnailImagePhase {
     case empty

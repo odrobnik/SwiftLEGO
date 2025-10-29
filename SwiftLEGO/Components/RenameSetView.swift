@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import BrickCore
 
 struct RenameSetView: View {
     @Environment(\.dismiss) private var dismiss

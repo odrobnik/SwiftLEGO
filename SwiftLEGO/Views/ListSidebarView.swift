@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import BrickCore
 
 struct ListSidebarView: View {
     @Environment(\.modelContext) private var modelContext

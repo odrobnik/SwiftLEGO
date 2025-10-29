@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import BrickCore
 
 struct PartDetailView: View {
     @Bindable var part: Part

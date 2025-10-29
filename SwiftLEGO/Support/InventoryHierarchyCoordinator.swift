@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import BrickCore
 
 @MainActor
 extension Part {

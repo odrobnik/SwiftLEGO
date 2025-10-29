@@ -6,6 +6,7 @@ import SwiftData
 #else
   import UIKit
 #endif
+import BrickCore
 
 #if os(macOS)
   private extension NSFont {

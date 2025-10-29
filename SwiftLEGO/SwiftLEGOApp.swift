@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import BrickCore
 
 @main
 struct SwiftLEGOApp: App {

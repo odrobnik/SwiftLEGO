@@ -6,6 +6,7 @@ import UIKit
 #elseif canImport(AppKit)
 import AppKit
 #endif
+import BrickCore
 
 struct BulkAddSetsView: View {
     @Environment(\.dismiss) private var dismiss

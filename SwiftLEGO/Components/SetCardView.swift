@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import BrickCore
 
 struct SetCardView: View {
     let brickSet: BrickSet

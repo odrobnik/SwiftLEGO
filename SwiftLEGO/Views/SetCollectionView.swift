@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import BrickCore
 
 struct SetCollectionView: View {
     @Environment(\.modelContext) private var modelContext
