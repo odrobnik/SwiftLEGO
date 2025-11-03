@@ -1,10 +1,13 @@
 import SwiftUI
 import SwiftData
+import QuickLook
 import BrickCore
 
 struct PartDetailView: View {
     @Bindable var part: Part
     @State private var showMissingOnly: Bool = false
+    @State private var partQuickLookURL: URL?
+    @State private var partQuickLookLoading: Set<URL> = []
 
     init(part: Part) {
         self._part = Bindable(part)
@@ -41,13 +44,16 @@ struct PartDetailView: View {
                         ForEach(group.parts) { subpart in
                             PartRowNavigationWrapper(
                                 part: subpart,
-                                isFilteringMissing: showMissingOnly
+                                isFilteringMissing: showMissingOnly,
+                                onQuickLookRequest: presentPartQuickLook(for:),
+                                isQuickLookInProgress: isQuickLookLoading(_:)
                             )
                         }
                     }
                 }
             }
         }
+        .quickLookPreview($partQuickLookURL)
         .listStyle(.insetGrouped)
         .navigationTitle("\(part.partID) \(part.name)")
         .toolbarTitleDisplayMode(.inline)
@@ -73,7 +79,11 @@ struct PartDetailView: View {
     private var headerSection: some View {
         Section {
             HStack(alignment: .top, spacing: 16) {
-                PartThumbnailImage(part: part)
+                PartThumbnailImage(
+                    part: part,
+                    isPreparingPreview: isQuickLookLoading(part),
+                    onPreviewRequested: { presentPartQuickLook(for: part) }
+                )
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(part.name)
@@ -99,6 +109,32 @@ struct PartDetailView: View {
         }
     }
 
+    private func presentPartQuickLook(for part: Part) {
+        guard let preferredURL = part.quickLookImageURL ?? part.imageURL else { return }
+        if partQuickLookLoading.contains(preferredURL) { return }
+        partQuickLookLoading.insert(preferredURL)
+
+        Task {
+            let fallbackURL = preferredURL == part.imageURL ? nil : part.imageURL
+            let preview = await PartQuickLookStore.shared.previewURL(
+                preferredURL: preferredURL,
+                fallbackURL: fallbackURL
+            )
+
+            await MainActor.run {
+                if let preview {
+                    partQuickLookURL = preview
+                }
+                partQuickLookLoading.remove(preferredURL)
+            }
+        }
+    }
+
+    private func isQuickLookLoading(_ part: Part) -> Bool {
+        guard let url = part.quickLookImageURL ?? part.imageURL else { return false }
+        return partQuickLookLoading.contains(url)
+    }
+
     private func normalizeColorName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Unknown Color" : trimmed
@@ -114,10 +150,31 @@ struct PartDetailView: View {
 }
 
 private struct PartThumbnailImage: View {
-    @Bindable var part: Part
+    let part: Part
+    let isPreparingPreview: Bool
+    let onPreviewRequested: (() -> Void)?
 
     var body: some View {
-        thumbnail
+        Group {
+            if let onPreviewRequested {
+                thumbnail
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(alignment: .bottomTrailing) {
+                        if isPreparingPreview {
+                            ProgressView()
+                                .controlSize(.small)
+                                .padding(6)
+                                .background(.thinMaterial, in: Capsule())
+                        }
+                    }
+                    .onLongPressGesture {
+                        onPreviewRequested()
+                    }
+                    .accessibilityAddTraits(.isButton)
+            } else {
+                thumbnail
+            }
+        }
     }
 
     @ViewBuilder

@@ -9,6 +9,8 @@ struct MinifigureDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var minifigure: Minifigure
     @State private var showMissingOnly: Bool = false
+    @State private var partQuickLookURL: URL?
+    @State private var partQuickLookLoading: Set<URL> = []
 
     init(minifigure: Minifigure) {
         self._minifigure = Bindable(minifigure)
@@ -45,13 +47,19 @@ struct MinifigureDetailView: View {
                         ForEach(group.parts) { part in
                             PartRowNavigationWrapper(
                                 part: part,
-                                isFilteringMissing: showMissingOnly
+                                isFilteringMissing: showMissingOnly,
+                                onQuickLookRequest: presentPartQuickLook(for:),
+                                isQuickLookInProgress: { part in
+                                    guard let url = part.quickLookImageURL ?? part.imageURL else { return false }
+                                    return partQuickLookLoading.contains(url)
+                                }
                             )
                         }
                     }
                 }
             }
         }
+        .quickLookPreview($partQuickLookURL)
         .listStyle(.insetGrouped)
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(minifigure.displayIdentifier()) \(minifigure.displayName(includeInstanceSuffix: false))")
@@ -93,9 +101,17 @@ struct MinifigureDetailView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                }
 
-                Spacer()
+                    Spacer(minLength: 0)
+
+                    if let owningSet = minifigure.set {
+                        Text("\(owningSet.setNumber) \(owningSet.name)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
             }
             .padding(.vertical, 8)
         }
@@ -123,12 +139,33 @@ struct MinifigureDetailView: View {
 
     private func updateQuantity(to newValue: Int) {
         let clamped = max(0, min(newValue, minifigure.quantityNeeded))
-        guard clamped != minifigure.quantityHave else { return }
+       guard clamped != minifigure.quantityHave else { return }
 
         withAnimation {
             minifigure.quantityHave = clamped
             _minifigure.wrappedValue.synchronizeParts(to: clamped)
             try? modelContext.save()
+        }
+    }
+
+    private func presentPartQuickLook(for part: Part) {
+        guard let preferredURL = part.quickLookImageURL ?? part.imageURL else { return }
+        if partQuickLookLoading.contains(preferredURL) { return }
+        partQuickLookLoading.insert(preferredURL)
+
+        Task {
+            let fallbackURL = preferredURL == part.imageURL ? nil : part.imageURL
+            let preview = await PartQuickLookStore.shared.previewURL(
+                preferredURL: preferredURL,
+                fallbackURL: fallbackURL
+            )
+
+            await MainActor.run {
+                if let preview {
+                    partQuickLookURL = preview
+                }
+                partQuickLookLoading.remove(preferredURL)
+            }
         }
     }
 }

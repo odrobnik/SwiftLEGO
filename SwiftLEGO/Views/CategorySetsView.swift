@@ -144,7 +144,7 @@ struct CategorySetsView: View {
                 }
             }
 
-            await MainActor.run {
+            _ = await MainActor.run {
                 refreshingSetIDs.remove(identifier)
             }
         }

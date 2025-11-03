@@ -486,7 +486,7 @@ struct SetCollectionView: View {
                 }
             }
 
-            await MainActor.run {
+            Task { @MainActor in
                 refreshingSetIDs.remove(identifier)
             }
         }
@@ -526,7 +526,7 @@ struct SetCollectionView: View {
                 // Intentionally ignore failures to produce a preview.
             }
 
-            await MainActor.run {
+            Task { @MainActor in
                 quickLookLoadingURLs.remove(url)
             }
         }
@@ -620,7 +620,7 @@ struct SetCollectionView: View {
                 }
 
                 let matches: Bool
-                if let dimensionPrefixQuery = dimensionPrefixQuery {
+                if let _ = dimensionPrefixQuery {
                     if normalizedQueryTokens.count <= 1 {
                         matches = true
                     } else {

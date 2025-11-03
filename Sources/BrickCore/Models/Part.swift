@@ -93,6 +93,15 @@ public extension Part {
         return URL(string: imageURLString)
     }
 
+    var highResolutionImageURL: URL? {
+        guard let imageURL else { return nil }
+        return Self.makeHighResolutionBrickLinkImageURL(from: imageURL)
+    }
+
+    var quickLookImageURL: URL? {
+        highResolutionImageURL ?? imageURL
+    }
+
     var partURL: URL? {
         guard let partURLString else { return nil }
         return URL(string: partURLString)
@@ -101,5 +110,28 @@ public extension Part {
     var inventorySection: InventorySection {
         get { InventorySection(rawValue: inventorySectionRawValue) ?? .regular }
         set { inventorySectionRawValue = newValue.rawValue }
+    }
+
+    private static func makeHighResolutionBrickLinkImageURL(from url: URL) -> URL? {
+        guard let host = url.host?.lowercased(),
+              host.contains("bricklink.com") else {
+            return nil
+        }
+
+        let lowercasedPath = url.path.lowercased()
+        if lowercasedPath.hasPrefix("/pl/") {
+            return url
+        }
+
+        let filename = (url.path as NSString).lastPathComponent
+        guard !filename.isEmpty else { return nil }
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "www.bricklink.com"
+        components.path = "/PL/\(filename)"
+        components.query = "0"
+
+        return components.url
     }
 }

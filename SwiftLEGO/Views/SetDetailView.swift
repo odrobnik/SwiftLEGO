@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import QuickLook
 #if canImport(BrickCore)
 import BrickCore
 #endif
@@ -36,6 +37,8 @@ struct SetDetailView: View {
     @State private var isRefreshingInventory: Bool = false
     @State private var refreshAlert: RefreshAlert?
     @State private var minifigureGroupExpansion: [String: Bool] = [:]
+    @State private var partQuickLookURL: URL?
+    @State private var partQuickLookLoading: Set<URL> = []
 
     init(
         brickSet: BrickSet,
@@ -150,7 +153,12 @@ struct SetDetailView: View {
                                 ForEach(group.parts) { part in
                                     PartRowNavigationWrapper(
                                         part: part,
-                                        isFilteringMissing: showMissingOnly
+                                        isFilteringMissing: showMissingOnly,
+                                        onQuickLookRequest: presentPartQuickLook(for:),
+                                        isQuickLookInProgress: { part in
+                                            guard let url = part.quickLookImageURL ?? part.imageURL else { return false }
+                                            return partQuickLookLoading.contains(url)
+                                        }
                                     )
                                 }
                             }
@@ -185,6 +193,7 @@ struct SetDetailView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .quickLookPreview($partQuickLookURL)
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
         .toolbar {
@@ -308,6 +317,27 @@ struct SetDetailView: View {
     private func normalizeColorName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Unknown Color" : trimmed
+    }
+
+    private func presentPartQuickLook(for part: Part) {
+        guard let preferredURL = part.quickLookImageURL ?? part.imageURL else { return }
+        if partQuickLookLoading.contains(preferredURL) { return }
+        partQuickLookLoading.insert(preferredURL)
+
+        Task {
+            let fallbackURL = preferredURL == part.imageURL ? nil : part.imageURL
+            let preview = await PartQuickLookStore.shared.previewURL(
+                preferredURL: preferredURL,
+                fallbackURL: fallbackURL
+            )
+
+            await MainActor.run {
+                if let preview {
+                    partQuickLookURL = preview
+                }
+                partQuickLookLoading.remove(preferredURL)
+            }
+        }
     }
 
     private func colorPartSortComparator(_ lhs: Part, _ rhs: Part) -> Bool {
@@ -1000,16 +1030,53 @@ struct PartRowView: View {
 struct PartRowNavigationWrapper: View {
     @Bindable var part: Part
     let isFilteringMissing: Bool
+    let onQuickLookRequest: ((Part) -> Void)?
+    let isQuickLookInProgress: ((Part) -> Bool)?
+
+    init(
+        part: Part,
+        isFilteringMissing: Bool,
+        onQuickLookRequest: ((Part) -> Void)? = nil,
+        isQuickLookInProgress: ((Part) -> Bool)? = nil
+    ) {
+        self._part = Bindable(part)
+        self.isFilteringMissing = isFilteringMissing
+        self.onQuickLookRequest = onQuickLookRequest
+        self.isQuickLookInProgress = isQuickLookInProgress
+    }
 
     var body: some View {
         if part.subparts.isEmpty {
-            PartRowView(part: part, isFilteringMissing: isFilteringMissing)
+            rowContent
         } else {
             NavigationLink {
                 PartDetailView(part: part)
             } label: {
-                PartRowView(part: part, isFilteringMissing: isFilteringMissing)
+                rowContent
             }
+        }
+    }
+
+    @ViewBuilder
+    private var rowContent: some View {
+        if let onQuickLookRequest {
+            PartRowView(part: part, isFilteringMissing: isFilteringMissing)
+                .contentShape(Rectangle())
+                .overlay(alignment: .trailing) {
+                    if let isQuickLookInProgress,
+                       isQuickLookInProgress(part) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(6)
+                            .background(.thinMaterial, in: Capsule())
+                    }
+                }
+                .onLongPressGesture {
+                    onQuickLookRequest(part)
+                }
+                .accessibilityAddTraits(.isButton)
+        } else {
+            PartRowView(part: part, isFilteringMissing: isFilteringMissing)
         }
     }
 }
