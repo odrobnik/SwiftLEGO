@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import QuickLook
 #if canImport(BrickCore)
 import BrickCore
 #endif
@@ -134,9 +135,13 @@ struct MinifigureDetailView: View {
 
 private struct MinifigureThumbnail: View {
     let minifigure: Minifigure
+    @State private var quickLookURL: URL?
+    @State private var cachedPreviewURL: URL?
+    @State private var isPreparingPreview = false
 
     var body: some View {
         thumbnail
+            .quickLookPreview($quickLookURL)
     }
 
     @ViewBuilder
@@ -148,10 +153,7 @@ private struct MinifigureThumbnail: View {
                     ProgressView()
                         .frame(width: 96, height: 96)
                 case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 120, maxHeight: 120)
+                    previewableImage(image, sourceURL: url)
                 case .failure(let state):
                     ZStack {
                         placeholder
@@ -182,6 +184,73 @@ private struct MinifigureThumbnail: View {
                 Image(systemName: "person.fill")
                     .foregroundStyle(.secondary)
             }
+    }
+
+    @ViewBuilder
+    private func previewableImage(_ image: Image, sourceURL: URL) -> some View {
+        image
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: 200, maxHeight: 150)
+            .contentShape(Rectangle())
+            .onLongPressGesture {
+                openQuickLook(for: sourceURL)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if isPreparingPreview {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(6)
+                        .background(.thinMaterial, in: Capsule())
+                }
+            }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("Preview minifigure image")
+    }
+
+    @MainActor
+    private func openQuickLook(for url: URL) {
+        if let cachedPreviewURL {
+            quickLookURL = cachedPreviewURL
+            return
+        }
+
+        guard !isPreparingPreview else { return }
+        isPreparingPreview = true
+
+        Task {
+            do {
+                let data = try await ThumbnailCacheManager.shared.data(for: url)
+                try Task.checkCancellation()
+                let previewURL = makeTemporaryPreviewURL(for: url)
+                try data.write(to: previewURL, options: .atomic)
+                await MainActor.run {
+                    cachedPreviewURL = previewURL
+                    quickLookURL = previewURL
+                }
+            } catch is CancellationError {
+                // Ignore cancellation.
+            } catch {
+                // Intentionally ignore failures to produce a preview.
+            }
+
+            await MainActor.run {
+                isPreparingPreview = false
+            }
+        }
+    }
+
+    private func makeTemporaryPreviewURL(for sourceURL: URL) -> URL {
+        let base = FileManager.default.temporaryDirectory
+        let filename = "minifigure-preview-\(UUID().uuidString)"
+        let pathExtension = sourceURL.pathExtension
+        if pathExtension.isEmpty {
+            return base.appendingPathComponent(filename, isDirectory: false)
+        } else {
+            return base
+                .appendingPathComponent(filename, isDirectory: false)
+                .appendingPathExtension(pathExtension)
+        }
     }
 }
 
