@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import QuickLook
 #if canImport(BrickCore)
 import BrickCore
 #endif
@@ -11,8 +10,6 @@ struct PartSearchResultRow: View {
     @Bindable var displayPart: Part
     let matchingParts: [Part]
     let contextDescription: String?
-    @State private var quickLookURL: URL?
-    @State private var isPreparingQuickLook = false
 
     private var directMatch: Part? {
         matchingParts.first { $0.persistentModelID == displayPart.persistentModelID }
@@ -66,11 +63,7 @@ struct PartSearchResultRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 16) {
-                PartThumbnail(
-                    part: thumbnailSource,
-                    isPreparingPreview: isPreparingQuickLook,
-                    onPreviewRequested: presentQuickLookPreview
-                )
+                PartThumbnail(part: thumbnailSource)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(displayPart.name)
@@ -136,7 +129,6 @@ struct PartSearchResultRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .quickLookPreview($quickLookURL)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             if let directMatch, subpartMatches.isEmpty {
                 Button {
@@ -146,27 +138,6 @@ struct PartSearchResultRow: View {
                 }
                 .tint(.green)
                 .disabled(directMatch.quantityHave >= directMatch.quantityNeeded)
-            }
-        }
-    }
-
-    private func presentQuickLookPreview() {
-        guard let preferredURL = thumbnailSource.quickLookImageURL ?? thumbnailSource.imageURL else { return }
-        guard !isPreparingQuickLook else { return }
-        isPreparingQuickLook = true
-
-        Task {
-            let fallbackURL = preferredURL == thumbnailSource.imageURL ? nil : thumbnailSource.imageURL
-            let preview = await PartQuickLookStore.shared.previewURL(
-                preferredURL: preferredURL,
-                fallbackURL: fallbackURL
-            )
-
-            await MainActor.run {
-                if let preview {
-                    quickLookURL = preview
-                }
-                isPreparingQuickLook = false
             }
         }
     }
@@ -210,75 +181,50 @@ struct PartSearchResultRow: View {
 
 private struct PartThumbnail: View {
     let part: Part
-    let isPreparingPreview: Bool
-    let onPreviewRequested: (() -> Void)?
 
     var body: some View {
-        Group {
-            if let onPreviewRequested {
-                thumbnail
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(alignment: .bottomTrailing) {
-                        if isPreparingPreview {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(4)
-                                .background(.thinMaterial, in: Capsule())
+        QuickLookThumbnail(item: part) {
+            if let url = part.imageURL {
+                ThumbnailImage(url: url) { phase in
+                    switch phase {
+                    case .empty, .loading:
+                        ProgressView()
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                    case .failure(let state):
+                        if shouldShowRetry(for: state.error) {
+                            ZStack {
+                                placeholder
+                                VStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.red)
+                                    Button("Retry") {
+                                        state.retry()
+                                    }
+                                    .font(.caption)
+                                }
+                                .padding(8)
+                            }
+                        } else {
+                            placeholder
                         }
                     }
-                    .onLongPressGesture {
-                        onPreviewRequested()
-                    }
-                    .accessibilityAddTraits(.isButton)
+                }
+                .background(.white)
             } else {
-                thumbnail
+                placeholder
             }
         }
         .frame(width: 80, height: 60)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let url = part.imageURL {
-            ThumbnailImage(url: url) { phase in
-                switch phase {
-                case .empty, .loading:
-                    ProgressView()
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                case .failure(let state):
-                    if shouldShowRetry(for: state.error) {
-                        ZStack {
-                            placeholder
-                            VStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.red)
-                                Button("Retry") {
-                                    state.retry()
-                                }
-                                .font(.caption)
-                            }
-                            .padding(8)
-                        }
-                    } else {
-                        placeholder
-                    }
-                }
-            }
-            .background(.white)
-        } else {
-            placeholder
-        }
-    }
-
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color(uiColor: .tertiarySystemFill))
-            .frame(width: 80, height: 60)
             .overlay {
                 Image(systemName: "cube.transparent")
                     .foregroundStyle(.secondary)

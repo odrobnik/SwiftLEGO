@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import QuickLook
 #if canImport(BrickCore)
 import BrickCore
 #endif
@@ -9,8 +8,6 @@ struct MinifigureDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var minifigure: Minifigure
     @State private var showMissingOnly: Bool = false
-    @State private var partQuickLookURL: URL?
-    @State private var partQuickLookLoading: Set<URL> = []
 
     init(minifigure: Minifigure) {
         self._minifigure = Bindable(minifigure)
@@ -47,19 +44,14 @@ struct MinifigureDetailView: View {
                         ForEach(group.parts) { part in
                             PartRowNavigationWrapper(
                                 part: part,
-                                isFilteringMissing: showMissingOnly,
-                                onQuickLookRequest: presentPartQuickLook(for:),
-                                isQuickLookInProgress: { part in
-                                    guard let url = part.quickLookImageURL ?? part.imageURL else { return false }
-                                    return partQuickLookLoading.contains(url)
-                                }
+                                isFilteringMissing: showMissingOnly
                             )
                         }
                     }
                 }
             }
         }
-        .quickLookPreview($partQuickLookURL)
+        .quickLookPresenter()
         .listStyle(.insetGrouped)
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(minifigure.displayIdentifier()) \(minifigure.displayName(includeInstanceSuffix: false))")
@@ -139,7 +131,7 @@ struct MinifigureDetailView: View {
 
     private func updateQuantity(to newValue: Int) {
         let clamped = max(0, min(newValue, minifigure.quantityNeeded))
-       guard clamped != minifigure.quantityHave else { return }
+        guard clamped != minifigure.quantityHave else { return }
 
         withAnimation {
             minifigure.quantityHave = clamped
@@ -147,147 +139,55 @@ struct MinifigureDetailView: View {
             try? modelContext.save()
         }
     }
-
-    private func presentPartQuickLook(for part: Part) {
-        guard let preferredURL = part.quickLookImageURL ?? part.imageURL else { return }
-        if partQuickLookLoading.contains(preferredURL) { return }
-        partQuickLookLoading.insert(preferredURL)
-
-        Task {
-            let fallbackURL = preferredURL == part.imageURL ? nil : part.imageURL
-            let preview = await PartQuickLookStore.shared.previewURL(
-                preferredURL: preferredURL,
-                fallbackURL: fallbackURL
-            )
-
-            await MainActor.run {
-                if let preview {
-                    partQuickLookURL = preview
-                }
-                partQuickLookLoading.remove(preferredURL)
-            }
-        }
-    }
 }
 
 private struct MinifigureThumbnail: View {
     let minifigure: Minifigure
-    @State private var quickLookURL: URL?
-    @State private var cachedPreviewURL: URL?
-    @State private var isPreparingPreview = false
 
     var body: some View {
-        thumbnail
-            .quickLookPreview($quickLookURL)
-    }
-
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let url = minifigure.imageURL {
-            ThumbnailImage(url: url) { phase in
-                switch phase {
-                case .empty, .loading:
-                    ProgressView()
-                        .frame(width: 96, height: 96)
-                case .success(let image):
-                    previewableImage(image, sourceURL: url)
-                case .failure(let state):
-                    ZStack {
-                        placeholder
-                        VStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.title3.weight(.bold))
-                                .foregroundStyle(.red)
-                            Button("Retry") {
-                                state.retry()
+        QuickLookThumbnail(item: minifigure) {
+            if let url = minifigure.imageURL {
+                ThumbnailImage(url: url) { phase in
+                    switch phase {
+                    case .empty, .loading:
+                        ProgressView()
+                            .frame(width: 96, height: 96)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 120, maxHeight: 120)
+                    case .failure(let state):
+                        ZStack {
+                            placeholder
+                            VStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.title3.weight(.bold))
+                                    .foregroundStyle(.red)
+                                Button("Retry") {
+                                    state.retry()
+                                }
+                                .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.bordered)
+                            .padding(12)
                         }
-                        .padding(12)
                     }
                 }
+                .background(.white)
+            } else {
+                placeholder
             }
-            .background(.white)
-        } else {
-            placeholder
         }
+        .frame(width: 120, height: 120)
     }
 
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color(uiColor: .tertiarySystemFill))
-            .frame(width: 120, height: 120)
             .overlay {
                 Image(systemName: "person.fill")
                     .foregroundStyle(.secondary)
             }
-    }
-
-    @ViewBuilder
-    private func previewableImage(_ image: Image, sourceURL: URL) -> some View {
-        image
-            .resizable()
-            .scaledToFit()
-            .frame(maxWidth: 200, maxHeight: 150)
-            .contentShape(Rectangle())
-            .onLongPressGesture {
-                openQuickLook(for: sourceURL)
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if isPreparingPreview {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(6)
-                        .background(.thinMaterial, in: Capsule())
-                }
-            }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityLabel("Preview minifigure image")
-    }
-
-    @MainActor
-    private func openQuickLook(for url: URL) {
-        if let cachedPreviewURL {
-            quickLookURL = cachedPreviewURL
-            return
-        }
-
-        guard !isPreparingPreview else { return }
-        isPreparingPreview = true
-
-        Task {
-            do {
-                let data = try await ThumbnailCacheManager.shared.data(for: url)
-                try Task.checkCancellation()
-                let previewURL = makeTemporaryPreviewURL(for: url)
-                try data.write(to: previewURL, options: .atomic)
-                await MainActor.run {
-                    cachedPreviewURL = previewURL
-                    quickLookURL = previewURL
-                }
-            } catch is CancellationError {
-                // Ignore cancellation.
-            } catch {
-                // Intentionally ignore failures to produce a preview.
-            }
-
-            await MainActor.run {
-                isPreparingPreview = false
-            }
-        }
-    }
-
-    private func makeTemporaryPreviewURL(for sourceURL: URL) -> URL {
-        let base = FileManager.default.temporaryDirectory
-        let filename = "minifigure-preview-\(UUID().uuidString)"
-        let pathExtension = sourceURL.pathExtension
-        if pathExtension.isEmpty {
-            return base.appendingPathComponent(filename, isDirectory: false)
-        } else {
-            return base
-                .appendingPathComponent(filename, isDirectory: false)
-                .appendingPathExtension(pathExtension)
-        }
     }
 }
 

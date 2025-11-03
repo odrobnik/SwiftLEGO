@@ -1,13 +1,10 @@
 import SwiftUI
 import SwiftData
-import QuickLook
 import BrickCore
 
 struct PartDetailView: View {
     @Bindable var part: Part
     @State private var showMissingOnly: Bool = false
-    @State private var partQuickLookURL: URL?
-    @State private var partQuickLookLoading: Set<URL> = []
 
     init(part: Part) {
         self._part = Bindable(part)
@@ -44,16 +41,14 @@ struct PartDetailView: View {
                         ForEach(group.parts) { subpart in
                             PartRowNavigationWrapper(
                                 part: subpart,
-                                isFilteringMissing: showMissingOnly,
-                                onQuickLookRequest: presentPartQuickLook(for:),
-                                isQuickLookInProgress: isQuickLookLoading(_:)
+                                isFilteringMissing: showMissingOnly
                             )
                         }
                     }
                 }
             }
         }
-        .quickLookPreview($partQuickLookURL)
+        .quickLookPresenter()
         .listStyle(.insetGrouped)
         .navigationTitle("\(part.partID) \(part.name)")
         .toolbarTitleDisplayMode(.inline)
@@ -79,11 +74,7 @@ struct PartDetailView: View {
     private var headerSection: some View {
         Section {
             HStack(alignment: .top, spacing: 16) {
-                PartThumbnailImage(
-                    part: part,
-                    isPreparingPreview: isQuickLookLoading(part),
-                    onPreviewRequested: { presentPartQuickLook(for: part) }
-                )
+                PartThumbnailImage(part: part)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(part.name)
@@ -109,32 +100,6 @@ struct PartDetailView: View {
         }
     }
 
-    private func presentPartQuickLook(for part: Part) {
-        guard let preferredURL = part.quickLookImageURL ?? part.imageURL else { return }
-        if partQuickLookLoading.contains(preferredURL) { return }
-        partQuickLookLoading.insert(preferredURL)
-
-        Task {
-            let fallbackURL = preferredURL == part.imageURL ? nil : part.imageURL
-            let preview = await PartQuickLookStore.shared.previewURL(
-                preferredURL: preferredURL,
-                fallbackURL: fallbackURL
-            )
-
-            await MainActor.run {
-                if let preview {
-                    partQuickLookURL = preview
-                }
-                partQuickLookLoading.remove(preferredURL)
-            }
-        }
-    }
-
-    private func isQuickLookLoading(_ part: Part) -> Bool {
-        guard let url = part.quickLookImageURL ?? part.imageURL else { return false }
-        return partQuickLookLoading.contains(url)
-    }
-
     private func normalizeColorName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Unknown Color" : trimmed
@@ -151,67 +116,43 @@ struct PartDetailView: View {
 
 private struct PartThumbnailImage: View {
     let part: Part
-    let isPreparingPreview: Bool
-    let onPreviewRequested: (() -> Void)?
 
     var body: some View {
-        Group {
-            if let onPreviewRequested {
-                thumbnail
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(alignment: .bottomTrailing) {
-                        if isPreparingPreview {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(6)
-                                .background(.thinMaterial, in: Capsule())
-                        }
-                    }
-                    .onLongPressGesture {
-                        onPreviewRequested()
-                    }
-                    .accessibilityAddTraits(.isButton)
-            } else {
-                thumbnail
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let url = part.imageURL {
-            ThumbnailImage(url: url) { phase in
-                switch phase {
-                case .empty, .loading:
-                    ProgressView()
-                        .frame(width: 96, height: 96)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 96, height: 96)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                case .failure(let state):
-                    ZStack {
-                        placeholder
-                        VStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.title3.weight(.bold))
-                                .foregroundStyle(.red)
-                            Button("Retry") {
-                                state.retry()
+        QuickLookThumbnail(item: part, gesture: .tap) {
+            if let url = part.imageURL {
+                ThumbnailImage(url: url) { phase in
+                    switch phase {
+                    case .empty, .loading:
+                        ProgressView()
+                            .frame(width: 96, height: 96)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 96, height: 96)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    case .failure(let state):
+                        ZStack {
+                            placeholder
+                            VStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.title3.weight(.bold))
+                                    .foregroundStyle(.red)
+                                Button("Retry") {
+                                    state.retry()
+                                }
+                                .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.bordered)
+                            .padding(12)
                         }
-                        .padding(12)
                     }
                 }
+                .background(.white)
+            } else {
+                placeholder
             }
-            .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        } else {
-            placeholder
         }
+        .frame(width: 96, height: 96)
     }
 
     private var placeholder: some View {

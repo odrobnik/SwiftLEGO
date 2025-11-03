@@ -10,7 +10,6 @@ struct SetCardView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color(.white))
-                   
 
                 if let url = brickSet.thumbnailURL {
                     ThumbnailImage(url: url) { phase in

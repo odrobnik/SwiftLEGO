@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import QuickLook
 #if canImport(BrickCore)
 import BrickCore
 #endif
@@ -37,8 +36,6 @@ struct SetDetailView: View {
     @State private var isRefreshingInventory: Bool = false
     @State private var refreshAlert: RefreshAlert?
     @State private var minifigureGroupExpansion: [String: Bool] = [:]
-    @State private var partQuickLookURL: URL?
-    @State private var partQuickLookLoading: Set<URL> = []
 
     init(
         brickSet: BrickSet,
@@ -153,12 +150,7 @@ struct SetDetailView: View {
                                 ForEach(group.parts) { part in
                                     PartRowNavigationWrapper(
                                         part: part,
-                                        isFilteringMissing: showMissingOnly,
-                                        onQuickLookRequest: presentPartQuickLook(for:),
-                                        isQuickLookInProgress: { part in
-                                            guard let url = part.quickLookImageURL ?? part.imageURL else { return false }
-                                            return partQuickLookLoading.contains(url)
-                                        }
+                                        isFilteringMissing: showMissingOnly
                                     )
                                 }
                             }
@@ -193,7 +185,7 @@ struct SetDetailView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
-        .quickLookPreview($partQuickLookURL)
+        .quickLookPresenter()
         .toolbarTitleDisplayMode(.inline)
         .navigationTitle("\(brickSet.setNumber) \(brickSet.name)")
         .toolbar {
@@ -317,27 +309,6 @@ struct SetDetailView: View {
     private func normalizeColorName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Unknown Color" : trimmed
-    }
-
-    private func presentPartQuickLook(for part: Part) {
-        guard let preferredURL = part.quickLookImageURL ?? part.imageURL else { return }
-        if partQuickLookLoading.contains(preferredURL) { return }
-        partQuickLookLoading.insert(preferredURL)
-
-        Task {
-            let fallbackURL = preferredURL == part.imageURL ? nil : part.imageURL
-            let preview = await PartQuickLookStore.shared.previewURL(
-                preferredURL: preferredURL,
-                fallbackURL: fallbackURL
-            )
-
-            await MainActor.run {
-                if let preview {
-                    partQuickLookURL = preview
-                }
-                partQuickLookLoading.remove(preferredURL)
-            }
-        }
     }
 
     private func colorPartSortComparator(_ lhs: Part, _ rhs: Part) -> Bool {
@@ -588,38 +559,36 @@ private struct HeaderThumbnail: View {
     let brickSet: BrickSet
 
     var body: some View {
-        thumbnail
-    }
-
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let url = brickSet.thumbnailURL {
-            ThumbnailImage(url: url) { phase in
-                switch phase {
-                case .empty, .loading:
-                    ProgressView()
-                        .frame(width: 44, height: 44)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 96, height: 96)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                case .failure(let state):
-                    VStack(spacing: 8) {
-                        placeholder
-                        Button("Retry") {
-                            state.retry()
+        QuickLookThumbnail(item: brickSet, gesture: .tap) {
+            if let url = brickSet.thumbnailURL {
+                ThumbnailImage(url: url) { phase in
+                    switch phase {
+                    case .empty, .loading:
+                        ProgressView()
+                            .frame(width: 96, height: 96)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 96, height: 96)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    case .failure(let state):
+                        VStack(spacing: 8) {
+                            placeholder
+                            Button("Retry") {
+                                state.retry()
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
+                .background(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            } else {
+                placeholder
             }
-            .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        } else {
-            placeholder
         }
+        .frame(width: 96, height: 96)
     }
 
     private var placeholder: some View {
@@ -970,31 +939,33 @@ struct PartRowView: View {
 
     @ViewBuilder
     private var thumbnail: some View {
-        if let url = part.imageURL {
-            ThumbnailImage(url: url) { phase in
-                switch phase {
-                case .empty, .loading:
-                    ProgressView()
-                        .frame(width: 80, height: 60)
-                case .success(let image):
-                    image
-//                        .resizable()
-//                        .scaledToFit()
-                        .frame(width: 80, height: 60)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                case .failure(let state):
-                    VStack(spacing: 6) {
-                        placeholder
-                        Button("Retry") {
-                            state.retry()
+        QuickLookThumbnail(item: part) {
+            if let url = part.imageURL {
+                ThumbnailImage(url: url) { phase in
+                    switch phase {
+                    case .empty, .loading:
+                        ProgressView()
+                            .frame(width: 80, height: 60)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 80, height: 60)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    case .failure(let state):
+                        VStack(spacing: 6) {
+                            placeholder
+                            Button("Retry") {
+                                state.retry()
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
+                .background(.white)
+            } else {
+                placeholder
             }
-            .background(.white)
-        } else {
-            placeholder
         }
     }
 
@@ -1030,53 +1001,16 @@ struct PartRowView: View {
 struct PartRowNavigationWrapper: View {
     @Bindable var part: Part
     let isFilteringMissing: Bool
-    let onQuickLookRequest: ((Part) -> Void)?
-    let isQuickLookInProgress: ((Part) -> Bool)?
-
-    init(
-        part: Part,
-        isFilteringMissing: Bool,
-        onQuickLookRequest: ((Part) -> Void)? = nil,
-        isQuickLookInProgress: ((Part) -> Bool)? = nil
-    ) {
-        self._part = Bindable(part)
-        self.isFilteringMissing = isFilteringMissing
-        self.onQuickLookRequest = onQuickLookRequest
-        self.isQuickLookInProgress = isQuickLookInProgress
-    }
 
     var body: some View {
         if part.subparts.isEmpty {
-            rowContent
+            PartRowView(part: part, isFilteringMissing: isFilteringMissing)
         } else {
             NavigationLink {
                 PartDetailView(part: part)
             } label: {
-                rowContent
+                PartRowView(part: part, isFilteringMissing: isFilteringMissing)
             }
-        }
-    }
-
-    @ViewBuilder
-    private var rowContent: some View {
-        if let onQuickLookRequest {
-            PartRowView(part: part, isFilteringMissing: isFilteringMissing)
-                .contentShape(Rectangle())
-                .overlay(alignment: .trailing) {
-                    if let isQuickLookInProgress,
-                       isQuickLookInProgress(part) {
-                        ProgressView()
-                            .controlSize(.small)
-                            .padding(6)
-                            .background(.thinMaterial, in: Capsule())
-                    }
-                }
-                .onLongPressGesture {
-                    onQuickLookRequest(part)
-                }
-                .accessibilityAddTraits(.isButton)
-        } else {
-            PartRowView(part: part, isFilteringMissing: isFilteringMissing)
         }
     }
 }

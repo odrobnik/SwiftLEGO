@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import QuickLook
 import BrickCore
 
 struct SetCollectionView: View {
@@ -18,9 +17,6 @@ struct SetCollectionView: View {
     @State private var minifigureSearchResults: [MinifigureSearchEntry] = []
     @State private var refreshingSetIDs: Set<PersistentIdentifier> = []
     @State private var refreshError: RefreshError?
-    @State private var quickLookURL: URL?
-    @State private var quickLookCachedPreviews: [URL: URL] = [:]
-    @State private var quickLookLoadingURLs: Set<URL> = []
 
     init(list: CollectionList) {
         self._list = Bindable(list)
@@ -160,7 +156,7 @@ struct SetCollectionView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
-        .quickLookPreview($quickLookURL)
+        .quickLookPresenter()
     }
 
     private var gridView: some View {
@@ -194,11 +190,8 @@ struct SetCollectionView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .contextMenu {
-                                        if let thumbnailURL = set.thumbnailURL {
-                                            Button("View Set", systemImage: "eye") {
-                                                presentQuickLook(for: thumbnailURL)
-                                            }
-                                            .disabled(quickLookLoadingURLs.contains(thumbnailURL))
+                                        QuickLookMenuButton(item: set) {
+                                            Label("View Set", systemImage: "eye")
                                         }
                                         Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
                                             refreshInventory(for: set)
@@ -292,11 +285,8 @@ struct SetCollectionView: View {
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                if let thumbnailURL = set.thumbnailURL {
-                                    Button("View Set", systemImage: "eye") {
-                                        presentQuickLook(for: thumbnailURL)
-                                    }
-                                    .disabled(quickLookLoadingURLs.contains(thumbnailURL))
+                                QuickLookMenuButton(item: set) {
+                                    Label("View Set", systemImage: "eye")
                                 }
                                 Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
                                     refreshInventory(for: set)
@@ -498,52 +488,6 @@ struct SetCollectionView: View {
         }
 
         return error.localizedDescription
-    }
-
-    @MainActor
-    private func presentQuickLook(for url: URL) {
-        if let cachedPreview = quickLookCachedPreviews[url] {
-            quickLookURL = cachedPreview
-            return
-        }
-
-        guard !quickLookLoadingURLs.contains(url) else { return }
-        quickLookLoadingURLs.insert(url)
-
-        Task {
-            do {
-                let data = try await ThumbnailCacheManager.shared.data(for: url)
-                try Task.checkCancellation()
-                let previewURL = makeTemporaryPreviewURL(for: url)
-                try data.write(to: previewURL, options: .atomic)
-                await MainActor.run {
-                    quickLookCachedPreviews[url] = previewURL
-                    quickLookURL = previewURL
-                }
-            } catch is CancellationError {
-                // Ignore cancellation.
-            } catch {
-                // Intentionally ignore failures to produce a preview.
-            }
-
-            Task { @MainActor in
-                quickLookLoadingURLs.remove(url)
-            }
-        }
-    }
-
-    private func makeTemporaryPreviewURL(for sourceURL: URL) -> URL {
-        let base = FileManager.default.temporaryDirectory
-        let filename = "set-preview-\(UUID().uuidString)"
-        let pathExtension = sourceURL.pathExtension
-
-        if pathExtension.isEmpty {
-            return base.appendingPathComponent(filename, isDirectory: false)
-        } else {
-            return base
-                .appendingPathComponent(filename, isDirectory: false)
-                .appendingPathExtension(pathExtension)
-        }
     }
 
     private func delete(_ set: BrickSet) {
