@@ -85,12 +85,35 @@ public enum SetImportUtilities {
         let totalNeeded = payload.quantityNeeded * multiplier
         let owningSet = parentPart == nil ? set : nil
         let owningMinifigure = parentPart == nil ? minifigure : nil
+        let trimmedColorID = payload.colorID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedColorName = payload.colorName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPartName = payload.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parentColorID = parentPart.map { $0.colorID.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        let parentColorName = parentPart.map { $0.colorName.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+
+        let resolvedColorID: String
+        if trimmedColorID.isEmpty, !parentColorID.isEmpty {
+            resolvedColorID = parentColorID
+        } else {
+            resolvedColorID = trimmedColorID
+        }
+
+        let normalizedColorName = trimmedColorName.lowercased()
+        let normalizedPartName = trimmedPartName.lowercased()
+        let colorLooksMissing = trimmedColorName.isEmpty || normalizedColorName == normalizedPartName
+
+        let resolvedColorName: String
+        if colorLooksMissing, !parentColorName.isEmpty {
+            resolvedColorName = parentColorName
+        } else {
+            resolvedColorName = trimmedColorName
+        }
 
         let part = Part(
             partID: payload.partID,
             name: payload.name,
-            colorID: payload.colorID,
-            colorName: payload.colorName,
+            colorID: resolvedColorID,
+            colorName: resolvedColorName,
             quantityNeeded: totalNeeded,
             quantityHave: 0,
             imageURLString: payload.imageURL?.absoluteString,
