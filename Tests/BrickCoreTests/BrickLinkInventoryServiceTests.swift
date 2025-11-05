@@ -77,12 +77,17 @@ struct BrickLinkInventoryServiceTests {
 		#expect(accessories.quantity == 1)
 		#expect(accessories.inventoryURL != nil)
 		#expect(!accessories.subparts.isEmpty)
+		let accessoriesFullImage = try #require(accessories.fullImageURL)
+		#expect(accessoriesFullImage.absoluteString.contains("/ItemImage/PN/"))
 		let placeholderSubpart = try #require(
 			accessories.subparts.first { $0.imageURL?.absoluteString.contains("no_image") == true },
 			"Expected to find a subpart with a placeholder thumbnail."
 		)
 		let subpartFullImage = try #require(placeholderSubpart.fullImageURL, "Placeholder subparts should include a full-size image link.")
-		#expect(subpartFullImage.absoluteString.contains("/PL/"))
+		#expect(
+			subpartFullImage.absoluteString.contains("/ItemImage/PN/") ||
+			subpartFullImage.absoluteString.contains("/PL/")
+		)
 		#expect(accessories.subparts.first { $0.partID == "93082g" }?.quantity == 3)
 		#expect(accessories.subparts.first { $0.partID == "93082i" }?.quantity == 3)
 

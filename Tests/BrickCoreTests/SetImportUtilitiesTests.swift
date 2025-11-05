@@ -99,12 +99,17 @@ struct SetImportUtilitiesTests {
 			savedAccessories.subparts.first { $0.imageURL?.absoluteString.contains("no_image") == true },
 			"Expected placeholder subparts to carry BrickLink placeholder thumbnails."
 		)
-		#expect(placeholderSubpart.thumbnailImageURL == nil)
+		let synthesizedThumbnail = try #require(placeholderSubpart.thumbnailImageURL)
+		#expect(synthesizedThumbnail.absoluteString.contains("/ItemImage/PT/"))
 		let quickLookURL = try #require(placeholderSubpart.highResolutionImageURL, "Placeholder subparts should still produce a Quick Look URL.")
-		#expect(quickLookURL.absoluteString.contains("/PL/"))
+		#expect(
+			quickLookURL.absoluteString.contains("/ItemImage/PN/") ||
+			quickLookURL.absoluteString.contains("/PL/")
+		)
 
         for subpart in savedAccessories.subparts {
             let resolvedColorName = subpart.colorName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            #expect(subpart.colorID == savedAccessories.colorID)
             #expect(!resolvedColorName.isEmpty, "Subpart \(subpart.partID) should have a color after persistence.")
             #expect(
                 resolvedColorName == expectedColorName,

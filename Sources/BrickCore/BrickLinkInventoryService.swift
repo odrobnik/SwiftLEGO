@@ -339,12 +339,29 @@ public final class BrickLinkInventoryService {
 			colorName = normalizedDescription
 		}
 
-		let colorID = partURL.flatMap { url in
+		var colorID = partURL.flatMap { url in
 			URLComponents(url: url, resolvingAgainstBaseURL: false)?
 				.queryItems?
 				.first(where: { $0.name.lowercased() == "idcolor" })?
 				.value
 		} ?? ""
+		colorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
+		if colorID == "0" {
+			colorID = ""
+		}
+
+		let colorSpecificThumbnail = makeColorSpecificThumbnailURL(partID: partID, colorID: colorID)
+		let colorSpecificFull = makeColorSpecificImageURL(partID: partID, colorID: colorID)
+
+		let resolvedThumbnail: URL?
+		if let existing = imageURLs.thumbnail,
+		   !existing.path.lowercased().contains("no_image") {
+			resolvedThumbnail = existing
+		} else {
+			resolvedThumbnail = colorSpecificThumbnail ?? imageURLs.thumbnail
+		}
+
+		let preferredFullImage = colorSpecificFull ?? imageURLs.fullsize
 
 		return BrickLinkPart(
 			partID: partID,
@@ -352,8 +369,8 @@ public final class BrickLinkInventoryService {
 			name: partName.isEmpty ? normalizedDescription : partName,
 			colorName: colorName,
 			colorID: colorID,
-			imageURL: imageURLs.thumbnail,
-			fullImageURL: imageURLs.fullsize,
+			imageURL: resolvedThumbnail,
+			fullImageURL: preferredFullImage,
 			quantity: quantity,
 			section: section,
 			inventoryURL: inventoryURL
@@ -442,6 +459,32 @@ public final class BrickLinkInventoryService {
 			return url
 		}
 		return URL(string: "https://www.bricklink.com\(input)")
+	}
+
+	private func makeColorSpecificImageURL(partID: String, colorID: String) -> URL? {
+		let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
+		let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
+		let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
+		guard !trimmedPartID.isEmpty, !sanitizedColorID.isEmpty else { return nil }
+
+		var components = URLComponents()
+		components.scheme = "https"
+		components.host = "img.bricklink.com"
+		components.path = "/ItemImage/PN/\(sanitizedColorID)/\(trimmedPartID).png"
+		return components.url
+	}
+
+	private func makeColorSpecificThumbnailURL(partID: String, colorID: String) -> URL? {
+		let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
+		let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
+		let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
+		guard !trimmedPartID.isEmpty, !sanitizedColorID.isEmpty else { return nil }
+
+		var components = URLComponents()
+		components.scheme = "https"
+		components.host = "img.bricklink.com"
+		components.path = "/ItemImage/PT/\(sanitizedColorID)/\(trimmedPartID).t1.png"
+		return components.url
 	}
 
 	private func resolveFullsizeImageURL(thumbnail: URL?, candidate: URL?) -> URL? {

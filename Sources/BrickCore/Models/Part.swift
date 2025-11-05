@@ -102,15 +102,29 @@ public extension Part {
     }
 
     var thumbnailImageURL: URL? {
-        guard let imageURL else { return nil }
-        let path = imageURL.path.lowercased()
-        return path.contains("no_image") ? nil : imageURL
+        if let imageURL {
+            let path = imageURL.path.lowercased()
+            if !path.contains("no_image") {
+                return imageURL
+            }
+        }
+
+        return Self.makeColorSpecificThumbnailURL(partID: partID, colorID: colorID)
     }
 
     var highResolutionImageURL: URL? {
         if let fullImageURL {
+            if fullImageURL.path.lowercased().contains("/pl/"),
+               let colorSpecific = Self.makeColorSpecificImageURL(partID: partID, colorID: colorID) {
+                return colorSpecific
+            }
             return fullImageURL
         }
+
+        if let colorSpecific = Self.makeColorSpecificImageURL(partID: partID, colorID: colorID) {
+            return colorSpecific
+        }
+
         guard let imageURL else { return nil }
         return Self.makeHighResolutionBrickLinkImageURL(from: imageURL)
     }
@@ -149,6 +163,32 @@ public extension Part {
         components.path = "/PL/\(filename)"
         components.query = "0"
 
+        return components.url
+    }
+
+    private static func makeColorSpecificImageURL(partID: String, colorID: String) -> URL? {
+        let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
+        guard !trimmedPartID.isEmpty, !sanitizedColorID.isEmpty else { return nil }
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "img.bricklink.com"
+        components.path = "/ItemImage/PN/\(sanitizedColorID)/\(trimmedPartID).png"
+        return components.url
+    }
+
+    private static func makeColorSpecificThumbnailURL(partID: String, colorID: String) -> URL? {
+        let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
+        guard !trimmedPartID.isEmpty, !sanitizedColorID.isEmpty else { return nil }
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "img.bricklink.com"
+        components.path = "/ItemImage/PT/\(sanitizedColorID)/\(trimmedPartID).t1.png"
         return components.url
     }
 }

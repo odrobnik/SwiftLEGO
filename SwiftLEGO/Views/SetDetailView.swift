@@ -556,7 +556,7 @@ private struct HeaderThumbnail: View {
     let brickSet: BrickSet
 
     var body: some View {
-        QuickLookThumbnail(item: brickSet, gesture: .tap) {
+        QuickLookThumbnail(item: brickSet, gesture: .longPress) {
             if let url = brickSet.thumbnailURL {
                 ThumbnailImage(url: url) { phase in
                     switch phase {

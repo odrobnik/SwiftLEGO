@@ -86,18 +86,20 @@ public enum SetImportUtilities {
         let totalNeeded = payload.quantityNeeded * multiplier
         let owningSet = parentPart == nil ? set : nil
         let owningMinifigure = parentPart == nil ? minifigure : nil
-        let trimmedColorID = payload.colorID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedColorName = payload.colorName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedPartName = payload.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parentColorID = parentPart.map { $0.colorID.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+		let trimmedColorID = payload.colorID.trimmingCharacters(in: .whitespacesAndNewlines)
+		let trimmedColorName = payload.colorName.trimmingCharacters(in: .whitespacesAndNewlines)
+		let trimmedPartName = payload.name.trimmingCharacters(in: .whitespacesAndNewlines)
+		let parentColorIDRaw = parentPart.map { $0.colorID.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+		let parentColorID = parentColorIDRaw == "0" ? "" : parentColorIDRaw
         let parentColorName = parentPart.map { $0.colorName.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
 
-        let resolvedColorID: String
-        if trimmedColorID.isEmpty, !parentColorID.isEmpty {
-            resolvedColorID = parentColorID
-        } else {
-            resolvedColorID = trimmedColorID
-        }
+		let resolvedColorID: String
+		let colorIDLooksMissing = trimmedColorID.isEmpty || trimmedColorID == "0"
+		if colorIDLooksMissing, parentPart != nil, !parentColorID.isEmpty {
+			resolvedColorID = parentColorID
+		} else {
+			resolvedColorID = trimmedColorID
+		}
 
         let normalizedColorName = trimmedColorName.lowercased()
         let normalizedPartName = trimmedPartName.lowercased()

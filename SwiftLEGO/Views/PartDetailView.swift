@@ -116,7 +116,7 @@ private struct PartThumbnailImage: View {
     let part: Part
 
     var body: some View {
-        QuickLookThumbnail(item: part, gesture: .tap) {
+        QuickLookThumbnail(item: part, gesture: .longPress) {
             if let url = part.thumbnailImageURL {
                 ThumbnailImage(url: url) { phase in
                     switch phase {
