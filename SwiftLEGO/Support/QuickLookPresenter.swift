@@ -8,7 +8,7 @@ final class QuickLookPresenter: ObservableObject {
     private var loadingIDs: Set<AnyHashable> = []
 
     func present<Item: QuickLookPreviewable>(_ item: Item) {
-        guard let preferredURL = item.quickLookPreferredURL ?? item.quickLookFallbackURL else {
+        guard (item.quickLookPreferredURL ?? item.quickLookFallbackURL) != nil else {
             return
         }
 
