@@ -44,6 +44,7 @@ public final class Part: Identifiable {
     public var quantityNeeded: Int
     public var quantityHave: Int
     public var imageURLString: String?
+    public var fullImageURLString: String?
     public var partURLString: String?
     public var inventorySectionRawValue: String = InventorySection.regular.rawValue
     public var set: BrickSet?
@@ -61,6 +62,7 @@ public final class Part: Identifiable {
         quantityNeeded: Int,
         quantityHave: Int = 0,
         imageURLString: String? = nil,
+        fullImageURLString: String? = nil,
         partURLString: String? = nil,
         inventorySection: InventorySection = .regular,
         set: BrickSet? = nil,
@@ -77,6 +79,7 @@ public final class Part: Identifiable {
         self.quantityNeeded = quantityNeeded
         self.quantityHave = quantityHave
         self.imageURLString = imageURLString
+        self.fullImageURLString = fullImageURLString
         self.partURLString = partURLString
         self.inventorySectionRawValue = inventorySection.rawValue
         self.set = set
@@ -93,7 +96,21 @@ public extension Part {
         return URL(string: imageURLString)
     }
 
+    var fullImageURL: URL? {
+        guard let fullImageURLString else { return nil }
+        return URL(string: fullImageURLString)
+    }
+
+    var thumbnailImageURL: URL? {
+        guard let imageURL else { return nil }
+        let path = imageURL.path.lowercased()
+        return path.contains("no_image") ? nil : imageURL
+    }
+
     var highResolutionImageURL: URL? {
+        if let fullImageURL {
+            return fullImageURL
+        }
         guard let imageURL else { return nil }
         return Self.makeHighResolutionBrickLinkImageURL(from: imageURL)
     }

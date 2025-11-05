@@ -1008,8 +1008,15 @@ struct SetCollectionView: View {
                 .fill(Color(uiColor: .tertiarySystemFill))
                 .frame(width: 80, height: 60)
                 .overlay {
-                    Image(systemName: "cube.transparent")
-                        .foregroundStyle(.secondary)
+                    GeometryReader { proxy in
+                        let dimension = min(proxy.size.width, proxy.size.height) * 0.6
+                        Image(systemName: "cube.transparent")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: dimension, height: dimension)
+                            .foregroundStyle(.secondary)
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                    }
                 }
         }
 

@@ -593,8 +593,15 @@ private struct HeaderThumbnail: View {
             .fill(Color(uiColor: .tertiarySystemFill))
             .frame(width: 96, height: 96)
             .overlay {
-                Image(systemName: "cube.transparent")
-                    .foregroundStyle(.secondary)
+                GeometryReader { proxy in
+                    let dimension = min(proxy.size.width, proxy.size.height) * 0.6
+                    Image(systemName: "cube.transparent")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: dimension, height: dimension)
+                        .foregroundStyle(.secondary)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                }
             }
     }
 }
@@ -937,7 +944,7 @@ struct PartRowView: View {
     @ViewBuilder
     private var thumbnail: some View {
         QuickLookThumbnail(item: part) {
-            if let url = part.imageURL {
+            if let url = part.thumbnailImageURL {
                 ThumbnailImage(url: url) { phase in
                     switch phase {
                     case .empty, .loading:
@@ -971,8 +978,15 @@ struct PartRowView: View {
             .fill(Color(uiColor: .tertiarySystemFill))
             .frame(width: 64, height: 64)
             .overlay {
-                Image(systemName: "cube.transparent")
-                    .foregroundStyle(.secondary)
+                GeometryReader { proxy in
+                    let dimension = min(proxy.size.width, proxy.size.height) * 0.6
+                    Image(systemName: "cube.transparent")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: dimension, height: dimension)
+                        .foregroundStyle(.secondary)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                }
             }
     }
 

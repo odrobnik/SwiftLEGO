@@ -33,6 +33,7 @@ public struct BrickLinkPartPayload: Sendable {
     public let quantityNeeded: Int
     public let instanceNumber: Int?
     public let imageURL: URL?
+    public let fullImageURL: URL?
     public let partURL: URL?
     public let inventorySection: Part.InventorySection
     public let subparts: [BrickLinkPartPayload]
@@ -45,6 +46,7 @@ public struct BrickLinkPartPayload: Sendable {
         quantityNeeded: Int,
         instanceNumber: Int? = nil,
         imageURL: URL? = nil,
+        fullImageURL: URL? = nil,
         partURL: URL? = nil,
         inventorySection: Part.InventorySection,
         subparts: [BrickLinkPartPayload] = []
@@ -56,6 +58,7 @@ public struct BrickLinkPartPayload: Sendable {
         self.quantityNeeded = quantityNeeded
         self.instanceNumber = instanceNumber
         self.imageURL = imageURL
+        self.fullImageURL = fullImageURL
         self.partURL = partURL
         self.inventorySection = inventorySection
         self.subparts = subparts
@@ -165,6 +168,7 @@ public actor BrickLinkService {
             quantityNeeded: part.quantity,
             instanceNumber: nil,
             imageURL: part.imageURL,
+            fullImageURL: part.fullImageURL,
             partURL: part.partURL,
             inventorySection: Part.InventorySection(brickLinkSection: part.section),
             subparts: part.subparts.map { makePartPayload(from: $0) }

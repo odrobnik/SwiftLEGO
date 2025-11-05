@@ -95,6 +95,13 @@ struct SetImportUtilitiesTests {
         let expectedColorName = savedAccessories.colorName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         #expect(!expectedColorName.isEmpty)
         #expect(!savedAccessories.subparts.isEmpty)
+		let placeholderSubpart = try #require(
+			savedAccessories.subparts.first { $0.imageURL?.absoluteString.contains("no_image") == true },
+			"Expected placeholder subparts to carry BrickLink placeholder thumbnails."
+		)
+		#expect(placeholderSubpart.thumbnailImageURL == nil)
+		let quickLookURL = try #require(placeholderSubpart.highResolutionImageURL, "Placeholder subparts should still produce a Quick Look URL.")
+		#expect(quickLookURL.absoluteString.contains("/PL/"))
 
         for subpart in savedAccessories.subparts {
             let resolvedColorName = subpart.colorName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

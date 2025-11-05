@@ -45,6 +45,7 @@ public enum SetImportUtilities {
                 quantityNeeded: sample.instanceNumber == nil ? totalNeeded : sample.quantityNeeded,
                 instanceNumber: sample.instanceNumber,
                 imageURL: sample.imageURL,
+                fullImageURL: sample.fullImageURL,
                 partURL: sample.partURL,
                 inventorySection: sample.inventorySection,
                 subparts: sample.subparts
@@ -117,6 +118,7 @@ public enum SetImportUtilities {
             quantityNeeded: totalNeeded,
             quantityHave: 0,
             imageURLString: payload.imageURL?.absoluteString,
+            fullImageURLString: payload.fullImageURL?.absoluteString,
             partURLString: payload.partURL?.absoluteString,
             inventorySection: payload.inventorySection,
             set: owningSet,
@@ -152,6 +154,7 @@ public enum SetImportUtilities {
                 quantityNeeded: $0.quantityNeeded,
                 instanceNumber: $0.instanceNumber,
                 imageURL: $0.imageURL,
+                fullImageURL: $0.fullImageURL,
                 partURL: $0.partURL,
                 inventorySection: $0.inventorySection,
                 subparts: partPayloads(from: $0.subparts)

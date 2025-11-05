@@ -188,6 +188,7 @@ public final class BrickLinkInventoryService {
 						colorName: part.colorName,
 						colorID: part.colorID,
 						imageURL: part.imageURL,
+						fullImageURL: part.fullImageURL,
 						quantity: part.quantity,
 						section: part.section,
 						inventoryURL: part.inventoryURL,
@@ -313,7 +314,7 @@ public final class BrickLinkInventoryService {
 		let partLinkColumn = columns.first(where: { $0.contains("catalog/catalogitem.page?P=") })
 		let descriptionColumn = columns.first(where: { $0.contains("**") && !$0.contains("Part No:") })
 
-		let imageURL = extractImageURL(from: imageColumn)
+		let imageURLs = extractImageURLs(from: imageColumn)
 
 		let quantity = columns
 			.compactMap { Int($0) }
@@ -351,7 +352,8 @@ public final class BrickLinkInventoryService {
 			name: partName.isEmpty ? normalizedDescription : partName,
 			colorName: colorName,
 			colorID: colorID,
-			imageURL: imageURL,
+			imageURL: imageURLs.thumbnail,
+			fullImageURL: imageURLs.fullsize,
 			quantity: quantity,
 			section: section,
 			inventoryURL: inventoryURL
@@ -368,7 +370,7 @@ public final class BrickLinkInventoryService {
 		let minifigLinkColumn = columns.first(where: { $0.contains("catalogitem.page?M=") })
 		let descriptionColumn = columns.first(where: { $0.contains("Catalog") })
 
-		let imageURL = extractImageURL(from: imageColumn)
+		let imageURL = extractImageURLs(from: imageColumn).thumbnail
 		let quantity = columns
 			.compactMap { Int($0) }
 			.first ?? 0
@@ -411,25 +413,63 @@ public final class BrickLinkInventoryService {
 		)
 	}
 
-	private func extractImageURL(from column: String?) -> URL? {
-		guard let column else { return nil }
+	private func extractImageURLs(from column: String?) -> (thumbnail: URL?, fullsize: URL?) {
+		guard let column else { return (nil, nil) }
 		let nsRange = NSRange(column.startIndex..<column.endIndex, in: column)
-		guard let match = imageRegex.firstMatch(in: column, options: [], range: nsRange) else {
-			return nil
+		var thumbnailURL: URL?
+
+		if let match = imageRegex.firstMatch(in: column, options: [], range: nsRange),
+		   let range = Range(match.range(at: 1), in: column) {
+			let urlString = String(column[range])
+			thumbnailURL = makeAbsoluteURL(from: urlString)
 		}
 
-		guard let range = Range(match.range(at: 1), in: column) else {
-			return nil
+		var fullsizeURL: URL?
+		if let anchorRange = column.range(of: ")](") {
+			let tail = column[anchorRange.upperBound...]
+			if let closingParenthesis = tail.firstIndex(of: ")") {
+				let candidate = String(tail[..<closingParenthesis])
+				fullsizeURL = makeAbsoluteURL(from: candidate)
+			}
 		}
 
-		let urlString = String(column[range])
+		let resolvedFullsize = resolveFullsizeImageURL(thumbnail: thumbnailURL, candidate: fullsizeURL)
+		return (thumbnailURL, resolvedFullsize)
+	}
 
-		if let url = URL(string: urlString), url.scheme != nil {
+	private func makeAbsoluteURL(from input: String) -> URL? {
+		if let url = URL(string: input), url.scheme != nil {
 			return url
 		}
+		return URL(string: "https://www.bricklink.com\(input)")
+	}
 
-		// Fallback: construct absolute URL relative to BrickLink
-		return URL(string: "https://www.bricklink.com\(urlString)")
+	private func resolveFullsizeImageURL(thumbnail: URL?, candidate: URL?) -> URL? {
+		if let candidate {
+			let lowercasedPath = candidate.path.lowercased()
+			if lowercasedPath.contains("/catalogitempic.asp"),
+			   let components = URLComponents(url: candidate, resolvingAgainstBaseURL: false),
+			   let partID = components.queryItems?.first(where: { $0.name.lowercased() == "p" })?.value,
+			   !partID.isEmpty {
+				var directComponents = URLComponents()
+				directComponents.scheme = "https"
+				directComponents.host = "www.bricklink.com"
+				directComponents.path = "/PL/\(partID).jpg"
+				directComponents.query = "0"
+				return directComponents.url
+			}
+
+			let pathExtension = (candidate.path as NSString).pathExtension
+			if !pathExtension.isEmpty {
+				return candidate
+			}
+		}
+
+		if let thumbnail {
+			return promoteToHighResolution(thumbnail)
+		}
+
+		return candidate
 	}
 
 	private func extractPartName(from column: String?) -> String {
@@ -623,11 +663,11 @@ public final class BrickLinkInventoryService {
 			}
 
 			if line.contains("catalogItemPic.asp?S="),
-			   let preferred = extractImageURL(from: line),
+			   let preferred = extractImageURLs(from: line).thumbnail,
 			   preferred.absoluteString.contains("/S/") {
 				thumbnailURL = promoteToHighResolution(preferred)
 			} else if thumbnailURL == nil,
-					  let candidate = extractImageURL(from: line) {
+					  let candidate = extractImageURLs(from: line).thumbnail {
 				thumbnailURL = promoteToHighResolution(candidate)
 			}
 

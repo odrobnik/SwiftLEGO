@@ -80,6 +80,7 @@ public struct BrickLinkPart: Sendable, Equatable {
 	public let colorName: String
 	public let colorID: String
 	public let imageURL: URL?
+	public let fullImageURL: URL?
 	public let quantity: Int
 	public let section: BrickLinkPartSection
 	public let inventoryURL: URL?
@@ -92,6 +93,7 @@ public struct BrickLinkPart: Sendable, Equatable {
 		colorName: String,
 		colorID: String,
 		imageURL: URL?,
+		fullImageURL: URL? = nil,
 		quantity: Int,
 		section: BrickLinkPartSection,
 		inventoryURL: URL? = nil,
@@ -103,6 +105,7 @@ public struct BrickLinkPart: Sendable, Equatable {
 		self.colorName = colorName
 		self.colorID = colorID
 		self.imageURL = imageURL
+		self.fullImageURL = fullImageURL
 		self.quantity = quantity
 		self.section = section
 		self.inventoryURL = inventoryURL
