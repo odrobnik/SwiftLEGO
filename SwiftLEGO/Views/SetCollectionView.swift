@@ -338,8 +338,7 @@ struct SetCollectionView: View {
                                     set: entry.set,
                                     displayPart: entry.displayPart,
                                     owningMinifigure: entry.owningMinifigure,
-                                    matchingParts: entry.matchingParts,
-                                    contextDescription: entry.contextDescription
+                                    matchingParts: entry.matchingParts
                                 )
                             }
                         }
@@ -877,34 +876,6 @@ struct SetCollectionView: View {
             let candidate = displayPart.colorName.isEmpty ? (subpartMatches.first?.colorName ?? displayPart.colorName) : displayPart.colorName
             let name = candidate
             return name.isEmpty ? "Unknown Color" : name
-        }
-
-        var contextDescription: String? {
-            var components: [String] = []
-
-            if !subpartMatches.isEmpty || directMatch == nil {
-                let parentName = displayPart.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !parentName.isEmpty {
-                    let labelPrefix: String
-                    switch displayPart.inventorySection {
-                    case .alternate:
-                        labelPrefix = "Alternate"
-                    case .counterpart:
-                        labelPrefix = "Counterpart"
-                    case .extra:
-                        labelPrefix = "Extra"
-                    case .regular:
-                        labelPrefix = "Sub-Part"
-                    }
-                    components.append("\(labelPrefix): \(parentName)")
-                }
-            }
-
-            if let owningMinifigure {
-                components.append("Minifigure: \(owningMinifigure.name)")
-            }
-
-            return components.isEmpty ? nil : components.joined(separator: " • ")
         }
     }
 

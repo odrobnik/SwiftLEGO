@@ -10,7 +10,6 @@ struct PartSearchResultRow: View {
     @Bindable var displayPart: Part
     let owningMinifigure: Minifigure?
     let matchingParts: [Part]
-    let contextDescription: String?
 
     private var directMatch: Part? {
         matchingParts.first { $0.persistentModelID == displayPart.persistentModelID }
@@ -18,17 +17,6 @@ struct PartSearchResultRow: View {
 
     private var subpartMatches: [Part] {
         matchingParts.filter { $0.persistentModelID != displayPart.persistentModelID }
-    }
-
-    private var previewTargetPart: Part? {
-        if let nested = subpartMatches.first {
-            return nested
-        }
-        return directMatch ?? matchingParts.first
-    }
-
-    private var hasMultiLevelContext: Bool {
-        owningMinifigure != nil || !subpartMatches.isEmpty
     }
 
     private var directMatchBinding: Binding<Int>? {
@@ -63,30 +51,21 @@ struct PartSearchResultRow: View {
         matchingParts.reduce(0) { $0 + $1.quantityHave }
     }
 
-    private var multiLevelPreviewSegments: [String]? {
-        guard hasMultiLevelContext, let target = previewTargetPart else { return nil }
-
-        var segments: [String] = ["\(set.setNumber) • \(set.name)"]
-
+    private var secondaryContextLine: String? {
         if let owningMinifigure {
-            segments.append("Minifigure: \(owningMinifigure.displayName())")
-        }
-
-        let hierarchy = hierarchyChain(for: target)
-        let trimmedNames = hierarchy
-            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        if trimmedNames.isEmpty {
-            let fallback = displayPart.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !fallback.isEmpty {
-                segments.append(fallback)
+            let trimmed = owningMinifigure.displayName().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
             }
-        } else {
-            segments.append(contentsOf: trimmedNames)
         }
 
-        return segments.count > 1 ? segments : nil
+        guard shouldShowSuperPartContext else { return nil }
+        let trimmedParent = displayPart.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedParent.isEmpty ? nil : trimmedParent
+    }
+
+    private var shouldShowSuperPartContext: Bool {
+        owningMinifigure == nil && (!subpartMatches.isEmpty || directMatch == nil)
     }
 
     @ViewBuilder
@@ -139,16 +118,6 @@ struct PartSearchResultRow: View {
                 }
             }
 
-                if let previewSegments = multiLevelPreviewSegments {
-                    MultiLevelMatchPreview(segments: previewSegments)
-                }
-
-                if let contextDescription, !contextDescription.isEmpty {
-                    Text(contextDescription)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 if !subpartMatches.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(subpartMatches, id: \.persistentModelID) { subpart in
@@ -164,11 +133,21 @@ struct PartSearchResultRow: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.orange)
 
-                Spacer()
+                    Spacer()
 
-                Text("\(set.setNumber) • \(set.name)")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(set.setNumber) • \(set.name)")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.trailing)
+
+                        if let line = secondaryContextLine {
+                            Text(line)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -186,25 +165,6 @@ struct PartSearchResultRow: View {
 
     private func missingCount(for part: Part) -> Int {
         max(part.quantityNeeded - part.quantityHave, 0)
-    }
-
-    private func hierarchyChain(for part: Part) -> [Part] {
-        var chain: [Part] = []
-        var current: Part? = part
-
-        while let node = current {
-            chain.append(node)
-            if node.persistentModelID == displayPart.persistentModelID {
-                break
-            }
-            current = node.parentPart
-        }
-
-        if chain.last?.persistentModelID != displayPart.persistentModelID {
-            chain.append(displayPart)
-        }
-
-        return chain.reversed()
     }
 
     private func subpartSummary(for part: Part) -> LocalizedStringKey {
@@ -237,24 +197,6 @@ struct PartSearchResultRow: View {
 
     private func markComplete(for part: Part) {
         updateQuantity(for: part, to: part.quantityNeeded)
-    }
-}
-
-private struct MultiLevelMatchPreview: View {
-    let segments: [String]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Matched Path")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            Text(segments.joined(separator: " › "))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .lineLimit(3)
-        }
     }
 }
 
@@ -371,8 +313,7 @@ private struct PartThumbnail: View {
         set: set,
         displayPart: part,
         owningMinifigure: nil,
-        matchingParts: matches,
-        contextDescription: "Counterpart: Preview Sample"
+        matchingParts: matches
     )
     .padding()
     .modelContainer(container)
@@ -433,8 +374,7 @@ private struct PartThumbnail: View {
                     set: directSet,
                     displayPart: directPart,
                     owningMinifigure: nil,
-                    matchingParts: directMatches,
-                    contextDescription: nil
+                    matchingParts: directMatches
                 )
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 .listRowSeparator(.hidden)
@@ -443,8 +383,7 @@ private struct PartThumbnail: View {
                     set: counterpartSet,
                     displayPart: counterpartPart,
                     owningMinifigure: nil,
-                    matchingParts: aggregatedMatches,
-                    contextDescription: "Counterpart: Preview Bundle"
+                    matchingParts: aggregatedMatches
                 )
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 .listRowSeparator(.hidden)
@@ -456,5 +395,61 @@ private struct PartThumbnail: View {
         .navigationTitle("Andrea")
         .toolbar { }
     }
+    .modelContainer(container)
+}
+
+#Preview("Part Result Row – Minifigure Sub-Part") {
+    let container = SwiftLEGOModelContainer.preview
+    let context = ModelContext(container)
+
+    let view: PartSearchResultRow = {
+        let set = BrickSet(setNumber: "70838-1", name: "Queen Watevra's So-Not-Evil Space Palace")
+        context.insert(set)
+
+        let minifigure = Minifigure(
+            identifier: "tlm198",
+            name: "Sweet Mayhem",
+            quantityNeeded: 1,
+            set: set
+        )
+        context.insert(minifigure)
+        set.minifigures.append(minifigure)
+
+        let assembly = Part(
+            partID: "spa0001",
+            name: "Helmet Assembly",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 1,
+            quantityHave: 0,
+            inventorySection: .counterpart,
+            minifigure: minifigure
+        )
+        context.insert(assembly)
+        minifigure.parts.append(assembly)
+
+        let subpart = Part(
+            partID: "35787pb003",
+            name: "Flight Visor",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 1,
+            quantityHave: 0,
+            minifigure: minifigure,
+            parentPart: assembly
+        )
+        context.insert(subpart)
+        assembly.subparts.append(subpart)
+
+        return PartSearchResultRow(
+            set: set,
+            displayPart: assembly,
+            owningMinifigure: minifigure,
+            matchingParts: [subpart]
+        )
+    }()
+
+    view
+    .padding()
     .modelContainer(container)
 }
