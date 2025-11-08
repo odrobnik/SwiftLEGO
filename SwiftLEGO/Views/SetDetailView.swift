@@ -541,10 +541,18 @@ struct SetDetailView: View {
 }
 
 private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {
-    guard !numericQuery.isEmpty else { return false }
-    let numericPrefix = partID.prefix { $0.isNumber }
+    let normalizedQuery = numericQuery
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+    guard !normalizedQuery.isEmpty else { return false }
+
+    let numericPrefix = partID
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .prefix { $0.isNumber }
+
     guard !numericPrefix.isEmpty else { return false }
-    return String(numericPrefix).caseInsensitiveCompare(numericQuery) == .orderedSame
+    return numericPrefix == normalizedQuery
 }
 
 private struct RefreshAlert: Identifiable {

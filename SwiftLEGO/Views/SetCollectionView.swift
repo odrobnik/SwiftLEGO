@@ -739,10 +739,18 @@ struct SetCollectionView: View {
     }
 
     private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {
-        guard !numericQuery.isEmpty else { return false }
-        let numericPrefix = partID.prefix { $0.isNumber }
+        let normalizedQuery = numericQuery
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalizedQuery.isEmpty else { return false }
+
+        let numericPrefix = partID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .prefix { $0.isNumber }
+
         guard !numericPrefix.isEmpty else { return false }
-        return String(numericPrefix).caseInsensitiveCompare(numericQuery) == .orderedSame
+        return numericPrefix == normalizedQuery
     }
 
     private func normalizedDimensionPrefix(in query: String) -> String? {
@@ -787,9 +795,10 @@ struct SetCollectionView: View {
         visit: (Part, Part, Minifigure?) -> Void
     ) {
         func walk(part: Part, root: Part, owningMinifigure: Minifigure?) {
-            guard part.inventorySection != .extra else { return }
+            if part.inventorySection != .extra {
+                visit(part, root, owningMinifigure)
+            }
 
-            visit(part, root, owningMinifigure)
             for child in part.subparts {
                 walk(part: child, root: root, owningMinifigure: owningMinifigure)
             }
