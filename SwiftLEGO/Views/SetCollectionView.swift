@@ -337,6 +337,7 @@ struct SetCollectionView: View {
                                 PartSearchResultRow(
                                     set: entry.set,
                                     displayPart: entry.displayPart,
+                                    owningMinifigure: entry.owningMinifigure,
                                     matchingParts: entry.matchingParts,
                                     contextDescription: entry.contextDescription
                                 )

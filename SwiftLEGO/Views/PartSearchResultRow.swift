@@ -8,6 +8,7 @@ struct PartSearchResultRow: View {
     @Environment(\.modelContext) private var modelContext
     let set: BrickSet
     @Bindable var displayPart: Part
+    let owningMinifigure: Minifigure?
     let matchingParts: [Part]
     let contextDescription: String?
 
@@ -17,6 +18,17 @@ struct PartSearchResultRow: View {
 
     private var subpartMatches: [Part] {
         matchingParts.filter { $0.persistentModelID != displayPart.persistentModelID }
+    }
+
+    private var previewTargetPart: Part? {
+        if let nested = subpartMatches.first {
+            return nested
+        }
+        return directMatch ?? matchingParts.first
+    }
+
+    private var hasMultiLevelContext: Bool {
+        owningMinifigure != nil || !subpartMatches.isEmpty
     }
 
     private var directMatchBinding: Binding<Int>? {
@@ -49,6 +61,32 @@ struct PartSearchResultRow: View {
 
     private var totalHave: Int {
         matchingParts.reduce(0) { $0 + $1.quantityHave }
+    }
+
+    private var multiLevelPreviewSegments: [String]? {
+        guard hasMultiLevelContext, let target = previewTargetPart else { return nil }
+
+        var segments: [String] = ["\(set.setNumber) • \(set.name)"]
+
+        if let owningMinifigure {
+            segments.append("Minifigure: \(owningMinifigure.displayName())")
+        }
+
+        let hierarchy = hierarchyChain(for: target)
+        let trimmedNames = hierarchy
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if trimmedNames.isEmpty {
+            let fallback = displayPart.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !fallback.isEmpty {
+                segments.append(fallback)
+            }
+        } else {
+            segments.append(contentsOf: trimmedNames)
+        }
+
+        return segments.count > 1 ? segments : nil
     }
 
     @ViewBuilder
@@ -101,6 +139,10 @@ struct PartSearchResultRow: View {
                 }
             }
 
+                if let previewSegments = multiLevelPreviewSegments {
+                    MultiLevelMatchPreview(segments: previewSegments)
+                }
+
                 if let contextDescription, !contextDescription.isEmpty {
                     Text(contextDescription)
                         .font(.caption)
@@ -146,6 +188,25 @@ struct PartSearchResultRow: View {
         max(part.quantityNeeded - part.quantityHave, 0)
     }
 
+    private func hierarchyChain(for part: Part) -> [Part] {
+        var chain: [Part] = []
+        var current: Part? = part
+
+        while let node = current {
+            chain.append(node)
+            if node.persistentModelID == displayPart.persistentModelID {
+                break
+            }
+            current = node.parentPart
+        }
+
+        if chain.last?.persistentModelID != displayPart.persistentModelID {
+            chain.append(displayPart)
+        }
+
+        return chain.reversed()
+    }
+
     private func subpartSummary(for part: Part) -> LocalizedStringKey {
         let missing = missingCount(for: part)
         let colorDescription = part.colorName.isEmpty ? "Unknown color" : part.colorName
@@ -176,6 +237,24 @@ struct PartSearchResultRow: View {
 
     private func markComplete(for part: Part) {
         updateQuantity(for: part, to: part.quantityNeeded)
+    }
+}
+
+private struct MultiLevelMatchPreview: View {
+    let segments: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Matched Path")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(segments.joined(separator: " › "))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .lineLimit(3)
+        }
     }
 }
 
@@ -291,6 +370,7 @@ private struct PartThumbnail: View {
     return PartSearchResultRow(
         set: set,
         displayPart: part,
+        owningMinifigure: nil,
         matchingParts: matches,
         contextDescription: "Counterpart: Preview Sample"
     )
@@ -352,6 +432,7 @@ private struct PartThumbnail: View {
                 PartSearchResultRow(
                     set: directSet,
                     displayPart: directPart,
+                    owningMinifigure: nil,
                     matchingParts: directMatches,
                     contextDescription: nil
                 )
@@ -361,6 +442,7 @@ private struct PartThumbnail: View {
                 PartSearchResultRow(
                     set: counterpartSet,
                     displayPart: counterpartPart,
+                    owningMinifigure: nil,
                     matchingParts: aggregatedMatches,
                     contextDescription: "Counterpart: Preview Bundle"
                 )
