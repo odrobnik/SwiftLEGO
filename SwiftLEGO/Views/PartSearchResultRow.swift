@@ -7,74 +7,59 @@ import BrickCore
 struct PartSearchResultRow: View {
     @Environment(\.modelContext) private var modelContext
     let set: BrickSet
-    @Bindable var displayPart: Part
+    @Bindable var part: Part
     let owningMinifigure: Minifigure?
-    let matchingParts: [Part]
+    let parentChain: [Part]
 
-    private var directMatch: Part? {
-        matchingParts.first { $0.persistentModelID == displayPart.persistentModelID }
-    }
-
-    private var subpartMatches: [Part] {
-        matchingParts.filter { $0.persistentModelID != displayPart.persistentModelID }
-    }
-
-    private var directMatchBinding: Binding<Int>? {
-        guard let target = directMatch, subpartMatches.isEmpty else { return nil }
-        return Binding(
-            get: { target.quantityHave },
-            set: { updateQuantity(for: target, to: $0) }
+    private var quantityBinding: Binding<Int> {
+        Binding(
+            get: { part.quantityHave },
+            set: { updateQuantity(to: $0) }
         )
     }
 
     private var thumbnailSource: Part {
-        if displayPart.thumbnailImageURL != nil {
-            return displayPart
+        if part.thumbnailImageURL != nil {
+            return part
         }
-
-        if let directMatch, directMatch.thumbnailImageURL != nil {
-            return directMatch
-        }
-
-        return subpartMatches.first ?? displayPart
+        return parentChain.last ?? part
     }
 
     private var totalMissing: Int {
-        matchingParts.reduce(0) { $0 + missingCount(for: $1) }
+        missingCount(for: part)
     }
 
     private var totalNeeded: Int {
-        matchingParts.reduce(0) { $0 + $1.quantityNeeded }
+        part.quantityNeeded
     }
 
     private var totalHave: Int {
-        matchingParts.reduce(0) { $0 + $1.quantityHave }
+        part.quantityHave
     }
 
     private var secondaryContextLine: String? {
+        var segments: [String] = []
+
         if let owningMinifigure {
-            let trimmed = owningMinifigure.displayName().trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                return trimmed
+            let name = owningMinifigure.displayName().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty {
+                segments.append("Minifigure: \(name)")
             }
         }
 
-        guard shouldShowSuperPartContext else { return nil }
-        let trimmedParent = displayPart.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedParent.isEmpty ? nil : trimmedParent
-    }
+        let parentNames = parentChain
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
 
-    private var shouldShowSuperPartContext: Bool {
-        owningMinifigure == nil && (!subpartMatches.isEmpty || directMatch == nil)
-    }
-
-    @ViewBuilder
-    private var summaryText: some View {
-        if let directMatch, subpartMatches.isEmpty {
-            Text("Missing ^[\(missingCount(for: directMatch)) part](inflect: true) • Need \(directMatch.quantityNeeded), have \(directMatch.quantityHave)")
-        } else {
-            Text("Missing ^[\(totalMissing) part](inflect: true) across ^[\(matchingParts.count) item](inflect: true) • Need \(totalNeeded), have \(totalHave)")
+        if !parentNames.isEmpty {
+            segments.append(parentNames.joined(separator: " › "))
         }
+
+        return segments.isEmpty ? nil : segments.joined(separator: " • ")
+    }
+
+    private var summaryText: some View {
+        Text("Missing ^[\(totalMissing) part](inflect: true) • Need \(totalNeeded), have \(totalHave)")
     }
 
     var body: some View {
@@ -83,83 +68,59 @@ struct PartSearchResultRow: View {
                 PartThumbnail(part: thumbnailSource)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(displayPart.name)
+                    Text(part.name)
                         .font(.headline)
 
-                    let secondaryColorName = displayPart.colorName.isEmpty ? (subpartMatches.first?.colorName ?? displayPart.colorName) : displayPart.colorName
-                    Text("\(displayPart.partID) • \(secondaryColorName)")
+                    let colorName = part.colorName.isEmpty ? "Unknown color" : part.colorName
+                    Text("\(part.partID) • \(colorName)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                if let binding = directMatchBinding, let directMatch {
-                    VStack(alignment: .center, spacing: 6) {
-                        Text("\(directMatch.quantityHave) of \(directMatch.quantityNeeded)")
-                            .font(.title3.bold())
-                            .contentTransition(.numericText())
-                            .multilineTextAlignment(.center)
+                VStack(alignment: .center, spacing: 6) {
+                    Text("\(part.quantityHave) of \(part.quantityNeeded)")
+                        .font(.title3.bold())
+                        .contentTransition(.numericText())
+                        .multilineTextAlignment(.center)
 
-                        Stepper("", value: binding, in: 0...directMatch.quantityNeeded)
-                            .labelsHidden()
-                    }
-                } else {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("Missing \(totalMissing)")
-                            .font(.title3.bold())
-                            .foregroundStyle(.orange)
-
-                        Text("Need \(totalNeeded), have \(totalHave)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(minWidth: 150, alignment: .center)
+                    Stepper("", value: quantityBinding, in: 0...part.quantityNeeded)
+                        .labelsHidden()
                 }
+                .frame(minWidth: 150, alignment: .center)
             }
 
-                if !subpartMatches.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(subpartMatches, id: \.persistentModelID) { subpart in
-                            Text(subpartSummary(for: subpart))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+            HStack(alignment: .center, spacing: 12) {
+                summaryText
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.orange)
 
-                HStack(alignment: .center, spacing: 12) {
-                    summaryText
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.orange)
+                Spacer()
 
-                    Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(set.setNumber) • \(set.name)")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
 
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(set.setNumber) • \(set.name)")
-                            .font(.body)
+                    if let line = secondaryContextLine {
+                        Text(line)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.trailing)
-
-                        if let line = secondaryContextLine {
-                            Text(line)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.trailing)
-                        }
                     }
+                }
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            if let directMatch, subpartMatches.isEmpty {
-                Button {
-                    markComplete(for: directMatch)
-                } label: {
-                    Label("Have All", systemImage: "checkmark.circle.fill")
-                }
-                .tint(.green)
-                .disabled(directMatch.quantityHave >= directMatch.quantityNeeded)
+            Button {
+                markComplete()
+            } label: {
+                Label("Have All", systemImage: "checkmark.circle.fill")
             }
+            .tint(.green)
+            .disabled(part.quantityHave >= part.quantityNeeded)
         }
     }
 
@@ -167,13 +128,7 @@ struct PartSearchResultRow: View {
         max(part.quantityNeeded - part.quantityHave, 0)
     }
 
-    private func subpartSummary(for part: Part) -> LocalizedStringKey {
-        let missing = missingCount(for: part)
-        let colorDescription = part.colorName.isEmpty ? "Unknown color" : part.colorName
-        return "• \(part.partID) • \(colorDescription) — Missing ^[\(missing) part](inflect: true) (Need \(part.quantityNeeded), have \(part.quantityHave))"
-    }
-
-    private func updateQuantity(for part: Part, to newValue: Int) {
+    private func updateQuantity(to newValue: Int) {
         let clamped = max(0, min(newValue, part.quantityNeeded))
         guard clamped != part.quantityHave else { return }
 
@@ -195,8 +150,8 @@ struct PartSearchResultRow: View {
         }
     }
 
-    private func markComplete(for part: Part) {
-        updateQuantity(for: part, to: part.quantityNeeded)
+    private func markComplete() {
+        updateQuantity(to: part.quantityNeeded)
     }
 }
 
@@ -307,13 +262,11 @@ private struct PartThumbnail: View {
         part = newPart
     }
 
-    let matches = [part]
-
     return PartSearchResultRow(
         set: set,
-        displayPart: part,
+        part: part,
         owningMinifigure: nil,
-        matchingParts: matches
+        parentChain: []
     )
     .padding()
     .modelContainer(container)
@@ -364,26 +317,23 @@ private struct PartThumbnail: View {
         counterpartPart.subparts.append(child)
     }
 
-    let directMatches = [directPart]
-    let aggregatedMatches = [counterpartPart] + counterpartPart.subparts
-
     return NavigationStack {
         List {
             Section("Black") {
                 PartSearchResultRow(
                     set: directSet,
-                    displayPart: directPart,
+                    part: directPart,
                     owningMinifigure: nil,
-                    matchingParts: directMatches
+                    parentChain: []
                 )
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 .listRowSeparator(.hidden)
 
                 PartSearchResultRow(
                     set: counterpartSet,
-                    displayPart: counterpartPart,
+                    part: counterpartPart.subparts.first ?? counterpartPart,
                     owningMinifigure: nil,
-                    matchingParts: aggregatedMatches
+                    parentChain: counterpartPart.subparts.isEmpty ? [] : [counterpartPart]
                 )
                 .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 .listRowSeparator(.hidden)
@@ -443,9 +393,9 @@ private struct PartThumbnail: View {
 
         return PartSearchResultRow(
             set: set,
-            displayPart: assembly,
+            part: subpart,
             owningMinifigure: minifigure,
-            matchingParts: [subpart]
+            parentChain: [assembly]
         )
     }()
 

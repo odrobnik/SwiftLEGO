@@ -331,14 +331,14 @@ struct SetCollectionView: View {
                                 value: SearchResult(
                                     set: entry.set,
                                     searchQuery: trimmedSearchText,
-                                    section: entry.displayPart.inventorySection
+                                    section: entry.part.inventorySection
                                 )
                             ) {
                                 PartSearchResultRow(
                                     set: entry.set,
-                                    displayPart: entry.displayPart,
+                                    part: entry.part,
                                     owningMinifigure: entry.owningMinifigure,
-                                    matchingParts: entry.matchingParts
+                                    parentChain: entry.parentChain
                                 )
                             }
                         }
@@ -548,7 +548,7 @@ struct SetCollectionView: View {
         var matchOrder = 0
 
         for set in sortedSets {
-            enumerateSearchableParts(in: set) { part, displayPart, owningMinifigure in
+            enumerateSearchableParts(in: set) { part, _, owningMinifigure in
                 let partIDLower = part.partID.lowercased()
                 let colorLower = part.colorName.lowercased()
                 let nameLower = part.name.lowercased()
@@ -606,18 +606,21 @@ struct SetCollectionView: View {
                 guard missingCount(for: part) > 0 else { return }
 
                 let entrySet = part.set ?? part.minifigure?.set ?? set
-                let key = displayPart.persistentModelID
+                let key = part.persistentModelID
+                let chain = parentChain(for: part)
 
                 if builders[key] == nil {
                     builders[key] = PartSearchEntryBuilder(
                         set: entrySet,
-                        displayPart: displayPart,
+                        part: part,
                         owningMinifigure: owningMinifigure,
+                        parentChain: chain,
                         orderIndex: matchOrder
                     )
+                } else {
+                    builders[key]?.updateOrder(matchOrder)
                 }
 
-                builders[key]?.recordMatch(part, order: matchOrder)
                 matchOrder += 1
             }
         }
@@ -628,7 +631,7 @@ struct SetCollectionView: View {
                 if lhs.orderIndex != rhs.orderIndex {
                     return lhs.orderIndex < rhs.orderIndex
                 }
-                return lhs.displayPart.partID.localizedCaseInsensitiveCompare(rhs.displayPart.partID) == .orderedAscending
+                return lhs.part.partID.localizedCaseInsensitiveCompare(rhs.part.partID) == .orderedAscending
             }
     }
 
@@ -814,23 +817,33 @@ struct SetCollectionView: View {
         }
     }
 
+    private func parentChain(for part: Part) -> [Part] {
+        var chain: [Part] = []
+        var current = part.parentPart
+
+        while let node = current {
+            chain.append(node)
+            current = node.parentPart
+        }
+
+        return chain.reversed()
+    }
+
     private var groupedPartResults: [ColorGroup] {
         let entries = partSearchResults.filter { $0.missingCount > 0 }
         guard !entries.isEmpty else { return [] }
 
-        let grouped = Dictionary(grouping: entries) { entry in
-            entry.groupingColorName
-        }
+        let grouped = Dictionary(grouping: entries, by: { $0.groupingColorName })
 
         return grouped.map { key, value in
             ColorGroup(
                 colorName: key,
                 entries: value.sorted { lhs, rhs in
-                    let nameComparison = lhs.displayPart.name.localizedCaseInsensitiveCompare(rhs.displayPart.name)
+                    let nameComparison = lhs.part.name.localizedCaseInsensitiveCompare(rhs.part.name)
                     if nameComparison != .orderedSame {
                         return nameComparison == .orderedAscending
                     }
-                    return lhs.displayPart.partID.localizedCaseInsensitiveCompare(rhs.displayPart.partID) == .orderedAscending
+                    return lhs.part.partID.localizedCaseInsensitiveCompare(rhs.part.partID) == .orderedAscending
                 }
             )
         }
@@ -853,72 +866,56 @@ struct SetCollectionView: View {
 
     private struct PartSearchEntry: Identifiable {
         let set: BrickSet
-        let displayPart: Part
-        let matchingParts: [Part]
+        let part: Part
         let owningMinifigure: Minifigure?
+        let parentChain: [Part]
         let orderIndex: Int
 
-        var id: PersistentIdentifier { displayPart.persistentModelID }
-
-        var directMatch: Part? {
-            matchingParts.first { $0.persistentModelID == displayPart.persistentModelID }
-        }
-
-        var subpartMatches: [Part] {
-            matchingParts.filter { $0.persistentModelID != displayPart.persistentModelID }
-        }
+        var id: PersistentIdentifier { part.persistentModelID }
 
         var missingCount: Int {
-            matchingParts.reduce(0) { $0 + max($1.quantityNeeded - $1.quantityHave, 0) }
+            max(part.quantityNeeded - part.quantityHave, 0)
         }
 
         var groupingColorName: String {
-            let candidate = displayPart.colorName.isEmpty ? (subpartMatches.first?.colorName ?? displayPart.colorName) : displayPart.colorName
-            let name = candidate
+            let name = part.colorName
             return name.isEmpty ? "Unknown Color" : name
         }
     }
 
     private struct PartSearchEntryBuilder {
         let set: BrickSet
-        let displayPart: Part
+        let part: Part
         let owningMinifigure: Minifigure?
-        private(set) var matchingParts: [Part] = []
-        private var recordedIDs: Set<PersistentIdentifier> = []
+        let parentChain: [Part]
         private(set) var orderIndex: Int
 
         init(
             set: BrickSet,
-            displayPart: Part,
+            part: Part,
             owningMinifigure: Minifigure?,
+            parentChain: [Part],
             orderIndex: Int
         ) {
             self.set = set
-            self.displayPart = displayPart
+            self.part = part
             self.owningMinifigure = owningMinifigure
-            self.matchingParts = []
-            self.recordedIDs = []
+            self.parentChain = parentChain
             self.orderIndex = orderIndex
         }
 
-        mutating func recordMatch(_ part: Part, order: Int) {
+        mutating func updateOrder(_ order: Int) {
             if order < orderIndex {
                 orderIndex = order
             }
-
-            let identifier = part.persistentModelID
-            guard !recordedIDs.contains(identifier) else { return }
-
-            recordedIDs.insert(identifier)
-            matchingParts.append(part)
         }
 
         func build() -> PartSearchEntry {
             PartSearchEntry(
                 set: set,
-                displayPart: displayPart,
-                matchingParts: matchingParts,
+                part: part,
                 owningMinifigure: owningMinifigure,
+                parentChain: parentChain,
                 orderIndex: orderIndex
             )
         }
