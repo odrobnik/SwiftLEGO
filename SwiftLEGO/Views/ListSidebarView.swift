@@ -14,6 +14,9 @@ struct ListSidebarView: View {
     @State private var exportDocument = InventorySnapshotDocument(snapshot: .empty)
     @State private var exportFilename = InventorySnapshotDocument.defaultFilename()
     @State private var isExportingInventory = false
+    @State private var wantedListDocument = WantedListDocument(inventory: .empty)
+    @State private var wantedListFilename = WantedListDocument.defaultFilename()
+    @State private var isExportingWantedList = false
     @State private var isImportingInventory = false
     @State private var inventoryAlert: InventoryAlert?
     @State private var importingListIDs: Set<PersistentIdentifier> = []
@@ -123,6 +126,12 @@ struct ListSidebarView: View {
                     } label: {
                         Label("Export Lists", systemImage: "square.and.arrow.up")
                     }
+
+                    Button {
+                        beginWantedListExport()
+                    } label: {
+                        Label("Export Wanted List", systemImage: "square.and.arrow.up.on.square")
+                    }
                 } label: {
                     Label("Inventory Actions", systemImage: "shippingbox")
                 }
@@ -164,6 +173,16 @@ struct ListSidebarView: View {
         ) { result in
             if case .failure(let error) = result {
                 inventoryAlert = .error("Export failed: \(error.localizedDescription)")
+            }
+        }
+        .fileExporter(
+            isPresented: $isExportingWantedList,
+            document: wantedListDocument,
+            contentType: .brickLinkWantedList,
+            defaultFilename: wantedListFilename
+        ) { result in
+            if case .failure(let error) = result {
+                inventoryAlert = .error("Wanted list export failed: \(error.localizedDescription)")
             }
         }
         .fileImporter(
@@ -230,6 +249,13 @@ struct ListSidebarView: View {
         exportDocument = InventorySnapshotDocument(snapshot: snapshot)
         exportFilename = InventorySnapshotDocument.defaultFilename()
         isExportingInventory = true
+    }
+
+    private func beginWantedListExport() {
+        let inventory = WantedListExporter.makeInventory(from: Array(lists))
+        wantedListDocument = WantedListDocument(inventory: inventory)
+        wantedListFilename = WantedListDocument.defaultFilename()
+        isExportingWantedList = true
     }
 
     private func beginInventoryImport() {

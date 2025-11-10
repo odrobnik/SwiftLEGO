@@ -15,13 +15,15 @@ let package = Package(
 		)
 	],
 	dependencies: [
-		.package(url: "https://github.com/odrobnik/HTMLParser.git", branch: "main")
+		.package(url: "https://github.com/odrobnik/HTMLParser.git", branch: "main"),
+		.package(url: "https://github.com/CoreOffice/XMLCoder.git", from: "0.17.1")
 	],
 	targets: [
 		.target(
 			name: "BrickCore",
 			dependencies: [
-				"HTMLParser"
+				"HTMLParser",
+				"XMLCoder"
 			],
 			path: "Sources/BrickCore"
 		),
