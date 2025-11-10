@@ -95,7 +95,7 @@ private extension WantedListExporter {
                 $0.inventorySection == .regular && $0.parentPart == nil
             }
 
-            let allPartsMissing = regularParts.isEmpty || regularParts.allSatisfy { !Self.hierarchyHasOwnedQuantity($0) }
+            let allPartsMissing = regularParts.isEmpty || regularParts.allSatisfy { !$0.hasOwnedQuantityInHierarchy() }
 
             if allPartsMissing {
                 addMinifigure(
@@ -155,10 +155,6 @@ private extension WantedListExporter {
             entries[key] = value
         }
 
-        private static func missingQuantity(for part: Part) -> Int {
-            max(0, part.quantityNeeded - part.quantityHave)
-        }
-
         private static func missingQuantity(for minifigure: Minifigure) -> Int {
             max(0, minifigure.quantityNeeded - minifigure.quantityHave)
         }
@@ -185,12 +181,17 @@ private extension WantedListExporter {
         private mutating func collectMissingEntries(for part: Part, setNumber: String) -> Bool {
             guard part.inventorySection == .regular else { return false }
 
+            let missing = part.missingQuantity
+            guard missing > 0 else { return false }
+
             let trimmedID = Self.trimmedIdentifier(part.partID)
             guard !trimmedID.isEmpty else { return false }
 
-            if part.subparts.isEmpty || !Self.hierarchyHasOwnedQuantity(part) {
-                let missing = Self.missingQuantity(for: part)
-                guard missing > 0 else { return false }
+            let shouldEmitSelf = part.subparts.isEmpty ||
+                !part.hasOwnedQuantityInHierarchy() ||
+                part.hasUniformMissingSubparts()
+
+            if shouldEmitSelf {
                 addPart(
                     itemID: trimmedID,
                     color: Self.resolvedColorID(for: part),
@@ -207,13 +208,6 @@ private extension WantedListExporter {
                 }
             }
             return didAdd
-        }
-
-        private static func hierarchyHasOwnedQuantity(_ part: Part) -> Bool {
-            if part.quantityHave > 0 {
-                return true
-            }
-            return part.subparts.contains { hierarchyHasOwnedQuantity($0) }
         }
     }
 }

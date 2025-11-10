@@ -247,6 +247,40 @@ struct WantedListExporterTests {
     }
 
     @Test @MainActor
+    func completedParentSkipsChildren() throws {
+        let list = CollectionList(name: "List")
+        let set = BrickSet(setNumber: "60152-1", name: "City Service")
+        list.sets = [set]
+        set.collection = list
+
+        let assembly = Part(
+            partID: "4592c02",
+            name: "Antenna 1 x 8 with Base",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 2,
+            quantityHave: 2,
+            set: set
+        )
+
+        let base = Part(
+            partID: "4592",
+            name: "Antenna Base",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 2,
+            quantityHave: 1,
+            parentPart: assembly
+        )
+
+        assembly.subparts = [base]
+        set.parts = [assembly]
+
+        let inventory = WantedListExporter.makeInventory(from: [list])
+        #expect(inventory.items.isEmpty)
+    }
+
+    @Test @MainActor
     func minifigurePartSubcomponentsAreExportedWhenPartiallyComplete() throws {
         let list = CollectionList(name: "List")
         let set = BrickSet(setNumber: "9999-1", name: "Set")

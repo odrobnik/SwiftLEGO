@@ -799,14 +799,19 @@ struct SetCollectionView: View {
         func walk(part: Part, root: Part, owningMinifigure: Minifigure?) {
             guard part.inventorySection != .extra else { return }
 
-            let hasProgress = hierarchyHasOwnedQuantity(part)
-            let shouldEmitSelf = part.subparts.isEmpty || !hasProgress
+            let isComplete = part.quantityNeeded > 0 && part.quantityHave >= part.quantityNeeded
+            guard !isComplete else { return }
+
+            let hasProgress = part.hasOwnedQuantityInHierarchy()
+            let shouldEmitSelf = part.subparts.isEmpty || !hasProgress || part.hasUniformMissingSubparts()
 
             if shouldEmitSelf {
                 visit(part, root, owningMinifigure)
             }
 
-            guard hasProgress else { return }
+            if !hasProgress || part.hasUniformMissingSubparts() {
+                return
+            }
 
             for child in part.subparts {
                 walk(part: child, root: root, owningMinifigure: owningMinifigure)
@@ -864,14 +869,7 @@ struct SetCollectionView: View {
     }
 
     private func missingCount(for part: Part) -> Int {
-        max(part.quantityNeeded - part.quantityHave, 0)
-    }
-
-    private func hierarchyHasOwnedQuantity(_ part: Part) -> Bool {
-        if part.quantityHave > 0 {
-            return true
-        }
-        return part.subparts.contains { hierarchyHasOwnedQuantity($0) }
+        part.missingQuantity
     }
 
     private func normalizeSetNumber(_ number: String) -> String {
