@@ -83,6 +83,11 @@ struct SetDetailView: View {
         }
     }
 
+    private var visibleMinifigureGroups: [MinifigureGroup] {
+        guard showMissingOnly else { return minifigureGroups }
+        return minifigureGroups.filter(\.hasMissing)
+    }
+
     private var partsByColor: [(color: String, parts: [Part])] {
         let grouped = Dictionary(grouping: filteredParts) { part in
             normalizeColorName(part.colorName)
@@ -137,7 +142,7 @@ struct SetDetailView: View {
     var body: some View {
         
         Group {
-            if partsByColor.isEmpty && minifigureGroups.isEmpty {
+            if partsByColor.isEmpty && visibleMinifigureGroups.isEmpty {
                 
                 EmptyStateView(icon: "shippingbox", title: "No parts", message: normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search.")
             } else {
@@ -162,7 +167,7 @@ struct SetDetailView: View {
                         }
                     }
                     
-                    if !minifigureGroups.isEmpty {
+                    if !visibleMinifigureGroups.isEmpty {
                         minifigureSection
                     }
                 }
@@ -246,7 +251,7 @@ struct SetDetailView: View {
 
     private var minifigureSection: some View {
         Section("Minifigures") {
-            ForEach(minifigureGroups) { group in
+            ForEach(visibleMinifigureGroups) { group in
                 if group.instanceCount <= 1, let instance = group.instances.first {
                     NavigationLink(value: instance) {
                         MinifigureInstanceRowView(
