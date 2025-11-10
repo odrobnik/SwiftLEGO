@@ -99,7 +99,7 @@ struct WantedListExporterTests {
         let item = try #require(inventory.items.first)
         #expect(item.itemType == .minifigure)
         #expect(item.itemID == "fig-001")
-        #expect(item.color == "0")
+        #expect(item.color == nil)
         #expect(item.minQuantity == 1)
         #expect(item.remarks == "7777 (1)")
     }
@@ -196,6 +196,54 @@ struct WantedListExporterTests {
         let ribbonItem = try #require(inventory.items.first { $0.itemID == "93083" })
         #expect(ribbonItem.minQuantity == 3)
         #expect(!inventory.items.contains { $0.itemID == "93082" })
+    }
+
+    @Test @MainActor
+    func partWithSubpartsWithoutProgressExportsParentOnly() throws {
+        let list = CollectionList(name: "List")
+        let set = BrickSet(setNumber: "5555-1", name: "Set")
+        list.sets = [set]
+        set.collection = list
+
+        let assembly = Part(
+            partID: "assembly",
+            name: "Assembly",
+            colorID: "11",
+            colorName: "Black",
+            quantityNeeded: 2,
+            quantityHave: 0,
+            set: set
+        )
+
+        let childA = Part(
+            partID: "childA",
+            name: "Child A",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 1,
+            quantityHave: 0,
+            parentPart: assembly
+        )
+
+        let childB = Part(
+            partID: "childB",
+            name: "Child B",
+            colorID: "5",
+            colorName: "Red",
+            quantityNeeded: 1,
+            quantityHave: 0,
+            parentPart: assembly
+        )
+
+        assembly.subparts = [childA, childB]
+        set.parts = [assembly]
+
+        let inventory = WantedListExporter.makeInventory(from: [list])
+
+        #expect(inventory.items.count == 1)
+        let assemblyItem = try #require(inventory.items.first)
+        #expect(assemblyItem.itemID == "assembly")
+        #expect(assemblyItem.minQuantity == 2)
     }
 
     @Test @MainActor

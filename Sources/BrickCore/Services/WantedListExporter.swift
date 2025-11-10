@@ -22,7 +22,7 @@ private extension WantedListExporter {
     struct AggregationKey: Hashable {
         let itemType: WantedListItem.ItemType
         let itemID: String
-        let color: String
+        let color: String?
     }
 
     struct AggregationValue {
@@ -69,7 +69,9 @@ private extension WantedListExporter {
                     if lhs.key.itemID != rhs.key.itemID {
                         return lhs.key.itemID.localizedStandardCompare(rhs.key.itemID) == .orderedAscending
                     }
-                    return lhs.key.color.localizedStandardCompare(rhs.key.color) == .orderedAscending
+                    let lhsColor = lhs.key.color ?? ""
+                    let rhsColor = rhs.key.color ?? ""
+                    return lhsColor.localizedStandardCompare(rhsColor) == .orderedAscending
                 }
                 .map { entry in
                     WantedListItem(
@@ -123,7 +125,7 @@ private extension WantedListExporter {
             addEntry(
                 itemType: .minifigure,
                 itemID: identifier,
-                color: "0",
+                color: nil,
                 quantity: quantity,
                 setNumber: setNumber
             )
@@ -132,7 +134,7 @@ private extension WantedListExporter {
         private mutating func addEntry(
             itemType: WantedListItem.ItemType,
             itemID: String,
-            color: String,
+            color: String?,
             quantity: Int,
             setNumber: String
         ) {
@@ -183,11 +185,14 @@ private extension WantedListExporter {
         private mutating func collectMissingEntries(for part: Part, setNumber: String) -> Bool {
             guard part.inventorySection == .regular else { return false }
 
-            if part.subparts.isEmpty {
+            let trimmedID = Self.trimmedIdentifier(part.partID)
+            guard !trimmedID.isEmpty else { return false }
+
+            if part.subparts.isEmpty || !Self.hierarchyHasOwnedQuantity(part) {
                 let missing = Self.missingQuantity(for: part)
                 guard missing > 0 else { return false }
                 addPart(
-                    itemID: Self.trimmedIdentifier(part.partID),
+                    itemID: trimmedID,
                     color: Self.resolvedColorID(for: part),
                     quantity: missing,
                     setNumber: setNumber
