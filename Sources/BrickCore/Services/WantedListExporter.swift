@@ -49,15 +49,8 @@ private extension WantedListExporter {
 
         mutating func collectMissingParts(from set: BrickSet) {
             let rootParts = set.parts.filter { $0.parentPart == nil }
-            for part in rootParts where part.inventorySection == .regular {
-                let missing = Self.missingQuantity(for: part)
-                guard missing > 0 else { continue }
-                addPart(
-                    itemID: Self.trimmedIdentifier(part.partID),
-                    color: Self.resolvedColorID(for: part),
-                    quantity: missing,
-                    setNumber: set.setNumber
-                )
+            for part in rootParts {
+                collectMissingEntries(for: part, setNumber: set.setNumber)
             }
         }
 
@@ -85,9 +78,7 @@ private extension WantedListExporter {
                         color: entry.key.color,
                         maxPrice: WantedListExporter.defaultMaxPrice,
                         minQuantity: entry.value.totalQuantity,
-                        condition: .new,
-                        remarks: entry.value.remarksDescription(),
-                        notify: .disabled
+                        remarks: entry.value.remarksDescription()
                     )
                 }
 
@@ -102,7 +93,7 @@ private extension WantedListExporter {
                 $0.inventorySection == .regular && $0.parentPart == nil
             }
 
-            let allPartsMissing = regularParts.isEmpty || regularParts.allSatisfy { $0.quantityHave == 0 }
+            let allPartsMissing = regularParts.isEmpty || regularParts.allSatisfy { !Self.hierarchyHasOwnedQuantity($0) }
 
             if allPartsMissing {
                 addMinifigure(
@@ -114,14 +105,7 @@ private extension WantedListExporter {
             }
 
             for part in regularParts {
-                let missing = Self.missingQuantity(for: part)
-                guard missing > 0 else { continue }
-                addPart(
-                    itemID: Self.trimmedIdentifier(part.partID),
-                    color: Self.resolvedColorID(for: part),
-                    quantity: missing,
-                    setNumber: set.setNumber
-                )
+                collectMissingEntries(for: part, setNumber: set.setNumber)
             }
         }
 
@@ -193,6 +177,38 @@ private extension WantedListExporter {
                 return trimmed
             }
             return String(trimmed[..<hyphenIndex])
+        }
+
+        @discardableResult
+        private mutating func collectMissingEntries(for part: Part, setNumber: String) -> Bool {
+            guard part.inventorySection == .regular else { return false }
+
+            if part.subparts.isEmpty {
+                let missing = Self.missingQuantity(for: part)
+                guard missing > 0 else { return false }
+                addPart(
+                    itemID: Self.trimmedIdentifier(part.partID),
+                    color: Self.resolvedColorID(for: part),
+                    quantity: missing,
+                    setNumber: setNumber
+                )
+                return true
+            }
+
+            var didAdd = false
+            for child in part.subparts {
+                if collectMissingEntries(for: child, setNumber: setNumber) {
+                    didAdd = true
+                }
+            }
+            return didAdd
+        }
+
+        private static func hierarchyHasOwnedQuantity(_ part: Part) -> Bool {
+            if part.quantityHave > 0 {
+                return true
+            }
+            return part.subparts.contains { hierarchyHasOwnedQuantity($0) }
         }
     }
 }

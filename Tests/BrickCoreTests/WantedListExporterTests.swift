@@ -146,4 +146,112 @@ struct WantedListExporterTests {
         #expect(item.minQuantity == 1)
         #expect(item.remarks == "8888 (1)")
     }
+
+    @Test @MainActor
+    func partWithSubpartsExportsMissingChildren() throws {
+        let list = CollectionList(name: "List")
+        let set = BrickSet(setNumber: "41314-1", name: "Friends Set")
+        list.sets = [set]
+        set.collection = list
+
+        let assembly = Part(
+            partID: "93082",
+            name: "Friends Accessories",
+            colorID: "11",
+            colorName: "Black",
+            quantityNeeded: 1,
+            quantityHave: 0,
+            set: set
+        )
+
+        let hairBrush = Part(
+            partID: "93081",
+            name: "Hair Brush",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 2,
+            quantityHave: 1,
+            parentPart: assembly
+        )
+
+        let ribbon = Part(
+            partID: "93083",
+            name: "Ribbon",
+            colorID: "5",
+            colorName: "Red",
+            quantityNeeded: 3,
+            quantityHave: 0,
+            parentPart: assembly
+        )
+
+        assembly.subparts = [hairBrush, ribbon]
+        set.parts = [assembly]
+
+        let inventory = WantedListExporter.makeInventory(from: [list])
+
+        #expect(inventory.items.count == 2)
+        let brushItem = try #require(inventory.items.first { $0.itemID == "93081" })
+        #expect(brushItem.minQuantity == 1)
+
+        let ribbonItem = try #require(inventory.items.first { $0.itemID == "93083" })
+        #expect(ribbonItem.minQuantity == 3)
+        #expect(!inventory.items.contains { $0.itemID == "93082" })
+    }
+
+    @Test @MainActor
+    func minifigurePartSubcomponentsAreExportedWhenPartiallyComplete() throws {
+        let list = CollectionList(name: "List")
+        let set = BrickSet(setNumber: "9999-1", name: "Set")
+        list.sets = [set]
+        set.collection = list
+
+        let minifigure = Minifigure(
+            identifier: "fig-010",
+            name: "Tester",
+            quantityNeeded: 1,
+            set: set
+        )
+
+        let helmet = Part(
+            partID: "helmet",
+            name: "Helmet",
+            colorID: "11",
+            colorName: "Black",
+            quantityNeeded: 1,
+            quantityHave: 0,
+            minifigure: minifigure
+        )
+
+        let visor = Part(
+            partID: "visor",
+            name: "Visor",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 1,
+            quantityHave: 1,
+            parentPart: helmet
+        )
+
+        let plume = Part(
+            partID: "plume",
+            name: "Plume",
+            colorID: "5",
+            colorName: "Red",
+            quantityNeeded: 1,
+            quantityHave: 0,
+            parentPart: helmet
+        )
+
+        helmet.subparts = [visor, plume]
+        minifigure.parts = [helmet]
+        set.minifigures = [minifigure]
+
+        let inventory = WantedListExporter.makeInventory(from: [list])
+
+        #expect(inventory.items.count == 1)
+        let plumeItem = try #require(inventory.items.first)
+        #expect(plumeItem.itemID == "plume")
+        #expect(plumeItem.minQuantity == 1)
+        #expect(plumeItem.remarks == "9999 (1)")
+    }
 }

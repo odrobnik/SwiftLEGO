@@ -22,23 +22,12 @@ public struct WantedListItem: Equatable, Codable {
         case minifigure = "M"
     }
 
-    public enum Condition: String, Codable {
-        case new = "N"
-    }
-
-    public enum NotificationState: String, Codable {
-        case enabled = "Y"
-        case disabled = "N"
-    }
-
     public var itemType: ItemType
     public var itemID: String
     public var color: String
     public var maxPrice: String
     public var minQuantity: Int
-    public var condition: Condition
     public var remarks: String
-    public var notify: NotificationState
 
     public init(
         itemType: ItemType,
@@ -46,18 +35,14 @@ public struct WantedListItem: Equatable, Codable {
         color: String,
         maxPrice: String,
         minQuantity: Int,
-        condition: Condition,
-        remarks: String,
-        notify: NotificationState
+        remarks: String
     ) {
         self.itemType = itemType
         self.itemID = itemID
         self.color = color
         self.maxPrice = maxPrice
         self.minQuantity = minQuantity
-        self.condition = condition
         self.remarks = remarks
-        self.notify = notify
     }
 
     enum CodingKeys: String, CodingKey {
@@ -66,8 +51,6 @@ public struct WantedListItem: Equatable, Codable {
         case color = "COLOR"
         case maxPrice = "MAXPRICE"
         case minQuantity = "MINQTY"
-        case condition = "CONDITION"
         case remarks = "REMARKS"
-        case notify = "NOTIFY"
     }
 }
