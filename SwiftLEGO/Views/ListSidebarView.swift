@@ -200,7 +200,7 @@ struct ListSidebarView: View {
         .alert(item: $inventoryAlert) { alert in
             Alert(
                 title: Text(alert.title),
-                message: Text(alert.message),
+                message: alert.message,
                 dismissButton: .default(Text("OK"))
             )
         }
@@ -306,7 +306,7 @@ struct ListSidebarView: View {
     }
 
     @MainActor
-    private func performImport(using snapshot: InventorySnapshot) async throws -> String {
+    private func performImport(using snapshot: InventorySnapshot) async throws -> Text {
         if snapshot.lists.isEmpty && snapshot.sets.isEmpty {
             throw InventoryImportError.emptySnapshot
         }
@@ -318,7 +318,7 @@ struct ListSidebarView: View {
         if snapshot.lists.isEmpty {
             let applyResult = snapshot.apply(to: existingLists)
             try modelContext.save()
-            return applyResult.summaryDescription
+            return Text(applyResult.summaryDescription)
         }
 
         let setProvider = InventoryImportSetProvider(modelContext: modelContext, service: brickLinkService)
@@ -362,22 +362,30 @@ struct ListSidebarView: View {
 
         try modelContext.save()
 
-        var messageComponents: [String] = []
+        var message: Text?
+        func appendLine(_ line: Text) {
+            if let existing = message {
+                message = existing + Text("\n") + line
+            } else {
+                message = line
+            }
+        }
+
         if !createdLists.isEmpty {
             let names = createdLists.map(\.name).joined(separator: ", ")
             let importedSummary: LocalizedStringResource = "Imported ^[\(createdLists.count) list](inflect: true) (\(names)) with ^[\(totalImportedSets) set](inflect: true)."
-            messageComponents.append(String(localized: importedSummary))
+            appendLine(Text(importedSummary))
         } else {
-            messageComponents.append(String(localized: "No lists were imported."))
+            appendLine(Text("No lists were imported."))
         }
 
         if !missingSetNumbers.isEmpty {
             let missing = missingSetNumbers.sorted().joined(separator: ", ")
             let missingSummary: LocalizedStringResource = "Skipped ^[\(missingSetNumbers.count) set](inflect: true) not found in your collection: \(missing)."
-            messageComponents.append(String(localized: missingSummary))
+            appendLine(Text(missingSummary))
         }
 
-        return messageComponents.joined(separator: "\n")
+        return message ?? Text("")
     }
 
     private func uniqueListName(for rawName: String, usedNames: inout Set<String>) -> String {
@@ -634,7 +642,7 @@ private struct InventoryAlert: Identifiable {
 
     let id = UUID()
     let kind: Kind
-    let message: String
+    let message: Text
 
     var title: String {
         switch kind {
@@ -645,12 +653,12 @@ private struct InventoryAlert: Identifiable {
         }
     }
 
-    static func success(_ message: String) -> InventoryAlert {
+    static func success(_ message: Text) -> InventoryAlert {
         InventoryAlert(kind: .success, message: message)
     }
 
     static func error(_ message: String) -> InventoryAlert {
-        InventoryAlert(kind: .error, message: message)
+        InventoryAlert(kind: .error, message: Text(verbatim: message))
     }
 }
 

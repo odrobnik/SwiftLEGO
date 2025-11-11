@@ -78,3 +78,9 @@ Getting Started
 4. Export/import snapshots from the collection screen to sync owned quantities across installs.
 
 For BrickCore-only work, you can develop and test with Swift Package Manager by opening the repo folder in Xcode or running `swift test` from the command line.
+
+
+Snapshot Backups
+----------------
+
+SwiftLEGO relies on SwiftData for persistence, and schema tweaks can occasionally require deleting the on-device store during development. To avoid losing progress, make a habit of exporting an inventory snapshot (`.lego` file) after you log new sets or update “have” quantities. If a future schema change forces you to uninstall the app or reset the simulator, you can reinstall, import the snapshot from Files, and continue exactly where you left off.
