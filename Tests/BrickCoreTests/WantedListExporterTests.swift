@@ -421,4 +421,43 @@ struct WantedListExporterTests {
         let item = try #require(inventory.items.first)
         #expect(item.itemID == "3001")
     }
+
+    @Test @MainActor
+    func stickeredCounterpartsArePreferred() throws {
+        let list = CollectionList(name: "List")
+        let set = BrickSet(setNumber: "75946-1", name: "Hungarian Horntail")
+        list.sets = [set]
+        set.collection = list
+
+        let baseWing = Part(
+            partID: "60616",
+            name: "Dragon Wing",
+            colorID: "85",
+            colorName: "Dark Bluish Gray",
+            quantityNeeded: 4,
+            quantityHave: 0,
+            set: set
+        )
+
+        let stickeredWing = Part(
+            partID: "60616pb016",
+            name: "Sticker for Dragon Wing",
+            colorID: "85",
+            colorName: "Dark Bluish Gray",
+            quantityNeeded: 2,
+            quantityHave: 0,
+            inventorySection: .counterpart,
+            set: set
+        )
+
+        set.parts = [baseWing, stickeredWing]
+
+        let inventory = WantedListExporter.makeInventory(from: [list])
+
+        let stickerItem = try #require(inventory.items.first { $0.itemID == "60616pb016" })
+        #expect(stickerItem.minQuantity == 2)
+
+        let baseItem = try #require(inventory.items.first { $0.itemID == "60616" })
+        #expect(baseItem.minQuantity == 2)
+    }
 }

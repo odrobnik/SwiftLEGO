@@ -38,6 +38,11 @@ private extension WantedListExporter {
         let color: String?
     }
 
+    struct StickerAllocationKey: Hashable {
+        let partID: String
+        let color: String
+    }
+
     struct AggregationValue {
         var totalQuantity: Int = 0
         var perSetQuantities: [String: Int] = [:]
@@ -61,9 +66,26 @@ private extension WantedListExporter {
         private var entries: [AggregationKey: AggregationValue] = [:]
 
         mutating func collectMissingParts(from set: BrickSet) {
-            let rootParts = set.parts.filter { $0.parentPart == nil }
+            var stickerAllocations = collectStickeredCounterparts(from: set)
+            let rootParts = set.parts.filter { $0.parentPart == nil && $0.inventorySection == .regular }
             for part in rootParts {
-                collectMissingEntries(for: part, setNumber: set.setNumber)
+                var overrideMissing: Int?
+                if let trimmedID = Self.nonEmptyIdentifier(from: part.partID) {
+                    let colorID = Self.resolvedColorID(for: part)
+                    let key = StickerAllocationKey(partID: trimmedID, color: colorID)
+                    if let allocation = stickerAllocations[key], allocation > 0 {
+                        let baseMissing = part.missingQuantity
+                        let adjusted = max(0, baseMissing - allocation)
+                        let consumed = baseMissing - adjusted
+                        stickerAllocations[key] = max(0, allocation - consumed)
+                        overrideMissing = adjusted
+                    }
+                }
+                collectMissingEntries(
+                    for: part,
+                    setNumber: set.setNumber,
+                    overrideMissingQuantity: overrideMissing
+                )
             }
         }
 
@@ -120,7 +142,11 @@ private extension WantedListExporter {
             }
 
             for part in regularParts {
-                collectMissingEntries(for: part, setNumber: set.setNumber)
+                collectMissingEntries(
+                    for: part,
+                    setNumber: set.setNumber,
+                    overrideMissingQuantity: nil
+                )
             }
         }
 
@@ -191,10 +217,14 @@ private extension WantedListExporter {
         }
 
         @discardableResult
-        private mutating func collectMissingEntries(for part: Part, setNumber: String) -> Bool {
+        private mutating func collectMissingEntries(
+            for part: Part,
+            setNumber: String,
+            overrideMissingQuantity: Int? = nil
+        ) -> Bool {
             guard part.inventorySection == .regular else { return false }
 
-            let missing = part.missingQuantity
+            let missing = overrideMissingQuantity ?? part.missingQuantity
             guard missing > 0 else { return false }
 
             let trimmedID = Self.trimmedIdentifier(part.partID)
@@ -216,11 +246,63 @@ private extension WantedListExporter {
 
             var didAdd = false
             for child in part.subparts {
-                if collectMissingEntries(for: child, setNumber: setNumber) {
+                if collectMissingEntries(for: child, setNumber: setNumber, overrideMissingQuantity: nil) {
                     didAdd = true
                 }
             }
             return didAdd
+        }
+
+        private mutating func collectStickeredCounterparts(from set: BrickSet) -> [StickerAllocationKey: Int] {
+            var allocations: [StickerAllocationKey: Int] = [:]
+            let counterparts = set.parts.filter { $0.parentPart == nil && $0.inventorySection == .counterpart }
+
+            for part in counterparts {
+                guard Self.isStickeredCounterpart(part),
+                      let stickerID = Self.nonEmptyIdentifier(from: part.partID),
+                      let baseID = Self.basePartIdentifier(from: part.partID) else {
+                    continue
+                }
+
+                let missing = part.missingQuantity
+                guard missing > 0 else { continue }
+
+                let colorID = Self.resolvedColorID(for: part)
+
+                addPart(
+                    itemID: stickerID,
+                    color: colorID,
+                    quantity: missing,
+                    setNumber: set.setNumber
+                )
+
+                let key = StickerAllocationKey(partID: baseID, color: colorID)
+                allocations[key, default: 0] += missing
+            }
+
+            return allocations
+        }
+
+        private static func isStickeredCounterpart(_ part: Part) -> Bool {
+            guard part.inventorySection == .counterpart else { return false }
+            let name = part.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard name.localizedCaseInsensitiveContains("sticker") else { return false }
+            return basePartIdentifier(from: part.partID) != nil
+        }
+
+        private static func basePartIdentifier(from stickeredID: String) -> String? {
+            let trimmed = trimmedIdentifier(stickeredID)
+            guard !trimmed.isEmpty else { return nil }
+            let lower = trimmed.lowercased()
+            guard let range = lower.range(of: "pb") else { return nil }
+            let base = trimmed[..<range.lowerBound]
+            let sanitized = base.trimmingCharacters(in: .whitespacesAndNewlines)
+            return sanitized.isEmpty ? nil : sanitized
+        }
+
+        private static func nonEmptyIdentifier(from raw: String) -> String? {
+            let trimmed = trimmedIdentifier(raw)
+            return trimmed.isEmpty ? nil : trimmed
         }
     }
 }
