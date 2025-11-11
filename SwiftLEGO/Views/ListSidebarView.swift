@@ -175,16 +175,15 @@ struct ListSidebarView: View {
                 inventoryAlert = .error("Export failed: \(error.localizedDescription)")
             }
         }
-        .fileExporter(
-            isPresented: $isExportingWantedList,
-            document: wantedListDocument,
-            contentType: .brickLinkWantedList,
-            defaultFilename: wantedListFilename
-        ) { result in
-            if case .failure(let error) = result {
+        .background(
+            WantedListExportAttachment(
+                isExporting: $isExportingWantedList,
+                document: wantedListDocument,
+                filename: wantedListFilename
+            ) { error in
                 inventoryAlert = .error("Wanted list export failed: \(error.localizedDescription)")
             }
-        }
+        )
         .fileImporter(
             isPresented: $isImportingInventory,
             allowedContentTypes: [.legoInventory, .json]
@@ -698,6 +697,27 @@ private struct InventoryAlert: Identifiable {
 
     static func error(_ message: String) -> InventoryAlert {
         InventoryAlert(kind: .error, message: message)
+    }
+}
+
+private struct WantedListExportAttachment: View {
+    @Binding var isExporting: Bool
+    var document: WantedListDocument
+    var filename: String
+    var onFailure: (Error) -> Void
+
+    var body: some View {
+        EmptyView()
+            .fileExporter(
+                isPresented: $isExporting,
+                document: document,
+                contentType: .brickLinkWantedList,
+                defaultFilename: filename
+            ) { result in
+                if case .failure(let error) = result {
+                    onFailure(error)
+                }
+            }
     }
 }
 
