@@ -11,12 +11,7 @@ struct ListSidebarView: View {
     @State private var editorState: EditorState?
     @State private var expandedCategoryIDs: Set<String> = []
     @State private var setBeingEdited: BrickSet?
-    @State private var exportDocument = InventorySnapshotDocument(snapshot: .empty)
-    @State private var exportFilename = InventorySnapshotDocument.defaultFilename()
-    @State private var isExportingInventory = false
-    @State private var wantedListDocument = WantedListDocument(inventory: .empty)
-    @State private var wantedListFilename = WantedListDocument.defaultFilename()
-    @State private var isExportingWantedList = false
+    @State private var exportConfiguration = ExportConfiguration()
     @State private var isImportingInventory = false
     @State private var inventoryAlert: InventoryAlert?
     @State private var importingListIDs: Set<PersistentIdentifier> = []
@@ -114,18 +109,18 @@ struct ListSidebarView: View {
                     Label("Add List", systemImage: "plus")
                 }
             }
-            ToolbarItem(placement: .secondaryAction) {
-                Menu {
-                    Button {
-                        beginInventoryImport()
-                    } label: {
-                        Label("Import Lists", systemImage: "square.and.arrow.down")
-                    }
+            ToolbarItemGroup(placement: .secondaryAction) {
+                Button {
+                    beginInventoryImport()
+                } label: {
+                    Label("Import Collection", systemImage: "square.and.arrow.down")
+                }
 
+                Menu {
                     Button {
                         beginInventoryExport()
                     } label: {
-                        Label("Export Lists", systemImage: "square.and.arrow.up")
+                        Label("Export Collection", systemImage: "square.and.arrow.up")
                     }
 
                     Button {
@@ -134,7 +129,7 @@ struct ListSidebarView: View {
                         Label("Export Wanted List", systemImage: "square.and.arrow.up.on.square")
                     }
                 } label: {
-                    Label("Inventory Actions", systemImage: "shippingbox")
+                    Label("Export", systemImage: "shippingbox")
                 }
             }
         }
@@ -167,24 +162,15 @@ struct ListSidebarView: View {
             }
         }
         .fileExporter(
-            isPresented: $isExportingInventory,
-            document: exportDocument,
-            contentType: .legoInventory,
-            defaultFilename: exportFilename
+            isPresented: $exportConfiguration.isPresented,
+            document: exportConfiguration.document,
+            contentType: exportConfiguration.contentType,
+            defaultFilename: exportConfiguration.filename
         ) { result in
             if case .failure(let error) = result {
-                inventoryAlert = .error("Export failed: \(error.localizedDescription)")
+                inventoryAlert = .error("\(exportConfiguration.failurePrefix): \(error.localizedDescription)")
             }
         }
-        .background(
-            WantedListExportAttachment(
-                isExporting: $isExportingWantedList,
-                document: wantedListDocument,
-                filename: wantedListFilename
-            ) { error in
-                inventoryAlert = .error("Wanted list export failed: \(error.localizedDescription)")
-            }
-        )
         .fileImporter(
             isPresented: $isImportingInventory,
             allowedContentTypes: [.legoInventory, .json]
@@ -246,16 +232,24 @@ struct ListSidebarView: View {
 
     private func beginInventoryExport() {
         let snapshot = InventorySnapshot.make(from: Array(lists))
-        exportDocument = InventorySnapshotDocument(snapshot: snapshot)
-        exportFilename = InventorySnapshotDocument.defaultFilename()
-        isExportingInventory = true
+        let document = InventorySnapshotDocument(snapshot: snapshot)
+        exportConfiguration.present(
+            document: ExportDocumentEnvelope(document),
+            contentType: .legoInventory,
+            filename: InventorySnapshotDocument.defaultFilename(),
+            failurePrefix: "Export failed"
+        )
     }
 
     private func beginWantedListExport() {
         let inventory = WantedListExporter.makeInventory(from: Array(lists))
-        wantedListDocument = WantedListDocument(inventory: inventory)
-        wantedListFilename = WantedListDocument.defaultFilename()
-        isExportingWantedList = true
+        let document = WantedListDocument(inventory: inventory)
+        exportConfiguration.present(
+            document: ExportDocumentEnvelope(document),
+            contentType: .brickLinkWantedList,
+            filename: WantedListDocument.defaultFilename(),
+            failurePrefix: "Wanted list export failed"
+        )
     }
 
     private func beginInventoryImport() {
@@ -662,24 +656,44 @@ private struct InventoryAlert: Identifiable {
     }
 }
 
-private struct WantedListExportAttachment: View {
-    @Binding var isExporting: Bool
-    var document: WantedListDocument
-    var filename: String
-    var onFailure: (Error) -> Void
+private struct ExportConfiguration {
+    var isPresented = false
+    var document: ExportDocumentEnvelope = ExportDocumentEnvelope(InventorySnapshotDocument(snapshot: .empty))
+    var contentType: UTType = .legoInventory
+    var filename: String = InventorySnapshotDocument.defaultFilename()
+    var failurePrefix: String = "Export failed"
 
-    var body: some View {
-        EmptyView()
-            .fileExporter(
-                isPresented: $isExporting,
-                document: document,
-                contentType: .brickLinkWantedList,
-                defaultFilename: filename
-            ) { result in
-                if case .failure(let error) = result {
-                    onFailure(error)
-                }
-            }
+    mutating func present(
+        document: ExportDocumentEnvelope,
+        contentType: UTType,
+        filename: String,
+        failurePrefix: String
+    ) {
+        self.document = document
+        self.contentType = contentType
+        self.filename = filename
+        self.failurePrefix = failurePrefix
+        isPresented = true
+    }
+}
+
+private struct ExportDocumentEnvelope: FileDocument {
+    static var readableContentTypes: [UTType] { [.legoInventory, .brickLinkWantedList] }
+    private let writer: (WriteConfiguration) throws -> FileWrapper
+
+    init(_ document: some FileDocument) {
+        var storedDocument = document
+        self.writer = { configuration in
+            try storedDocument.fileWrapper(configuration: configuration)
+        }
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        throw CocoaError(.featureUnsupported)
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        try writer(configuration)
     }
 }
 
