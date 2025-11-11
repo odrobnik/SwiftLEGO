@@ -365,22 +365,16 @@ struct ListSidebarView: View {
         var messageComponents: [String] = []
         if !createdLists.isEmpty {
             let names = createdLists.map(\.name).joined(separator: ", ")
-            messageComponents.append(
-                String(
-                    localized: "Imported ^[\(createdLists.count) list](inflect: true) (\(names)) with ^[\(totalImportedSets) set](inflect: true)."
-                )
-            )
+            let importedSummary: LocalizedStringResource = "Imported ^[\(createdLists.count) list](inflect: true) (\(names)) with ^[\(totalImportedSets) set](inflect: true)."
+            messageComponents.append(String(localized: importedSummary))
         } else {
             messageComponents.append(String(localized: "No lists were imported."))
         }
 
         if !missingSetNumbers.isEmpty {
             let missing = missingSetNumbers.sorted().joined(separator: ", ")
-            messageComponents.append(
-                String(
-                    localized: "Skipped ^[\(missingSetNumbers.count) set](inflect: true) not found in your collection: \(missing)."
-                )
-            )
+            let missingSummary: LocalizedStringResource = "Skipped ^[\(missingSetNumbers.count) set](inflect: true) not found in your collection: \(missing)."
+            messageComponents.append(String(localized: missingSummary))
         }
 
         return messageComponents.joined(separator: "\n")
