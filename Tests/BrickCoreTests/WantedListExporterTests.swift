@@ -383,4 +383,42 @@ struct WantedListExporterTests {
         #expect(plumeItem.minQuantity == 1)
         #expect(plumeItem.remarks == "9999 (1)")
     }
+
+    @Test @MainActor
+    func excludedSetsAreSkipped() throws {
+        let list = CollectionList(name: "Skip")
+        let included = BrickSet(setNumber: "1000-1", name: "Include")
+        let excluded = BrickSet(setNumber: "2000-1", name: "Exclude", excludeFromWantedList: true)
+
+        let partIncluded = Part(
+            partID: "3001",
+            name: "Brick 2 x 4",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 2,
+            quantityHave: 0,
+            set: included
+        )
+
+        let partExcluded = Part(
+            partID: "3002",
+            name: "Brick 2 x 3",
+            colorID: "2",
+            colorName: "Tan",
+            quantityNeeded: 2,
+            quantityHave: 0,
+            set: excluded
+        )
+
+        included.parts = [partIncluded]
+        excluded.parts = [partExcluded]
+        list.sets = [included, excluded]
+        included.collection = list
+        excluded.collection = list
+
+        let inventory = WantedListExporter.makeInventory(from: [list])
+        #expect(inventory.items.count == 1)
+        let item = try #require(inventory.items.first)
+        #expect(item.itemID == "3001")
+    }
 }

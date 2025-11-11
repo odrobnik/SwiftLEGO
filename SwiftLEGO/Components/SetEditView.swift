@@ -2,15 +2,17 @@ import SwiftUI
 import SwiftData
 import BrickCore
 
-struct RenameSetView: View {
+struct SetEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var name: String
+    @State private var excludeFromWantedList: Bool
     var set: BrickSet
 
     init(set: BrickSet) {
         self.set = set
         _name = State(initialValue: set.name)
+        _excludeFromWantedList = State(initialValue: set.excludeFromWantedList)
     }
 
     var body: some View {
@@ -21,8 +23,17 @@ struct RenameSetView: View {
                         .submitLabel(.done)
                         .onSubmit(save)
                 }
+
+                Section("Wanted List") {
+                    Toggle("Exclude from wanted exports", isOn: $excludeFromWantedList)
+                        .toggleStyle(.switch)
+                        .accessibilityLabel("Exclude set from wanted lists")
+                    Text("Sets marked as excluded will never appear in wanted list exports.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .navigationTitle("Rename Set")
+            .navigationTitle("Edit Set")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", role: .cancel) {
@@ -45,6 +56,7 @@ struct RenameSetView: View {
     private func save() {
         guard isValid else { return }
         set.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        set.excludeFromWantedList = excludeFromWantedList
         try? modelContext.save()
         dismiss()
     }
@@ -56,6 +68,6 @@ struct RenameSetView: View {
         .fetch(FetchDescriptor<BrickSet>())
         .first!
 
-    return RenameSetView(set: set)
+    return SetEditView(set: set)
         .modelContainer(container)
 }

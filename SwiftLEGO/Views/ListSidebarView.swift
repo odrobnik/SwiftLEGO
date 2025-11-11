@@ -10,7 +10,7 @@ struct ListSidebarView: View {
     @Binding var selectedCategoryPath: [String]?
     @State private var editorState: EditorState?
     @State private var expandedCategoryIDs: Set<String> = []
-    @State private var setBeingRenamed: BrickSet?
+    @State private var setBeingEdited: BrickSet?
     @State private var exportDocument = InventorySnapshotDocument(snapshot: .empty)
     @State private var exportFilename = InventorySnapshotDocument.defaultFilename()
     @State private var isExportingInventory = false
@@ -157,8 +157,8 @@ struct ListSidebarView: View {
                 onDelete: { list in delete(list) }
             )
         }
-        .sheet(item: $setBeingRenamed) { set in
-            RenameSetView(set: set)
+        .sheet(item: $setBeingEdited) { set in
+            SetEditView(set: set)
         }
         .onChange(of: selectedCategoryPath) { _, newValue in
             if let path = newValue {

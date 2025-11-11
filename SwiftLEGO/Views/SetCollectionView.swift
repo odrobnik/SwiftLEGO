@@ -9,7 +9,7 @@ struct SetCollectionView: View {
     private let brickLinkService = BrickLinkService()
     @State private var showingAddSetSheet = false
     @State private var showingBulkAddSheet = false
-    @State private var setBeingRenamed: BrickSet?
+    @State private var setBeingEdited: BrickSet?
     @State private var searchScope: SearchScope = .sets
     @State private var effectiveSearchText: String = ""
     @State private var labelPrintTarget: BrickSet?
@@ -155,8 +155,8 @@ struct SetCollectionView: View {
                 }
             }
         }
-        .sheet(item: $setBeingRenamed) { set in
-            RenameSetView(set: set)
+        .sheet(item: $setBeingEdited) { set in
+            SetEditView(set: set)
         }
         .sheet(item: $labelPrintTarget) { set in
             LabelPrintSheet(brickSet: set)
@@ -225,8 +225,8 @@ struct SetCollectionView: View {
                                         Button("Print Label…", systemImage: "printer") {
                                             labelPrintTarget = set
                                         }
-                                        Button("Rename", systemImage: "pencil") {
-                                            setBeingRenamed = set
+                                        Button("Edit", systemImage: "slider.horizontal.3") {
+                                            setBeingEdited = set
                                         }
                                         Button(role: .destructive) {
                                             delete(set)
@@ -235,8 +235,8 @@ struct SetCollectionView: View {
                                         }
                                     }
                                     .swipeActions {
-                                        Button("Rename") {
-                                            setBeingRenamed = set
+                                        Button("Edit") {
+                                            setBeingEdited = set
                                         }
                                         .tint(.blue)
 
@@ -320,8 +320,8 @@ struct SetCollectionView: View {
                                 Button("Print Label…", systemImage: "printer") {
                                     labelPrintTarget = set
                                 }
-                                Button("Rename", systemImage: "pencil") {
-                                    setBeingRenamed = set
+                                Button("Edit", systemImage: "slider.horizontal.3") {
+                                    setBeingEdited = set
                                 }
                                 Button(role: .destructive) {
                                     delete(set)

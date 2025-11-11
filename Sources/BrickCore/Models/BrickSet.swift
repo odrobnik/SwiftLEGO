@@ -11,6 +11,7 @@ public final class BrickSet: Identifiable {
     public var collection: CollectionList?
     @Relationship(deleteRule: .cascade, inverse: \SetCategory.set) public var categories: [SetCategory]
     @Relationship(deleteRule: .cascade, inverse: \Minifigure.set) public var minifigures: [Minifigure]
+    public var excludeFromWantedList: Bool
 
     public init(
         id: UUID = UUID(),
@@ -20,7 +21,8 @@ public final class BrickSet: Identifiable {
         parts: [Part] = [],
         collection: CollectionList? = nil,
         categories: [SetCategory] = [],
-        minifigures: [Minifigure] = []
+        minifigures: [Minifigure] = [],
+        excludeFromWantedList: Bool = false
     ) {
         self.id = id
         self.setNumber = setNumber
@@ -30,6 +32,7 @@ public final class BrickSet: Identifiable {
         self.collection = collection
         self.categories = categories
         self.minifigures = minifigures
+        self.excludeFromWantedList = excludeFromWantedList
     }
 }
 

@@ -9,6 +9,7 @@ public enum WantedListExporter {
 
         for list in lists {
             for set in list.sets {
+                guard !set.excludeFromWantedList else { continue }
                 aggregator.collectMissingParts(from: set)
                 aggregator.collectMissingMinifigures(from: set)
             }
@@ -21,7 +22,7 @@ public enum WantedListExporter {
     public static func makeInventory(from sets: [BrickSet]) -> WantedListInventory {
         var aggregator = Aggregator()
 
-        for set in sets {
+        for set in sets where !set.excludeFromWantedList {
             aggregator.collectMissingParts(from: set)
             aggregator.collectMissingMinifigures(from: set)
         }

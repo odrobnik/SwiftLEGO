@@ -8,7 +8,7 @@ struct CategorySetsView: View {
     let sets: [BrickSet]
 
     private let brickLinkService = BrickLinkService()
-    @State private var setBeingRenamed: BrickSet?
+    @State private var setBeingEdited: BrickSet?
     @State private var labelPrintTarget: BrickSet?
     @State private var refreshingSetIDs: Set<PersistentIdentifier> = []
     @State private var activeAlert: ViewAlert?
@@ -95,8 +95,8 @@ struct CategorySetsView: View {
                                         Button("Print Label…", systemImage: "printer") {
                                             labelPrintTarget = set
                                         }
-                                        Button("Rename", systemImage: "pencil") {
-                                            setBeingRenamed = set
+                                        Button("Edit", systemImage: "slider.horizontal.3") {
+                                            setBeingEdited = set
                                         }
                                         Button(role: .destructive) {
                                             delete(set)
@@ -115,8 +115,8 @@ struct CategorySetsView: View {
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle(title)
-        .sheet(item: $setBeingRenamed) { set in
-            RenameSetView(set: set)
+        .sheet(item: $setBeingEdited) { set in
+            SetEditView(set: set)
         }
         .sheet(item: $labelPrintTarget) { set in
             LabelPrintSheet(brickSet: set)
