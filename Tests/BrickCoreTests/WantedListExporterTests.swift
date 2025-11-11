@@ -281,6 +281,53 @@ struct WantedListExporterTests {
     }
 
     @Test @MainActor
+    func uniformSubpartsExportParentEvenWhenPartiallyComplete() throws {
+        let list = CollectionList(name: "City")
+        let set = BrickSet(setNumber: "60152-1", name: "Sweeper")
+        list.sets = [set]
+        set.collection = list
+
+        let antenna = Part(
+            partID: "4592c02",
+            name: "Antenna 1 x 8 with Base",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 4,
+            quantityHave: 1,
+            set: set
+        )
+
+        let base = Part(
+            partID: "4592",
+            name: "Antenna Base",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 4,
+            quantityHave: 1,
+            parentPart: antenna
+        )
+
+        let lever = Part(
+            partID: "73587",
+            name: "Lever",
+            colorID: "1",
+            colorName: "White",
+            quantityNeeded: 4,
+            quantityHave: 1,
+            parentPart: antenna
+        )
+
+        antenna.subparts = [base, lever]
+        set.parts = [antenna]
+
+        let inventory = WantedListExporter.makeInventory(from: [list])
+        #expect(inventory.items.count == 1)
+        let item = try #require(inventory.items.first)
+        #expect(item.itemID == "4592c02")
+        #expect(item.minQuantity == 3)
+    }
+
+    @Test @MainActor
     func minifigurePartSubcomponentsAreExportedWhenPartiallyComplete() throws {
         let list = CollectionList(name: "List")
         let set = BrickSet(setNumber: "9999-1", name: "Set")

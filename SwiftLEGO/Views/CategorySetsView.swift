@@ -11,14 +11,18 @@ struct CategorySetsView: View {
     @State private var setBeingRenamed: BrickSet?
     @State private var labelPrintTarget: BrickSet?
     @State private var refreshingSetIDs: Set<PersistentIdentifier> = []
-    @State private var refreshError: RefreshAlert?
+    @State private var activeAlert: ViewAlert?
+    @State private var wantedListDocument = WantedListDocument(inventory: .empty)
+    @State private var wantedListFilename = WantedListDocument.defaultFilename()
+    @State private var isExportingWantedList = false
 
     private let adaptiveColumns = [
         GridItem(.adaptive(minimum: 220), spacing: 16)
     ]
 
-    private struct RefreshAlert: Identifiable {
+    private struct ViewAlert: Identifiable {
         let id = UUID()
+        let title: String
         let message: String
     }
 
@@ -117,12 +121,35 @@ struct CategorySetsView: View {
         .sheet(item: $labelPrintTarget) { set in
             LabelPrintSheet(brickSet: set)
         }
-        .alert(item: $refreshError) { alert in
+        .alert(item: $activeAlert) { alert in
             Alert(
-                title: Text("Refresh Failed"),
+                title: Text(alert.title),
                 message: Text(alert.message),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .fileExporter(
+            isPresented: $isExportingWantedList,
+            document: wantedListDocument,
+            contentType: .brickLinkWantedList,
+            defaultFilename: wantedListFilename
+        ) { result in
+            if case .failure(let error) = result {
+                activeAlert = ViewAlert(
+                    title: "Export Failed",
+                    message: "Wanted list export failed: \(error.localizedDescription)"
+                )
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    beginWantedListExport()
+                } label: {
+                    Label("Export Wanted List", systemImage: "square.and.arrow.up.on.square")
+                }
+                .disabled(sets.isEmpty)
+            }
         }
     }
 
@@ -140,7 +167,10 @@ struct CategorySetsView: View {
                 )
             } catch {
                 await MainActor.run {
-                    refreshError = RefreshAlert(message: refreshErrorMessage(for: error))
+                    activeAlert = ViewAlert(
+                        title: "Refresh Failed",
+                        message: refreshErrorMessage(for: error)
+                    )
                 }
             }
 
@@ -161,6 +191,14 @@ struct CategorySetsView: View {
     private func delete(_ set: BrickSet) {
         modelContext.delete(set)
         try? modelContext.save()
+    }
+
+    private func beginWantedListExport() {
+        guard !sets.isEmpty else { return }
+        let inventory = WantedListExporter.makeInventory(from: sets)
+        wantedListDocument = WantedListDocument(inventory: inventory)
+        wantedListFilename = WantedListDocument.defaultFilename()
+        isExportingWantedList = true
     }
 
     private func remainingPath(for set: BrickSet) -> [String] {

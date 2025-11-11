@@ -16,6 +16,18 @@ public enum WantedListExporter {
 
         return aggregator.makeInventory()
     }
+
+    @MainActor
+    public static func makeInventory(from sets: [BrickSet]) -> WantedListInventory {
+        var aggregator = Aggregator()
+
+        for set in sets {
+            aggregator.collectMissingParts(from: set)
+            aggregator.collectMissingMinifigures(from: set)
+        }
+
+        return aggregator.makeInventory()
+    }
 }
 
 private extension WantedListExporter {
