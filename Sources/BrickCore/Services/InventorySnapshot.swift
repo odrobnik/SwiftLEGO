@@ -533,6 +533,32 @@ extension InventorySnapshot {
                 )
             }
         }
+
+        updatedPartCount += ensureSubpartsCompleteIfNeeded(for: part)
+    }
+
+    private func ensureSubpartsCompleteIfNeeded(for part: Part) -> Int {
+        guard !part.subparts.isEmpty else { return 0 }
+        guard part.quantityNeeded > 0,
+              part.quantityHave >= part.quantityNeeded else {
+            return 0
+        }
+        return markSubpartsComplete(part.subparts)
+    }
+
+    private func markSubpartsComplete(_ subparts: [Part]) -> Int {
+        var updates = 0
+        for subpart in subparts {
+            if subpart.quantityHave != subpart.quantityNeeded {
+                subpart.quantityHave = subpart.quantityNeeded
+                updates += 1
+            }
+
+            if !subpart.subparts.isEmpty {
+                updates += markSubpartsComplete(subpart.subparts)
+            }
+        }
+        return updates
     }
 
     private func makePartLookup(from parts: [Part]) -> [String: [Part]] {
