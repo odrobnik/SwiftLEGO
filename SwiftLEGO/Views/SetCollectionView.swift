@@ -20,7 +20,6 @@ struct SetCollectionView: View {
     @State private var wantedListDocument = WantedListDocument(inventory: .empty)
     @State private var wantedListFilename = WantedListDocument.defaultFilename()
     @State private var isExportingWantedList = false
-
     init(list: CollectionList) {
         self._list = Bindable(list)
     }

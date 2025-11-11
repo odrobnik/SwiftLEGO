@@ -39,10 +39,19 @@ struct SetCardView: View {
             .clipped()
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(brickSet.setNumber)
-                    .font(.caption.weight(.semibold))
-                    .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(brickSet.setNumber)
+                        .font(.caption.weight(.semibold))
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondary)
+
+                    if let completionText {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                        completionText
+                    }
+                }
 
                 Text(brickSet.name)
                     .font(.headline)
@@ -54,8 +63,42 @@ struct SetCardView: View {
         .background {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color(.systemBackground))
-                .shadow(color: Color.primary.opacity(0.15), radius: 14, x: 0, y: 10)
+            .shadow(color: Color.primary.opacity(0.15), radius: 14, x: 0, y: 10)
         }
+    }
+
+    private var completionText: Text? {
+        guard let percentage = completionPercentage else { return nil }
+        let formatted = percentage.formatted(.percent.precision(.fractionLength(0)))
+        return Text(formatted)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private var completionPercentage: Double? {
+        let totals = completionTotals()
+        guard totals.needed > 0 else { return nil }
+        return min(1, max(0, Double(totals.have) / Double(totals.needed)))
+    }
+
+    private func completionTotals() -> (have: Int, needed: Int) {
+        var totals = (have: 0, needed: 0)
+
+        func accumulate(have: Int, needed: Int) {
+            guard needed > 0 else { return }
+            totals.needed += needed
+            totals.have += min(max(have, 0), needed)
+        }
+
+        for part in brickSet.parts where part.parentPart == nil && part.inventorySection == .regular {
+            accumulate(have: part.quantityHave, needed: part.quantityNeeded)
+        }
+
+        for figure in brickSet.minifigures {
+            accumulate(have: figure.quantityHave, needed: figure.quantityNeeded)
+        }
+
+        return totals
     }
 }
 
