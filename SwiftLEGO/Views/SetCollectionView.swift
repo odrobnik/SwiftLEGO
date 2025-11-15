@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import BrickCore
+import Foundation
 
 struct SetCollectionView: View {
     @Environment(\.modelContext) private var modelContext
@@ -539,7 +540,7 @@ struct SetCollectionView: View {
     }
 
     private var normalizedSearchText: String {
-        trimmedSearchText.lowercased()
+        normalized(trimmedSearchText)
     }
 
     private var matchingSets: [BrickSet] {
@@ -549,7 +550,7 @@ struct SetCollectionView: View {
         let tokens = queryTokens(from: trimmedSearchText)
 
         return sortedSets.filter { set in
-            let setNumberLower = set.setNumber.lowercased()
+            let setNumberLower = normalized(set.setNumber)
             if !normalizedQuery.isEmpty {
                 if setNumberLower == normalizedQuery {
                     return true
@@ -566,7 +567,7 @@ struct SetCollectionView: View {
     }
 
     private func runPartSearch(for query: String) -> [PartSearchEntry] {
-        let rawQuery = query.lowercased()
+        let rawQuery = normalized(query)
         guard !rawQuery.isEmpty else { return [] }
 
         let startsWithNumber = rawQuery.first?.isNumber == true
@@ -584,9 +585,9 @@ struct SetCollectionView: View {
 
         for set in sortedSets {
             enumerateSearchableParts(in: set) { part, _, owningMinifigure in
-                let partIDLower = part.partID.lowercased()
-                let colorLower = part.colorName.lowercased()
-                let nameLower = part.name.lowercased()
+                let partIDLower = normalized(part.partID)
+                let colorLower = normalized(part.colorName)
+                let nameLower = normalized(part.name)
                 let searchableText = searchableText(for: part)
                 let partTokens = partSearchTokens(for: part)
 
@@ -671,14 +672,14 @@ struct SetCollectionView: View {
     }
 
     private func runMinifigureSearch(for query: String) -> [MinifigureSearchEntry] {
-        let normalizedQuery = query.lowercased()
+        let normalizedQuery = normalized(query)
         guard !normalizedQuery.isEmpty else { return [] }
         let tokens = queryTokens(from: query)
 
         return list.sets
             .flatMap { $0.minifigures }
             .compactMap { minifigure in
-                let identifierLower = minifigure.identifier.lowercased()
+                let identifierLower = normalized(minifigure.identifier)
                 let matchesIdentifier = !normalizedQuery.isEmpty && identifierLower == normalizedQuery
                 let matchesName = matches(nameTokens: tokens, in: minifigure.name)
 
@@ -705,7 +706,7 @@ struct SetCollectionView: View {
     private func queryTokens(from text: String) -> [String] {
         text
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-            .map { $0.lowercased() }
+            .map { normalized(String($0)) }
     }
 
     private func performSearch(for key: SearchTaskKey) async {
@@ -776,15 +777,14 @@ struct SetCollectionView: View {
     }
 
     private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {
-        let normalizedQuery = numericQuery
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
+        let normalizedQuery = normalized(
+            numericQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
         guard !normalizedQuery.isEmpty else { return false }
 
-        let numericPrefix = partID
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .prefix { $0.isNumber }
+        let numericPrefix = normalized(
+            partID.trimmingCharacters(in: .whitespacesAndNewlines)
+        ).prefix { $0.isNumber }
 
         guard !numericPrefix.isEmpty else { return false }
         return numericPrefix == normalizedQuery
@@ -799,8 +799,7 @@ struct SetCollectionView: View {
     }
 
     private func normalizedDimensionQuery(for token: String) -> String? {
-        let lowercased = token
-            .lowercased()
+        let lowercased = normalized(token)
             .replacingOccurrences(of: "×", with: "x")
         let compact = lowercased.replacingOccurrences(of: " ", with: "")
 
@@ -818,13 +817,16 @@ struct SetCollectionView: View {
     }
 
     private func searchableText(for part: Part) -> String {
-        let combined = "\(part.partID) \(part.colorName) \(part.name)"
-            .lowercased()
+        let combined = normalized("\(part.partID) \(part.colorName) \(part.name)")
             .replacingOccurrences(of: "×", with: "x")
 
         return combined
             .split(whereSeparator: { $0.isWhitespace })
             .joined(separator: " ")
+    }
+
+    private func normalized(_ text: String) -> String {
+        text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
     }
 
     private func enumerateSearchableParts(

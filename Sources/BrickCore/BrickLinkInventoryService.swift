@@ -698,7 +698,7 @@ public final class BrickLinkInventoryService {
 
 		for line in lines {
 			if name == nil, let extracted = extractSetName(from: line) {
-				name = extracted
+				name = sanitizeSetName(extracted)
 			}
 
 			if categories.isEmpty, line.contains("[Catalog]") {
@@ -754,7 +754,91 @@ public final class BrickLinkInventoryService {
 	private let imageRegex = try! NSRegularExpression(pattern: #"!\[[^\]]*\]\(([^)]+)\)"#, options: [])
 	private let setNameRegex = try! NSRegularExpression(pattern: #"Name:\s*([^)\]]+)"#, options: [])
 	private let boldRegex = try! NSRegularExpression(pattern: #"\*\*([^*]+)\*\*"#, options: [])
+	private let braceContentRegex = try! NSRegularExpression(pattern: #"\{\s*([^}]+)\s*\}"#, options: [])
 
+}
+
+private extension BrickLinkInventoryService {
+	func sanitizeSetName(_ raw: String) -> String {
+		var result = raw
+		let fullRange = NSRange(result.startIndex..<result.endIndex, in: result)
+		let matches = braceContentRegex.matches(in: result, options: [], range: fullRange)
+
+		for match in matches.reversed() {
+			guard let braceRange = Range(match.range, in: result),
+				  let contentRange = Range(match.range(at: 1), in: result) else {
+				continue
+			}
+
+			let braceWord = result[contentRange].trimmingCharacters(in: .whitespacesAndNewlines)
+			guard !braceWord.isEmpty else {
+				result.removeSubrange(braceRange)
+				continue
+			}
+
+			guard let wordRange = precedingWordRange(before: braceRange.lowerBound, in: result) else {
+				continue
+			}
+
+			let precedingWord = result[wordRange].trimmingCharacters(in: .whitespacesAndNewlines)
+
+			if normalizedToken(precedingWord) == normalizedToken(braceWord) {
+				var removalRange = braceRange
+
+				var whitespaceStart = braceRange.lowerBound
+				var cursor = braceRange.lowerBound
+				while cursor > result.startIndex {
+					let prior = result.index(before: cursor)
+					if result[prior].isWhitespace {
+						cursor = prior
+					} else {
+						whitespaceStart = result.index(after: prior)
+						break
+					}
+				}
+
+				removalRange = whitespaceStart..<removalRange.upperBound
+				result.removeSubrange(removalRange)
+			}
+		}
+
+		return result.replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+	}
+
+	func precedingWordRange(before boundary: String.Index, in text: String) -> Range<String.Index>? {
+		var cursor = boundary
+
+		while cursor > text.startIndex {
+			let prior = text.index(before: cursor)
+			if text[prior].isWhitespace {
+				cursor = prior
+			} else {
+				break
+			}
+		}
+
+		let wordEnd = cursor
+		var wordStart = cursor
+		var found = false
+
+		while wordStart > text.startIndex {
+			let prior = text.index(before: wordStart)
+			let character = text[prior]
+			if character.isLetter || character.isNumber || character == "'" || character == "’" {
+				wordStart = prior
+				found = true
+			} else {
+				break
+			}
+		}
+
+		guard found, wordStart < wordEnd else { return nil }
+		return wordStart..<wordEnd
+	}
+
+	func normalizedToken(_ text: String) -> String {
+		text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+	}
 }
 
 	private extension Array where Element == String {
