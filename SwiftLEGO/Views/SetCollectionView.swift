@@ -573,10 +573,14 @@ struct SetCollectionView: View {
         let startsWithNumber = rawQuery.first?.isNumber == true
         let components = rawQuery.split(whereSeparator: { $0.isWhitespace })
         let primaryToken = components.first.map(String.init) ?? rawQuery
-        let primaryTokenIsNumeric = primaryToken.allSatisfy { $0.isNumber }
+        let primaryTokenIsShortLength = isShortLengthToken(primaryToken)
+        let primaryTokenIsNumericOnly = primaryToken.allSatisfy { $0.isNumber }
+        let primaryTokenIsNumeric = primaryTokenIsNumericOnly && !primaryTokenIsShortLength
+        let primaryTokenIsDimensionQuery = normalizedDimensionQuery(for: primaryToken) != nil
         let numericPrefixToken = String(primaryToken.prefix { $0.isNumber })
         let dimensionPrefixQuery = normalizedDimensionPrefix(in: rawQuery)
-        let shouldEnforceNumericPrefix = !numericPrefixToken.isEmpty && dimensionPrefixQuery == nil
+        let shouldEnforceNumericPrefix = !numericPrefixToken.isEmpty && dimensionPrefixQuery == nil && !primaryTokenIsShortLength
+        let shouldMatchPartIDPrefix = startsWithNumber && !primaryTokenIsNumericOnly && !primaryTokenIsDimensionQuery && !primaryTokenIsShortLength
         let normalizedQueryTokens = queryTokens(from: rawQuery)
         let secondaryTokens = normalizedQueryTokens.dropFirst()
 
@@ -616,12 +620,12 @@ struct SetCollectionView: View {
                             matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
                         }
                     }
-                } else if normalizedDimensionQuery(for: primaryToken) != nil {
+                } else if primaryTokenIsDimensionQuery {
                     matches = matchesToken(primaryToken, for: part, partTokens: partTokens, searchableText: searchableText) &&
                     secondaryTokens.allSatisfy { token in
                         matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
                     }
-                } else if startsWithNumber {
+                } else if shouldMatchPartIDPrefix {
                     guard partIDLower.hasPrefix(primaryToken) else { return }
                     if secondaryTokens.isEmpty {
                         matches = true
@@ -760,7 +764,7 @@ struct SetCollectionView: View {
     }
 
     private func matchesToken(_ token: String, for part: Part, partTokens: [String], searchableText: String) -> Bool {
-        if token.allSatisfy({ $0.isNumber }) {
+        if token.allSatisfy({ $0.isNumber }) && !isShortLengthToken(token) {
             if matchesNumericPartID(part.partID, numericQuery: token) {
                 return true
             }
@@ -774,6 +778,19 @@ struct SetCollectionView: View {
         }
 
         return partTokens.contains { $0.hasPrefix(token) || $0.contains(token) }
+    }
+
+    private func isShortLengthToken(_ token: String) -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        var normalizedToken = trimmed.lowercased()
+        if normalizedToken.hasSuffix("l") {
+            normalizedToken.removeLast()
+        }
+
+        guard (1...2).contains(normalizedToken.count) else { return false }
+        return normalizedToken.allSatisfy { $0.isNumber }
     }
 
     private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {

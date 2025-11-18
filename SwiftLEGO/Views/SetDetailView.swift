@@ -428,8 +428,10 @@ struct SetDetailView: View {
 
     private func matchesSearch(_ part: Part, query: String) -> Bool {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let queryTokens = wordPrefixes(in: query)
+        let primaryTokenIsShortLength = queryTokens.first.map(isShortLengthToken) ?? false
         let numericPrefixToken = String(trimmedQuery.prefix { $0.isNumber })
-        if !numericPrefixToken.isEmpty {
+        if !numericPrefixToken.isEmpty && !primaryTokenIsShortLength {
             let remainder = trimmedQuery.dropFirst(numericPrefixToken.count)
             let remainderAfterSpaces = remainder.drop(while: { $0.isWhitespace })
             let isDimensionQuery = remainderAfterSpaces.first.map { ["x", "X", "×"].contains($0) } ?? false
@@ -439,14 +441,13 @@ struct SetDetailView: View {
             }
         }
 
-        let queryTokens = wordPrefixes(in: query)
         guard !queryTokens.isEmpty else { return true }
 
         let partTokens = Set(wordPrefixes(in: "\(part.partID) \(part.colorName) \(part.name)"))
         let lowercasedPartName = part.name.lowercased()
 
         return queryTokens.allSatisfy { token in
-            if token.allSatisfy({ $0.isNumber }) {
+            if token.allSatisfy({ $0.isNumber }) && !isShortLengthToken(token) {
                 if matchesNumericPartID(part.partID, numericQuery: token) {
                     return true
                 }
@@ -478,6 +479,19 @@ struct SetDetailView: View {
         text
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
             .map { $0.lowercased() }
+    }
+
+    private func isShortLengthToken(_ token: String) -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        var normalizedToken = trimmed.lowercased()
+        if normalizedToken.hasSuffix("l") {
+            normalizedToken.removeLast()
+        }
+
+        guard (1...2).contains(normalizedToken.count) else { return false }
+        return normalizedToken.allSatisfy { $0.isNumber }
     }
 
     private func normalizedDimensionQuery(for token: String) -> String? {
