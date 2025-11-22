@@ -261,6 +261,94 @@ public enum SetImportUtilities {
         return newSet
     }
 
+    @MainActor
+    public static func applyInstanceNumbering(
+        for setNumber: String,
+        in list: CollectionList,
+        preferredName: String,
+        modelContext: ModelContext
+    ) {
+        let instances = list.sets.filter { $0.setNumber == setNumber }
+        guard instances.count > 1 else { return }
+
+        let baseName = resolvedBaseName(
+            preferredName: preferredName,
+            existingNames: instances.map(\.name)
+        )
+
+        guard !baseName.isEmpty else { return }
+
+        for (index, set) in instances.enumerated() {
+            set.name = "\(baseName) (\(index + 1))"
+        }
+
+        try? modelContext.save()
+    }
+
+    private static func resolvedBaseName(preferredName: String, existingNames: [String]) -> String {
+        let preferredBase = strippedBaseName(from: preferredName)
+        let existingBases = existingNames.map { strippedBaseName(from: $0) }
+
+        if let commonBase = mostCommonBaseName(in: existingBases) {
+            return commonBase
+        }
+
+        if !preferredBase.isEmpty {
+            return preferredBase
+        }
+
+        return existingBases.first(where: { !$0.isEmpty }) ??
+        preferredName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func mostCommonBaseName(in bases: [String]) -> String? {
+        var counts: [String: (count: Int, base: String, firstIndex: Int)] = [:]
+
+        for (index, base) in bases.enumerated() {
+            let trimmed = base.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+
+            let normalized = trimmed.folding(
+                options: [.diacriticInsensitive, .caseInsensitive],
+                locale: .current
+            )
+
+            if var entry = counts[normalized] {
+                entry.count += 1
+                counts[normalized] = entry
+            } else {
+                counts[normalized] = (count: 1, base: trimmed, firstIndex: index)
+            }
+        }
+
+        let commonBase = counts.values
+            .filter { $0.count > 1 }
+            .sorted { lhs, rhs in
+                if lhs.count != rhs.count {
+                    return lhs.count > rhs.count
+                }
+
+                return lhs.firstIndex < rhs.firstIndex
+            }
+            .first?
+            .base
+
+        return commonBase
+    }
+
+    private static func strippedBaseName(from name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let suffixRange = trimmed.range(
+            of: #" \(\d+\)$"#,
+            options: .regularExpression
+        ) else {
+            return trimmed
+        }
+
+        return String(trimmed[..<suffixRange.lowerBound])
+    }
+
     private static func makeMinifigureModels(
         from payloads: [BrickLinkMinifigurePayload],
         set: BrickSet

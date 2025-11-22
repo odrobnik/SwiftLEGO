@@ -131,8 +131,22 @@ struct AddSetView: View {
             minifigures: minifigures
         )
 
+        applyInstanceNumbering(for: newSet, defaultName: defaultName)
         completion(.success(newSet))
         dismiss()
+    }
+
+    @MainActor
+    private func applyInstanceNumbering(for set: BrickSet, defaultName: String) {
+        let trimmedCustomName = customName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preferredName = trimmedCustomName.isEmpty ? defaultName : trimmedCustomName
+
+        SetImportUtilities.applyInstanceNumbering(
+            for: set.setNumber,
+            in: list,
+            preferredName: preferredName,
+            modelContext: modelContext
+        )
     }
 }
 

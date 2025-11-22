@@ -117,4 +117,114 @@ struct SetImportUtilitiesTests {
             )
         }
     }
+
+    @Test @MainActor
+    func duplicateSetsReceiveInstanceNumbers() throws {
+        let container = try SwiftLEGOModelContainer.makeContainer(inMemory: true)
+        let context = ModelContext(container)
+
+        let list = CollectionList(name: "Copies")
+        context.insert(list)
+
+        _ = SetImportUtilities.persistSet(
+            list: list,
+            modelContext: context,
+            setNumber: "123-1",
+            defaultName: "Starfighter",
+            customName: nil,
+            thumbnailURLString: nil,
+            parts: [],
+            categories: [],
+            minifigures: []
+        )
+
+        _ = SetImportUtilities.persistSet(
+            list: list,
+            modelContext: context,
+            setNumber: "123-1",
+            defaultName: "Starfighter",
+            customName: nil,
+            thumbnailURLString: nil,
+            parts: [],
+            categories: [],
+            minifigures: []
+        )
+
+        SetImportUtilities.applyInstanceNumbering(
+            for: "123-1",
+            in: list,
+            preferredName: "Starfighter",
+            modelContext: context
+        )
+
+        let numberedNames = list.sets
+            .filter { $0.setNumber == "123-1" }
+            .map(\.name)
+            .sorted()
+
+        #expect(numberedNames == ["Starfighter (1)", "Starfighter (2)"])
+    }
+
+    @Test @MainActor
+    func existingInstanceBaseNameIsPreserved() throws {
+        let container = try SwiftLEGOModelContainer.makeContainer(inMemory: true)
+        let context = ModelContext(container)
+
+        let list = CollectionList(name: "Copies")
+        context.insert(list)
+
+        _ = SetImportUtilities.persistSet(
+            list: list,
+            modelContext: context,
+            setNumber: "321-1",
+            defaultName: "Gift Copy (1)",
+            customName: nil,
+            thumbnailURLString: nil,
+            parts: [],
+            categories: [],
+            minifigures: []
+        )
+
+        _ = SetImportUtilities.persistSet(
+            list: list,
+            modelContext: context,
+            setNumber: "321-1",
+            defaultName: "Gift Copy (2)",
+            customName: nil,
+            thumbnailURLString: nil,
+            parts: [],
+            categories: [],
+            minifigures: []
+        )
+
+        _ = SetImportUtilities.persistSet(
+            list: list,
+            modelContext: context,
+            setNumber: "321-1",
+            defaultName: "Starfighter",
+            customName: nil,
+            thumbnailURLString: nil,
+            parts: [],
+            categories: [],
+            minifigures: []
+        )
+
+        SetImportUtilities.applyInstanceNumbering(
+            for: "321-1",
+            in: list,
+            preferredName: "Starfighter",
+            modelContext: context
+        )
+
+        let numberedNames = list.sets
+            .filter { $0.setNumber == "321-1" }
+            .map(\.name)
+            .sorted()
+
+        #expect(numberedNames == [
+            "Gift Copy (1)",
+            "Gift Copy (2)",
+            "Gift Copy (3)"
+        ])
+    }
 }
