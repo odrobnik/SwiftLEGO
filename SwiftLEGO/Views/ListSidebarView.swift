@@ -356,30 +356,27 @@ struct ListSidebarView: View {
 
         try modelContext.save()
 
-        var message: Text?
-        func appendLine(_ line: Text) {
-            if let existing = message {
-                message = existing + Text("\n") + line
-            } else {
-                message = line
-            }
+        var lines: [String] = []
+        func appendLine(_ line: String) {
+            lines.append(line)
         }
 
         if !createdLists.isEmpty {
             let names = createdLists.map(\.name).joined(separator: ", ")
             let importedSummary: LocalizedStringResource = "Imported ^[\(createdLists.count) list](inflect: true) (\(names)) with ^[\(totalImportedSets) set](inflect: true)."
-            appendLine(Text(importedSummary))
+            appendLine(String(localized: importedSummary))
         } else {
-            appendLine(Text("No lists were imported."))
+            appendLine("No lists were imported.")
         }
 
         if !missingSetNumbers.isEmpty {
             let missing = missingSetNumbers.sorted().joined(separator: ", ")
             let missingSummary: LocalizedStringResource = "Skipped ^[\(missingSetNumbers.count) set](inflect: true) not found in your collection: \(missing)."
-            appendLine(Text(missingSummary))
+            appendLine(String(localized: missingSummary))
         }
 
-        return message ?? Text("")
+        guard !lines.isEmpty else { return Text("") }
+        return Text(lines.joined(separator: "\n"))
     }
 
     private func uniqueListName(for rawName: String, usedNames: inout Set<String>) -> String {
@@ -682,7 +679,7 @@ private struct ExportDocumentEnvelope: FileDocument {
     private let writer: (WriteConfiguration) throws -> FileWrapper
 
     init(_ document: some FileDocument) {
-        var storedDocument = document
+        let storedDocument = document
         self.writer = { configuration in
             try storedDocument.fileWrapper(configuration: configuration)
         }

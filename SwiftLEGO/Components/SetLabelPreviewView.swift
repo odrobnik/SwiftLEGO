@@ -504,6 +504,7 @@ private enum PrintDiagnostics {
 @available(iOS 16.0, *)
 struct LabelPrintSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.displayScale) private var displayScale
     let brickSet: BrickSet
     @State private var isPrinting = false
     @State private var anchorView: UIView?
@@ -568,12 +569,21 @@ struct LabelPrintSheet: View {
 
     private func printLabel() {
         guard !isPrinting else { return }
+        let resolvedScale = anchorView?.window?.windowScene?.screen.scale ??
+            anchorView?.window?.screen.scale ??
+            anchorView?.traitCollection.displayScale ??
+            displayScale
+
         let controller = UIPrintInteractionController.shared
         controller.printInfo = UIPrintInfo(dictionary: nil)
         controller.printInfo?.outputType = .general
         controller.printInfo?.jobName = "\(brickSet.setNumber) Label"
         controller.printInfo?.orientation = .portrait
-        controller.printPageRenderer = LabelPrintPageRenderer(brickSet: brickSet, labelSize: labelSize)
+        controller.printPageRenderer = LabelPrintPageRenderer(
+            brickSet: brickSet,
+            labelSize: labelSize,
+            displayScale: resolvedScale
+        )
         controller.delegate = printDelegate
         printDelegate.labelSize = labelSize
 
@@ -605,10 +615,12 @@ struct LabelPrintSheet: View {
 private final class LabelPrintPageRenderer: UIPrintPageRenderer {
     private let brickSet: BrickSet
     private let labelSize: CGSize
+    private let displayScale: CGFloat
 
-    init(brickSet: BrickSet, labelSize: CGSize) {
+    init(brickSet: BrickSet, labelSize: CGSize, displayScale: CGFloat) {
         self.brickSet = brickSet
         self.labelSize = labelSize
+        self.displayScale = displayScale
         super.init()
     }
 
@@ -631,7 +643,7 @@ private final class LabelPrintPageRenderer: UIPrintPageRenderer {
             SetLabelCanvas(brickSet: brickSet)
                 .frame(width: labelSize.width, height: labelSize.height)
         )
-        renderer.scale = UIScreen.main.scale
+        renderer.scale = displayScale
         if let image = renderer.uiImage {
             image.draw(in: printableRect)
         }

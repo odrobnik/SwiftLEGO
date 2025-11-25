@@ -221,17 +221,9 @@ struct SetDetailView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-            }
-            
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    isShowingLabelPrintSheet = true
-                } label: {
-                    Label("Print Label", systemImage: "printer")
-                }
-            }
-            
-            ToolbarItem(placement: .topBarTrailing) {
+
+                Spacer()
+
                 Button {
                     withAnimation {
                         showMissingOnly.toggle()
@@ -245,6 +237,14 @@ struct SetDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Toggle missing parts filter")
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isShowingLabelPrintSheet = true
+                } label: {
+                    Label("Print Label", systemImage: "printer")
+                }
             }
         }
     }

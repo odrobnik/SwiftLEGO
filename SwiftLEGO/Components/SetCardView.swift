@@ -2,8 +2,29 @@ import SwiftUI
 import SwiftData
 import BrickCore
 
+private let regularSectionRawValue = Part.InventorySection.regular.rawValue
+
 struct SetCardView: View {
     let brickSet: BrickSet
+    @Query private var regularRootParts: [Part]
+    @Query private var minifigures: [Minifigure]
+
+    init(brickSet: BrickSet) {
+        self.brickSet = brickSet
+        let setID = brickSet.persistentModelID
+        _regularRootParts = Query(
+            filter: #Predicate { part in
+                part.set?.persistentModelID == setID &&
+                part.parentPart == nil &&
+                part.inventorySectionRawValue == regularSectionRawValue
+            }
+        )
+        _minifigures = Query(
+            filter: #Predicate { figure in
+                figure.set?.persistentModelID == setID
+            }
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -90,11 +111,11 @@ struct SetCardView: View {
             totals.have += min(max(have, 0), needed)
         }
 
-        for part in brickSet.parts where part.parentPart == nil && part.inventorySection == .regular {
+        for part in regularRootParts {
             accumulate(have: part.quantityHave, needed: part.quantityNeeded)
         }
 
-        for figure in brickSet.minifigures {
+        for figure in minifigures {
             accumulate(have: figure.quantityHave, needed: figure.quantityNeeded)
         }
 
