@@ -15,10 +15,36 @@ struct CategorySetsView: View {
     @State private var wantedListDocument = WantedListDocument(inventory: .empty)
     @State private var wantedListFilename = WantedListDocument.defaultFilename()
     @State private var isExportingWantedList = false
+    @State private var searchText: String = ""
+    @State private var effectiveSearchText: String = ""
+    @State private var searchScope: SearchScope = .sets
+    @State private var partSearchResults: [PartSearchEntry] = []
+    @State private var minifigureSearchResults: [MinifigureSearchEntry] = []
 
     private let adaptiveColumns = [
         GridItem(.adaptive(minimum: 220), spacing: 16)
     ]
+
+    private enum SearchScope: String, CaseIterable, Identifiable {
+        case sets
+        case parts
+        case minifigures
+
+        var id: SearchScope { self }
+
+        var title: String { rawValue.capitalized }
+
+        var prompt: String {
+            switch self {
+            case .sets:
+                return "Search sets"
+            case .parts:
+                return "Search parts"
+            case .minifigures:
+                return "Search minifigures"
+            }
+        }
+    }
 
     private struct ViewAlert: Identifiable {
         let id = UUID()
@@ -26,13 +52,32 @@ struct CategorySetsView: View {
         let message: String
     }
 
+    private struct SearchTaskKey: Equatable {
+        let query: String
+        let scope: SearchScope
+    }
+
     private var title: String {
         categoryPath.joined(separator: " / ")
     }
 
+    private var searchTaskKey: SearchTaskKey {
+        SearchTaskKey(query: searchText, scope: searchScope)
+    }
+
+    private var sortedSets: [BrickSet] {
+        sets.sorted { lhs, rhs in
+            if lhs.setNumber == rhs.setNumber {
+                return lhs.name < rhs.name
+            }
+            return lhs.setNumber < rhs.setNumber
+        }
+    }
+
     private var groupedSets: [(sectionTitle: String, sets: [BrickSet])] {
+        let effectiveCategoryPath = normalizedPath(categoryPath)
         let groups = Dictionary(grouping: sets) { set in
-            remainingPath(for: set).joined(separator: " / ")
+            remainingPath(for: set, categoryPath: effectiveCategoryPath).joined(separator: " / ")
         }
 
         return groups
@@ -58,63 +103,83 @@ struct CategorySetsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            if groupedSets.isEmpty {
-                EmptyStateView(
-                    icon: "shippingbox",
-                    title: "No Sets Found",
-                    message: "No sets are tagged with this category."
-                )
-                .padding(.top, 80)
+        Group {
+            if isSearching {
+                searchResultsView
             } else {
-                LazyVStack(alignment: .leading, spacing: 24) {
-                    ForEach(groupedSets, id: \.sectionTitle) { group in
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(group.sectionTitle)
-                                .font(.title3.weight(.semibold))
-                                .padding(.horizontal)
+                ScrollView {
+                    if groupedSets.isEmpty {
+                        EmptyStateView(
+                            icon: "shippingbox",
+                            title: "No Sets Found",
+                            message: "No sets are tagged with this category."
+                        )
+                        .padding(.top, 80)
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 24) {
+                            ForEach(groupedSets, id: \.sectionTitle) { group in
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text(group.sectionTitle)
+                                        .font(.title3.weight(.semibold))
+                                        .padding(.horizontal)
 
-                            LazyVGrid(columns: adaptiveColumns, spacing: 16) {
-                                ForEach(group.sets) { set in
-                                    NavigationLink(value: set) {
-                                        SetCardView(brickSet: set)
-                                            .overlay(alignment: .topTrailing) {
-                                                if refreshingSetIDs.contains(set.persistentModelID) {
-                                                    ProgressView()
-                                                        .controlSize(.mini)
-                                                        .padding(6)
+                                    LazyVGrid(columns: adaptiveColumns, spacing: 16) {
+                                        ForEach(group.sets) { set in
+                                            NavigationLink(value: set) {
+                                                SetCardView(brickSet: set)
+                                                    .overlay(alignment: .topTrailing) {
+                                                        if refreshingSetIDs.contains(set.persistentModelID) {
+                                                            ProgressView()
+                                                                .controlSize(.mini)
+                                                                .padding(6)
+                                                        }
+                                                    }
+                                            }
+                                            .buttonStyle(.plain)
+                                            .contextMenu {
+                                                Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
+                                                    refreshInventory(for: set)
+                                                }
+                                                .disabled(refreshingSetIDs.contains(set.persistentModelID))
+                                                Button("Print Label…", systemImage: "printer") {
+                                                    labelPrintTarget = set
+                                                }
+                                                Button("Edit", systemImage: "slider.horizontal.3") {
+                                                    setBeingEdited = set
+                                                }
+                                                Button(role: .destructive) {
+                                                    delete(set)
+                                                } label: {
+                                                    Label("Delete", systemImage: "trash")
                                                 }
                                             }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .contextMenu {
-                                        Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
-                                            refreshInventory(for: set)
-                                        }
-                                        .disabled(refreshingSetIDs.contains(set.persistentModelID))
-                                        Button("Print Label…", systemImage: "printer") {
-                                            labelPrintTarget = set
-                                        }
-                                        Button("Edit", systemImage: "slider.horizontal.3") {
-                                            setBeingEdited = set
-                                        }
-                                        Button(role: .destructive) {
-                                            delete(set)
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
                                         }
                                     }
+                                    .padding(.horizontal)
                                 }
                             }
-                            .padding(.horizontal)
                         }
+                        .padding(.vertical)
                     }
                 }
-                .padding(.vertical)
             }
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle(title)
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: Text(searchScope.prompt)
+        )
+        .searchScopes($searchScope, activation: .onSearchPresentation) {
+            ForEach(SearchScope.allCases) { scope in
+                Text(scope.title).tag(scope)
+            }
+        }
+        .task(id: searchTaskKey) {
+            let key = searchTaskKey
+            await performSearch(for: key)
+        }
         .sheet(item: $setBeingEdited) { set in
             SetEditView(set: set)
         }
@@ -201,7 +266,223 @@ struct CategorySetsView: View {
         isExportingWantedList = true
     }
 
-    private func remainingPath(for set: BrickSet) -> [String] {
+    @ViewBuilder
+    private var searchResultsView: some View {
+        if searchScope == .parts {
+            partsSearchResultsList
+        } else if searchScope == .minifigures {
+            minifigureSearchResultsList
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    searchResultsContent
+                }
+                .padding(.top, 16)
+            }
+            .background(Color(uiColor: .systemGroupedBackground))
+        }
+    }
+
+    @ViewBuilder
+    private var searchResultsContent: some View {
+        switch searchScope {
+        case .sets:
+            setsSearchResultsContent
+        case .minifigures:
+            EmptyView()
+        case .parts:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var setsSearchResultsContent: some View {
+        if !matchingSetsByCategory.isEmpty {
+            ForEach(matchingSetsByCategory, id: \.path) { group in
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(sectionTitle(for: group.path))
+                        .font(.title3.weight(.semibold))
+                        .padding(.horizontal)
+
+                    LazyVGrid(columns: adaptiveColumns, spacing: 16) {
+                        ForEach(group.sets) { set in
+                            NavigationLink(value: set) {
+                                SetCardView(brickSet: set)
+                                    .overlay(alignment: .topTrailing) {
+                                        if refreshingSetIDs.contains(set.persistentModelID) {
+                                            ProgressView()
+                                                .controlSize(.mini)
+                                                .padding(6)
+                                        }
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
+                                    refreshInventory(for: set)
+                                }
+                                .disabled(refreshingSetIDs.contains(set.persistentModelID))
+                                Button("Print Label…", systemImage: "printer") {
+                                    labelPrintTarget = set
+                                }
+                                Button("Edit", systemImage: "slider.horizontal.3") {
+                                    setBeingEdited = set
+                                }
+                                Button(role: .destructive) {
+                                    delete(set)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        } else {
+            ContentUnavailableView.search(text: trimmedSearchText)
+                .padding()
+        }
+    }
+
+    private var partsSearchResultsList: some View {
+        List {
+            if groupedPartResults.isEmpty {
+                ContentUnavailableView.search(text: trimmedSearchText)
+                    .padding()
+                    .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(groupedPartResults, id: \.colorName) { group in
+                    Section(group.colorName) {
+                        ForEach(group.entries) { entry in
+                            NavigationLink(
+                                value: SearchResult(
+                                    set: entry.set,
+                                    searchQuery: trimmedSearchText,
+                                    section: entry.part.inventorySection
+                                )
+                            ) {
+                                PartSearchResultRow(
+                                    set: entry.set,
+                                    part: entry.part,
+                                    owningMinifigure: entry.owningMinifigure,
+                                    parentChain: entry.parentChain
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    private var minifigureSearchResultsList: some View {
+        List {
+            if minifigureResults.isEmpty {
+                ContentUnavailableView.search(text: trimmedSearchText)
+                    .padding()
+                    .listRowInsets(
+                        EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(minifigureResults) { entry in
+                    NavigationLink(
+                        value: SearchResult(
+                            set: entry.set,
+                            searchQuery: trimmedSearchText,
+                            section: .regular
+                        )
+                    ) {
+                        MinifigureSearchResultRow(
+                            set: entry.set,
+                            minifigure: entry.minifigure
+                        )
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    private var trimmedSearchText: String {
+        effectiveSearchText
+    }
+
+    private var isSearching: Bool {
+        !trimmedSearchText.isEmpty
+    }
+
+    private var normalizedSearchText: String {
+        normalized(trimmedSearchText)
+    }
+
+    private var matchingSets: [BrickSet] {
+        guard searchScope == .sets, isSearching else { return [] }
+        let normalizedQuery = normalizedSearchText
+        let strippedQuery = normalizeSetNumber(normalizedQuery)
+        let tokens = queryTokens(from: trimmedSearchText)
+
+        return sortedSets.filter { set in
+            let setNumberLower = normalized(set.setNumber)
+            if !normalizedQuery.isEmpty {
+                if setNumberLower == normalizedQuery {
+                    return true
+                }
+
+                let strippedSetNumber = normalizeSetNumber(setNumberLower)
+                if !strippedQuery.isEmpty && strippedSetNumber == strippedQuery {
+                    return true
+                }
+            }
+
+            return matches(nameTokens: tokens, in: set.name)
+        }
+    }
+
+    private var matchingSetsByCategory: [(path: [String], sets: [BrickSet])] {
+        let matches = matchingSets
+        guard !matches.isEmpty else { return [] }
+
+        let groups = Dictionary(grouping: matches) { set in
+            categoryPath(for: set)
+        }
+
+        return groups
+            .map { key, value in
+                let orderedSets = value.sorted { lhs, rhs in
+                    if lhs.setNumber != rhs.setNumber {
+                        return lhs.setNumber < rhs.setNumber
+                    }
+                    return lhs.name < rhs.name
+                }
+                return (path: key, sets: orderedSets)
+            }
+            .sorted { lhs, rhs in
+                let lhsIsUncategorized = lhs.path == ["Uncategorized"]
+                let rhsIsUncategorized = rhs.path == ["Uncategorized"]
+
+                if lhsIsUncategorized && !rhsIsUncategorized {
+                    return false
+                }
+
+                if !lhsIsUncategorized && rhsIsUncategorized {
+                    return true
+                }
+
+                return lhs.path.lexicographicallyPrecedes(rhs.path)
+            }
+    }
+
+    private func remainingPath(for set: BrickSet, categoryPath: [String]) -> [String] {
         let normalized = set.normalizedCategoryPath(uncategorizedTitle: "Uncategorized")
 
         guard normalized.count > categoryPath.count else { return [] }
@@ -211,5 +492,455 @@ struct CategorySetsView: View {
         }
 
         return normalized
+    }
+
+    private func categoryPath(for set: BrickSet) -> [String] {
+        set.normalizedCategoryPath(uncategorizedTitle: "Uncategorized")
+    }
+
+    private func sectionTitle(for path: [String]) -> String {
+        path.joined(separator: " / ")
+    }
+
+    private func runPartSearch(for query: String) -> [PartSearchEntry] {
+        let rawQuery = normalized(query)
+        guard !rawQuery.isEmpty else { return [] }
+
+        let startsWithNumber = rawQuery.first?.isNumber == true
+        let components = rawQuery.split(whereSeparator: { $0.isWhitespace })
+        let primaryToken = components.first.map(String.init) ?? rawQuery
+        let primaryTokenIsShortLength = isShortLengthToken(primaryToken)
+        let primaryTokenIsNumericOnly = primaryToken.allSatisfy { $0.isNumber }
+        let primaryTokenIsNumeric = primaryTokenIsNumericOnly && !primaryTokenIsShortLength
+        let primaryTokenIsDimensionQuery = normalizedDimensionQuery(for: primaryToken) != nil
+        let numericPrefixToken = String(primaryToken.prefix { $0.isNumber })
+        let dimensionPrefixQuery = normalizedDimensionPrefix(in: rawQuery)
+        let shouldEnforceNumericPrefix = !numericPrefixToken.isEmpty && dimensionPrefixQuery == nil && !primaryTokenIsShortLength
+        let shouldMatchPartIDPrefix = startsWithNumber && !primaryTokenIsNumericOnly && !primaryTokenIsDimensionQuery && !primaryTokenIsShortLength
+        let normalizedQueryTokens = queryTokens(from: rawQuery)
+        let secondaryTokens = normalizedQueryTokens.dropFirst()
+
+        var builders: [PersistentIdentifier: PartSearchEntryBuilder] = [:]
+        var matchOrder = 0
+
+        for set in sortedSets {
+            enumerateSearchableParts(in: set) { part, _, owningMinifigure in
+                let partIDLower = normalized(part.partID)
+                let colorLower = normalized(part.colorName)
+                let nameLower = normalized(part.name)
+                let searchableText = searchableText(for: part)
+                let partTokens = partSearchTokens(for: part)
+
+                if shouldEnforceNumericPrefix {
+                    guard matchesNumericPartID(part.partID, numericQuery: numericPrefixToken) else { return }
+                }
+
+                if let dimensionPrefixQuery, !searchableText.contains(dimensionPrefixQuery) {
+                    return
+                }
+
+                let matches: Bool
+                if let _ = dimensionPrefixQuery {
+                    if normalizedQueryTokens.count <= 1 {
+                        matches = true
+                    } else {
+                        matches = secondaryTokens.allSatisfy { token in
+                            matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
+                        }
+                    }
+                } else if primaryTokenIsNumeric {
+                    if secondaryTokens.isEmpty {
+                        matches = true
+                    } else {
+                        matches = secondaryTokens.allSatisfy { token in
+                            matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
+                        }
+                    }
+                } else if primaryTokenIsDimensionQuery {
+                    matches = matchesToken(primaryToken, for: part, partTokens: partTokens, searchableText: searchableText) &&
+                    secondaryTokens.allSatisfy { token in
+                        matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
+                    }
+                } else if shouldMatchPartIDPrefix {
+                    guard partIDLower.hasPrefix(primaryToken) else { return }
+                    if secondaryTokens.isEmpty {
+                        matches = true
+                    } else {
+                        matches = secondaryTokens.allSatisfy { token in
+                            matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
+                        }
+                    }
+                } else if colorLower.contains(rawQuery) || nameLower.contains(rawQuery) {
+                    matches = true
+                } else {
+                    matches = normalizedQueryTokens.allSatisfy { token in
+                        matchesToken(token, for: part, partTokens: partTokens, searchableText: searchableText)
+                    }
+                }
+
+                guard matches else { return }
+                guard missingCount(for: part) > 0 else { return }
+
+                let entrySet = part.set ?? part.minifigure?.set ?? set
+                let key = part.persistentModelID
+                let chain = parentChain(for: part)
+
+                if builders[key] == nil {
+                    builders[key] = PartSearchEntryBuilder(
+                        set: entrySet,
+                        part: part,
+                        owningMinifigure: owningMinifigure,
+                        parentChain: chain,
+                        orderIndex: matchOrder
+                    )
+                } else {
+                    builders[key]?.updateOrder(matchOrder)
+                }
+
+                matchOrder += 1
+            }
+        }
+
+        return builders.values
+            .map { $0.build() }
+            .sorted { lhs, rhs in
+                if lhs.orderIndex != rhs.orderIndex {
+                    return lhs.orderIndex < rhs.orderIndex
+                }
+                return lhs.part.partID.localizedCaseInsensitiveCompare(rhs.part.partID) == .orderedAscending
+            }
+    }
+
+    private func runMinifigureSearch(for query: String) -> [MinifigureSearchEntry] {
+        let normalizedQuery = normalized(query)
+        guard !normalizedQuery.isEmpty else { return [] }
+        let tokens = queryTokens(from: query)
+
+        return sets
+            .flatMap { $0.minifigures }
+            .compactMap { minifigure in
+                let identifierLower = normalized(minifigure.identifier)
+                let matchesIdentifier = !normalizedQuery.isEmpty && identifierLower == normalizedQuery
+                let matchesName = matches(nameTokens: tokens, in: minifigure.name)
+
+                guard matchesIdentifier || matchesName else { return nil }
+                guard let set = minifigure.set else { return nil }
+                return MinifigureSearchEntry(set: set, minifigure: minifigure)
+            }
+            .sorted { lhs, rhs in
+                if lhs.missingCount != rhs.missingCount {
+                    return lhs.missingCount < rhs.missingCount
+                }
+                return lhs.minifigure.identifier.localizedCaseInsensitiveCompare(rhs.minifigure.identifier) == .orderedAscending
+            }
+    }
+
+    private func matches(nameTokens tokenizedQuery: [String], in name: String) -> Bool {
+        guard !tokenizedQuery.isEmpty else { return false }
+        let nameTokens = queryTokens(from: name)
+        return tokenizedQuery.allSatisfy { token in
+            nameTokens.contains(where: { $0.hasPrefix(token) })
+        }
+    }
+
+    private func queryTokens(from text: String) -> [String] {
+        text
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map { normalized(String($0)) }
+    }
+
+    private func performSearch(for key: SearchTaskKey) async {
+        let trimmed = key.query.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            await MainActor.run {
+                effectiveSearchText = ""
+                partSearchResults = []
+                minifigureSearchResults = []
+            }
+            return
+        }
+
+        do {
+            try await Task.sleep(nanoseconds: 300_000_000)
+        } catch {
+            return
+        }
+
+        if Task.isCancelled {
+            return
+        }
+
+        await MainActor.run {
+            effectiveSearchText = trimmed
+            switch key.scope {
+            case .parts:
+                partSearchResults = runPartSearch(for: trimmed)
+                minifigureSearchResults = []
+            case .minifigures:
+                minifigureSearchResults = runMinifigureSearch(for: trimmed)
+                partSearchResults = []
+            case .sets:
+                partSearchResults = []
+                minifigureSearchResults = []
+            }
+        }
+    }
+
+    private func partSearchTokens(for part: Part) -> [String] {
+        let combined = "\(part.partID) \(part.colorName) \(part.name)"
+        return Array(
+            Set(
+                queryTokens(from: combined)
+            )
+        )
+    }
+
+    private func matchesToken(_ token: String, for part: Part, partTokens: [String], searchableText: String) -> Bool {
+        if token.allSatisfy({ $0.isNumber }) && !isShortLengthToken(token) {
+            if matchesNumericPartID(part.partID, numericQuery: token) {
+                return true
+            }
+
+            return partTokens.contains { $0 == token }
+        }
+
+        if let dimensionQuery = normalizedDimensionQuery(for: token),
+           searchableText.contains(dimensionQuery) {
+            return true
+        }
+
+        return partTokens.contains { $0.hasPrefix(token) || $0.contains(token) }
+    }
+
+    private func isShortLengthToken(_ token: String) -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        var normalizedToken = trimmed.lowercased()
+        if normalizedToken.hasSuffix("l") {
+            normalizedToken.removeLast()
+        }
+
+        guard (1...2).contains(normalizedToken.count) else { return false }
+        return normalizedToken.allSatisfy { $0.isNumber }
+    }
+
+    private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {
+        let normalizedQuery = normalized(
+            numericQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        guard !normalizedQuery.isEmpty else { return false }
+
+        let numericPrefix = normalized(
+            partID.trimmingCharacters(in: .whitespacesAndNewlines)
+        ).prefix { $0.isNumber }
+
+        guard !numericPrefix.isEmpty else { return false }
+        return numericPrefix == normalizedQuery
+    }
+
+    private func normalizedDimensionPrefix(in query: String) -> String? {
+        let prefix = query.prefix { character in
+            character.isNumber || character.isWhitespace || character == "x" || character == "X" || character == "×"
+        }
+        guard !prefix.isEmpty else { return nil }
+        return normalizedDimensionQuery(for: String(prefix))
+    }
+
+    private func normalizedDimensionQuery(for token: String) -> String? {
+        let lowercased = normalized(token)
+            .replacingOccurrences(of: "×", with: "x")
+        let compact = lowercased.replacingOccurrences(of: " ", with: "")
+
+        guard compact.contains("x") else { return nil }
+
+        let components = compact.split(separator: "x", omittingEmptySubsequences: false)
+        guard components.count >= 2 else { return nil }
+
+        let numericComponents = components.map(String.init)
+        guard numericComponents.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isNumber } }) else {
+            return nil
+        }
+
+        return numericComponents.joined(separator: " x ")
+    }
+
+    private func searchableText(for part: Part) -> String {
+        let combined = normalized("\(part.partID) \(part.colorName) \(part.name)")
+            .replacingOccurrences(of: "×", with: "x")
+
+        return combined
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+    }
+
+    private func normalized(_ text: String) -> String {
+        text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+    }
+
+    private func enumerateSearchableParts(
+        in set: BrickSet,
+        visit: (Part, Part, Minifigure?) -> Void
+    ) {
+        func walk(part: Part, root: Part, owningMinifigure: Minifigure?) {
+            guard part.inventorySection != .extra else { return }
+
+            let isComplete = part.quantityNeeded > 0 && part.quantityHave >= part.quantityNeeded
+            guard !isComplete else { return }
+
+            let hasProgress = part.hasOwnedQuantityInHierarchy()
+            let shouldEmitSelf = part.subparts.isEmpty || !hasProgress || part.hasUniformMissingSubparts()
+
+            if shouldEmitSelf {
+                visit(part, root, owningMinifigure)
+            }
+
+            if !hasProgress || part.hasUniformMissingSubparts() {
+                return
+            }
+
+            for child in part.subparts {
+                walk(part: child, root: root, owningMinifigure: owningMinifigure)
+            }
+        }
+
+        for part in set.parts {
+            walk(part: part, root: part, owningMinifigure: nil)
+        }
+
+        for minifigure in set.minifigures {
+            for part in minifigure.parts {
+                walk(part: part, root: part, owningMinifigure: minifigure)
+            }
+        }
+    }
+
+    private func parentChain(for part: Part) -> [Part] {
+        var chain: [Part] = []
+        var current = part.parentPart
+
+        while let node = current {
+            chain.append(node)
+            current = node.parentPart
+        }
+
+        return chain.reversed()
+    }
+
+    private var groupedPartResults: [ColorGroup] {
+        let entries = partSearchResults.filter { $0.missingCount > 0 }
+        guard !entries.isEmpty else { return [] }
+
+        let grouped = Dictionary(grouping: entries, by: { $0.groupingColorName })
+
+        return grouped.map { key, value in
+            ColorGroup(
+                colorName: key,
+                entries: value.sorted { lhs, rhs in
+                    let nameComparison = lhs.part.name.localizedCaseInsensitiveCompare(rhs.part.name)
+                    if nameComparison != .orderedSame {
+                        return nameComparison == .orderedAscending
+                    }
+                    return lhs.part.partID.localizedCaseInsensitiveCompare(rhs.part.partID) == .orderedAscending
+                }
+            )
+        }
+        .sorted { lhs, rhs in
+            lhs.colorName.localizedCaseInsensitiveCompare(rhs.colorName) == .orderedAscending
+        }
+    }
+
+    private var minifigureResults: [MinifigureSearchEntry] {
+        minifigureSearchResults
+    }
+
+    private func missingCount(for part: Part) -> Int {
+        part.missingQuantity
+    }
+
+    private func normalizeSetNumber(_ number: String) -> String {
+        number.split(separator: "-").first.map(String.init) ?? number
+    }
+
+    private func normalizedPath(_ path: [String]) -> [String] {
+        if path.first == CategoryConstants.rootCategoryTitle {
+            return Array(path.dropFirst())
+        }
+
+        return path
+    }
+
+    private struct PartSearchEntry: Identifiable {
+        let set: BrickSet
+        let part: Part
+        let owningMinifigure: Minifigure?
+        let parentChain: [Part]
+        let orderIndex: Int
+
+        var id: PersistentIdentifier { part.persistentModelID }
+
+        var missingCount: Int {
+            max(part.quantityNeeded - part.quantityHave, 0)
+        }
+
+        var groupingColorName: String {
+            let name = part.colorName
+            return name.isEmpty ? "Unknown Color" : name
+        }
+    }
+
+    private struct PartSearchEntryBuilder {
+        let set: BrickSet
+        let part: Part
+        let owningMinifigure: Minifigure?
+        let parentChain: [Part]
+        private(set) var orderIndex: Int
+
+        init(
+            set: BrickSet,
+            part: Part,
+            owningMinifigure: Minifigure?,
+            parentChain: [Part],
+            orderIndex: Int
+        ) {
+            self.set = set
+            self.part = part
+            self.owningMinifigure = owningMinifigure
+            self.parentChain = parentChain
+            self.orderIndex = orderIndex
+        }
+
+        mutating func updateOrder(_ order: Int) {
+            if order < orderIndex {
+                orderIndex = order
+            }
+        }
+
+        func build() -> PartSearchEntry {
+            PartSearchEntry(
+                set: set,
+                part: part,
+                owningMinifigure: owningMinifigure,
+                parentChain: parentChain,
+                orderIndex: orderIndex
+            )
+        }
+    }
+
+    private struct MinifigureSearchEntry: Identifiable {
+        let set: BrickSet
+        let minifigure: Minifigure
+
+        var missingCount: Int {
+            max(minifigure.quantityNeeded - minifigure.quantityHave, 0)
+        }
+
+        var id: PersistentIdentifier { minifigure.persistentModelID }
+    }
+
+    private struct ColorGroup {
+        let colorName: String
+        let entries: [PartSearchEntry]
     }
 }
