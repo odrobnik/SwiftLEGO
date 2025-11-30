@@ -58,10 +58,6 @@ struct PartSearchResultRow: View {
         return segments.isEmpty ? nil : segments.joined(separator: " • ")
     }
 
-    private var summaryText: some View {
-        Text("Missing ^[\(totalMissing) part](inflect: true) • Need \(totalNeeded), have \(totalHave)")
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 16) {
@@ -92,14 +88,23 @@ struct PartSearchResultRow: View {
             }
 
             HStack(alignment: .center, spacing: 12) {
-                summaryText
+                Text(set.name)
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(Color.accentColor.opacity(0.12))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
+                    )
 
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(set.setNumber) • \(set.name)")
+                    Text("\(set.setNumber)")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.trailing)

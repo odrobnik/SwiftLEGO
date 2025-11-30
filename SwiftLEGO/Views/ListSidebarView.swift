@@ -507,7 +507,7 @@ struct ListSidebarView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(selectionBackground(for: node))
@@ -519,11 +519,19 @@ struct ListSidebarView: View {
     @ViewBuilder
     private func categoryTreeRow(for node: CategoryNode, level: Int) -> some View {
         let isRootCategory = node.path == [rootCategoryTitle]
-        let nameFont: Font = isRootCategory ? .footnote.weight(.semibold) : .subheadline
-        let leading = level == 0 ? 0 : CGFloat(level) * 16 + 12
+        let nameFont: Font = {
+            if isRootCategory {
+                return .footnote.weight(.semibold)
+            } else if node.children.isEmpty {
+                return .subheadline
+            } else {
+                return .subheadline.weight(.semibold)
+            }
+        }()
+        let leading = level == 0 ? 0 : CGFloat(level) * 12
 
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
+            HStack(spacing: 2) {
                 if node.children.isEmpty {
                     Color.clear
                         .frame(width: 24, height: 24)
@@ -545,15 +553,7 @@ struct ListSidebarView: View {
                     selectCategory(node)
                 } label: {
                     HStack(spacing: isRootCategory ? 6 : 8) {
-                        if !isRootCategory {
-                            Image(systemName: node.children.isEmpty ? "tag" : "folder")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Color.clear
-                                .frame(width: 4, height: 4)
-                        }
                         Text(node.name)
-                            .textCase(isRootCategory ? .uppercase : nil)
                             .font(nameFont)
                             .lineLimit(1)
                         Spacer()
@@ -561,7 +561,7 @@ struct ListSidebarView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 6)
                     .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(selectionBackground(for: node))
