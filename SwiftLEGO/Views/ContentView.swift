@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var selectedListID: PersistentIdentifier?
     @State private var selectedCategoryPath: [String]?
     private let uncategorizedCategoryTitle = "Uncategorized"
+    private let rootCategoryTitle = CategoryConstants.rootCategoryTitle
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.automatic)) {
@@ -125,13 +126,18 @@ struct ContentView: View {
     }
 
     private func categoryMatches(_ set: BrickSet, path: [String]) -> Bool {
+        let effectivePath = normalizedPath(for: path)
         let normalized = categoryPath(for: set)
 
-        if path == [uncategorizedCategoryTitle] {
+        if effectivePath.isEmpty {
+            return true
+        }
+
+        if effectivePath == [uncategorizedCategoryTitle] {
             return normalized == [uncategorizedCategoryTitle]
         }
 
-        return normalized.starts(with: path)
+        return normalized.starts(with: effectivePath)
     }
 
     private func categoryPath(for set: BrickSet) -> [String] {
@@ -139,6 +145,14 @@ struct ContentView: View {
 
         if path.isEmpty {
             path = [uncategorizedCategoryTitle]
+        }
+
+        return path
+    }
+
+    private func normalizedPath(for path: [String]) -> [String] {
+        if path.first == rootCategoryTitle {
+            return Array(path.dropFirst())
         }
 
         return path

@@ -25,6 +25,7 @@ struct ListSidebarView: View {
         "\(lists.count) list\(lists.count == 1 ? "" : "s")"
     }
     private let uncategorizedCategoryTitle = "Uncategorized"
+    private let rootCategoryTitle = CategoryConstants.rootCategoryTitle
 
     var body: some View {
         List {
@@ -425,7 +426,7 @@ struct ListSidebarView: View {
         var rootNodes: [MutableCategoryNode] = []
 
         for set in allSets {
-            let path = categoryPath(for: set)
+            let path = [rootCategoryTitle] + categoryPath(for: set)
             guard !path.isEmpty else { continue }
 
             var parentNode: MutableCategoryNode?
