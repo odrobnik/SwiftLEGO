@@ -329,14 +329,15 @@ public final class BrickLinkInventoryService {
 			.replacingOccurrences(of: "**", with: "")
 			.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 		let normalizedDescription = normalizeWhitespace(rawDescription)
+		let sanitizedDescription = sanitizeColorDescription(normalizedDescription)
 
 		var colorName = ""
-		if !partName.isEmpty, let range = normalizedDescription.range(of: partName) {
-			colorName = String(normalizedDescription[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+		if !partName.isEmpty, let range = sanitizedDescription.range(of: partName) {
+			colorName = String(sanitizedDescription[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
 		}
 
 		if colorName.isEmpty {
-			colorName = normalizedDescription
+			colorName = sanitizedDescription
 		}
 
 		var colorID = partURL.flatMap { url in
@@ -648,6 +649,25 @@ public final class BrickLinkInventoryService {
 		}
 
 		return categories
+	}
+
+	private func sanitizeColorDescription(_ text: String) -> String {
+		var cleaned = text
+		let fullRange = NSRange(cleaned.startIndex..<cleaned.endIndex, in: cleaned)
+		cleaned = imageRegex.stringByReplacingMatches(
+			in: cleaned,
+			options: [],
+			range: fullRange,
+			withTemplate: ""
+		)
+
+		cleaned = cleaned.replacingOccurrences(
+			of: #"!\[[^\]]*\]"#,
+			with: "",
+			options: .regularExpression
+		)
+
+		return normalizeWhitespace(cleaned)
 	}
 
 	private func extractSetName(from line: String) -> String? {

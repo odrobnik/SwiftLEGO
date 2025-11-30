@@ -94,9 +94,16 @@ struct ListSidebarView: View {
             }
 
             if !categoryNodes.isEmpty {
-                Section("Categories") {
-                    ForEach(categoryNodes) { node in
-                        categoryTreeRow(for: node, level: 0)
+                Section {
+                    if let root = rootCategoryNode {
+                        rootCategoryRow(for: root)
+                        ForEach(root.children) { node in
+                            categoryTreeRow(for: node, level: 0)
+                        }
+                    } else {
+                        ForEach(categoryNodes) { node in
+                            categoryTreeRow(for: node, level: 0)
+                        }
                     }
                 }
             }
@@ -473,6 +480,10 @@ struct ListSidebarView: View {
             .map(convert)
     }
 
+    private var rootCategoryNode: CategoryNode? {
+        categoryNodes.first(where: { $0.path == [rootCategoryTitle] })
+    }
+
     private func categoryPath(for set: BrickSet) -> [String] {
         var path = set.normalizedCategoryPath(uncategorizedTitle: uncategorizedCategoryTitle)
 
@@ -484,10 +495,39 @@ struct ListSidebarView: View {
     }
 
     @ViewBuilder
+    private func rootCategoryRow(for node: CategoryNode) -> some View {
+        Button {
+            selectCategory(node)
+        } label: {
+            HStack(spacing: 6) {
+                Text(node.name)
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                Text("\(node.setCount)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selectionBackground(for: node))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
     private func categoryTreeRow(for node: CategoryNode, level: Int) -> some View {
+        let isRootCategory = node.path == [rootCategoryTitle]
+        let nameFont: Font = isRootCategory ? .footnote.weight(.semibold) : .subheadline
+        let leading = level == 0 ? 0 : CGFloat(level) * 16 + 12
+
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 if node.children.isEmpty {
+                    Color.clear
+                        .frame(width: 24, height: 24)
+                } else if isRootCategory {
                     Color.clear
                         .frame(width: 24, height: 24)
                 } else {
@@ -504,33 +544,38 @@ struct ListSidebarView: View {
                 Button {
                     selectCategory(node)
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: node.children.isEmpty ? "tag" : "folder")
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: isRootCategory ? 6 : 8) {
+                        if !isRootCategory {
+                            Image(systemName: node.children.isEmpty ? "tag" : "folder")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Color.clear
+                                .frame(width: 4, height: 4)
+                        }
                         Text(node.name)
-                            .font(.subheadline)
+                            .textCase(isRootCategory ? .uppercase : nil)
+                            .font(nameFont)
                             .lineLimit(1)
                         Spacer()
                         Text("\(node.setCount)")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(selectionBackground(for: node))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.leading, CGFloat(level) * 16 + 8)
-
-            if isCategoryExpanded(node), !node.children.isEmpty {
+            if (isRootCategory || isCategoryExpanded(node)), !node.children.isEmpty {
                 ForEach(node.children) { child in
                     AnyView(categoryTreeRow(for: child, level: level + 1))
                 }
             }
         }
+        .padding(.leading, isRootCategory ? 0 : leading)
     }
 
     @ViewBuilder
@@ -566,7 +611,11 @@ struct ListSidebarView: View {
     }
 
     private func isCategoryExpanded(_ node: CategoryNode) -> Bool {
-        expandedCategoryIDs.contains(node.id) || selectedCategoryPath?.starts(with: node.path) == true
+        if node.path == [rootCategoryTitle] {
+            return true
+        }
+
+        return expandedCategoryIDs.contains(node.id) || selectedCategoryPath?.starts(with: node.path) == true
     }
 
     private func expandAncestors(of path: [String]) {
