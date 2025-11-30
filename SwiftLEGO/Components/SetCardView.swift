@@ -2,28 +2,11 @@ import SwiftUI
 import SwiftData
 import BrickCore
 
-private let regularSectionRawValue = Part.InventorySection.regular.rawValue
-
 struct SetCardView: View {
-    let brickSet: BrickSet
-    @Query private var regularRootParts: [Part]
-    @Query private var minifigures: [Minifigure]
+    @Bindable var brickSet: BrickSet
 
     init(brickSet: BrickSet) {
-        self.brickSet = brickSet
-        let setID = brickSet.persistentModelID
-        _regularRootParts = Query(
-            filter: #Predicate { part in
-                part.set?.persistentModelID == setID &&
-                part.parentPart == nil &&
-                part.inventorySectionRawValue == regularSectionRawValue
-            }
-        )
-        _minifigures = Query(
-            filter: #Predicate { figure in
-                figure.set?.persistentModelID == setID
-            }
-        )
+        self._brickSet = Bindable(brickSet)
     }
 
     var body: some View {
@@ -120,6 +103,16 @@ struct SetCardView: View {
         }
 
         return totals
+    }
+
+    private var regularRootParts: [Part] {
+        brickSet.parts.filter { part in
+            part.parentPart == nil && part.inventorySection == .regular
+        }
+    }
+
+    private var minifigures: [Minifigure] {
+        brickSet.minifigures
     }
 }
 
