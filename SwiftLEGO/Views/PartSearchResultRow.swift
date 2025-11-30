@@ -88,7 +88,7 @@ struct PartSearchResultRow: View {
             }
 
             HStack(alignment: .center, spacing: 12) {
-                Text(set.name)
+                Text(set.collection?.name ?? "List")
                     .font(.footnote.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -104,7 +104,7 @@ struct PartSearchResultRow: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(set.setNumber)")
+                    Text("\(set.setNumber) • \(set.name)")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.trailing)
