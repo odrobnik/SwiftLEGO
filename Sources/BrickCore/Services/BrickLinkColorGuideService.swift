@@ -31,8 +31,8 @@ public actor BrickLinkColorGuideService {
     public init() {}
 
     public func fetchColorGuide(locale: String = "en-us") async throws -> [BrickLinkColorGuideEntry] {
-        let localeLowercased = locale.lowercased()
-        guard let url = URL(string: "https://v2.bricklink.com/\(localeLowercased)/catalog/color-guide") else {
+        _ = locale
+        guard let url = URL(string: "https://v2.bricklink.com/en-at/catalog/color-guide") else {
             throw ColorGuideError.invalidResponse
         }
 

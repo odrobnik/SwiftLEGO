@@ -180,6 +180,134 @@ public struct InventorySnapshot: Codable, Sendable {
         }
     }
 
+    public struct OrderSnapshot: Codable, Sendable {
+        public struct PartSnapshot: Codable, Sendable {
+            public let id: UUID?
+            public let itemTypeRawValue: String
+            public let partID: String
+            public let name: String
+            public let colorID: String
+            public let colorName: String
+            public let quantity: Int
+            public let imageURLString: String?
+
+            private enum CodingKeys: String, CodingKey {
+                case id
+                case itemTypeRawValue
+                case partID
+                case name
+                case colorID
+                case colorName
+                case quantity
+                case imageURLString
+            }
+
+            public init(
+                id: UUID? = nil,
+                itemTypeRawValue: String,
+                partID: String,
+                name: String,
+                colorID: String,
+                colorName: String,
+                quantity: Int,
+                imageURLString: String? = nil
+            ) {
+                self.id = id
+                self.itemTypeRawValue = itemTypeRawValue
+                self.partID = partID
+                self.name = name
+                self.colorID = colorID
+                self.colorName = colorName
+                self.quantity = quantity
+                self.imageURLString = imageURLString
+            }
+
+            public init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                id = try container.decodeIfPresent(UUID.self, forKey: .id)
+                itemTypeRawValue = try container.decodeIfPresent(String.self, forKey: .itemTypeRawValue) ?? OrderPart.ItemType.part.rawValue
+                partID = try container.decodeIfPresent(String.self, forKey: .partID) ?? ""
+                name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+                colorID = try container.decodeIfPresent(String.self, forKey: .colorID) ?? ""
+                colorName = try container.decodeIfPresent(String.self, forKey: .colorName) ?? ""
+                quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 0
+                imageURLString = try container.decodeIfPresent(String.self, forKey: .imageURLString)
+            }
+
+            public func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encodeIfPresent(id, forKey: .id)
+                try container.encode(itemTypeRawValue, forKey: .itemTypeRawValue)
+                try container.encode(partID, forKey: .partID)
+                try container.encode(name, forKey: .name)
+                try container.encode(colorID, forKey: .colorID)
+                try container.encode(colorName, forKey: .colorName)
+                try container.encode(quantity, forKey: .quantity)
+                if let imageURLString, !imageURLString.isEmpty {
+                    try container.encode(imageURLString, forKey: .imageURLString)
+                }
+            }
+        }
+
+        public let id: UUID?
+        public let name: String
+        public let orderNumber: String?
+        public let sourceFilename: String?
+        public let importedAt: Date?
+        public let parts: [PartSnapshot]
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case orderNumber
+            case sourceFilename
+            case importedAt
+            case parts
+        }
+
+        public init(
+            id: UUID? = nil,
+            name: String,
+            orderNumber: String? = nil,
+            sourceFilename: String? = nil,
+            importedAt: Date? = nil,
+            parts: [PartSnapshot]
+        ) {
+            self.id = id
+            self.name = name
+            self.orderNumber = orderNumber
+            self.sourceFilename = sourceFilename
+            self.importedAt = importedAt
+            self.parts = parts
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(UUID.self, forKey: .id)
+            name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+            orderNumber = try container.decodeIfPresent(String.self, forKey: .orderNumber)
+            sourceFilename = try container.decodeIfPresent(String.self, forKey: .sourceFilename)
+            importedAt = try container.decodeIfPresent(Date.self, forKey: .importedAt)
+            parts = try container.decodeIfPresent([PartSnapshot].self, forKey: .parts) ?? []
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(id, forKey: .id)
+            try container.encode(name, forKey: .name)
+            if let orderNumber, !orderNumber.isEmpty {
+                try container.encode(orderNumber, forKey: .orderNumber)
+            }
+            if let sourceFilename, !sourceFilename.isEmpty {
+                try container.encode(sourceFilename, forKey: .sourceFilename)
+            }
+            try container.encodeIfPresent(importedAt, forKey: .importedAt)
+            if !parts.isEmpty {
+                try container.encode(parts, forKey: .parts)
+            }
+        }
+    }
+
     public struct ApplyResult: Sendable {
         public let updatedPartCount: Int
         public let matchedSetCount: Int
@@ -220,25 +348,29 @@ public struct InventorySnapshot: Codable, Sendable {
         }
     }
 
-    public static let empty = InventorySnapshot(sets: [], lists: [])
+    public static let empty = InventorySnapshot(sets: [], lists: [], orders: [])
 
     public let sets: [SetSnapshot]
     public let lists: [ListSnapshot]
+    public let orders: [OrderSnapshot]
 
     private enum CodingKeys: String, CodingKey {
         case sets
         case lists
+        case orders
     }
 
-    public init(sets: [SetSnapshot], lists: [ListSnapshot] = []) {
+    public init(sets: [SetSnapshot], lists: [ListSnapshot] = [], orders: [OrderSnapshot] = []) {
         self.sets = sets
         self.lists = lists
+        self.orders = orders
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         sets = try container.decodeIfPresent([SetSnapshot].self, forKey: .sets) ?? []
         lists = try container.decodeIfPresent([ListSnapshot].self, forKey: .lists) ?? []
+        orders = try container.decodeIfPresent([OrderSnapshot].self, forKey: .orders) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -249,12 +381,18 @@ public struct InventorySnapshot: Codable, Sendable {
         if !lists.isEmpty {
             try container.encode(lists, forKey: .lists)
         }
+        if !orders.isEmpty {
+            try container.encode(orders, forKey: .orders)
+        }
     }
 }
 
 extension InventorySnapshot {
     @MainActor
-    public static func make(from lists: [CollectionList]) -> InventorySnapshot {
+    public static func make(
+        from lists: [CollectionList],
+        orders: [BrickOrder] = []
+    ) -> InventorySnapshot {
         let allSets = lists
             .flatMap { $0.sets }
             .sorted(by: setSortComparator)
@@ -267,7 +405,9 @@ extension InventorySnapshot {
             return ListSnapshot(id: list.id, name: list.name, sets: listSets)
         }
 
-        return InventorySnapshot(sets: allSets, lists: listSnapshots)
+        let orderSnapshots = makeOrderSnapshots(from: orders)
+
+        return InventorySnapshot(sets: allSets, lists: listSnapshots, orders: orderSnapshots)
     }
 
     @MainActor
@@ -486,6 +626,71 @@ extension InventorySnapshot {
             parts: partSnapshots,
             minifigures: minifigureSnapshots
         )
+    }
+
+    private static func makeOrderSnapshots(from orders: [BrickOrder]) -> [OrderSnapshot] {
+        orders
+            .sorted(by: orderSortComparator)
+            .map { order in
+                let partSnapshots = order.parts
+                    .sorted(by: orderPartSortComparator)
+                    .map { part in
+                        OrderSnapshot.PartSnapshot(
+                            id: part.id,
+                            itemTypeRawValue: part.itemTypeRawValue,
+                            partID: part.partID,
+                            name: part.name,
+                            colorID: part.colorID,
+                            colorName: part.colorName,
+                            quantity: part.quantity,
+                            imageURLString: part.imageURLString
+                        )
+                    }
+
+                return OrderSnapshot(
+                    id: order.id,
+                    name: order.name,
+                    orderNumber: order.orderNumber,
+                    sourceFilename: order.sourceFilename,
+                    importedAt: order.importedAt,
+                    parts: partSnapshots
+                )
+            }
+    }
+
+    private static func orderSortComparator(_ lhs: BrickOrder, _ rhs: BrickOrder) -> Bool {
+        if lhs.importedAt != rhs.importedAt {
+            return lhs.importedAt < rhs.importedAt
+        }
+
+        if lhs.name.caseInsensitiveCompare(rhs.name) != .orderedSame {
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+
+        let lhsNumber = lhs.orderNumber ?? ""
+        let rhsNumber = rhs.orderNumber ?? ""
+        if lhsNumber.caseInsensitiveCompare(rhsNumber) != .orderedSame {
+            return lhsNumber.localizedCaseInsensitiveCompare(rhsNumber) == .orderedAscending
+        }
+
+        return lhs.id.uuidString.localizedCaseInsensitiveCompare(rhs.id.uuidString) == .orderedAscending
+    }
+
+    private static func orderPartSortComparator(_ lhs: OrderPart, _ rhs: OrderPart) -> Bool {
+        let typeComparison = lhs.itemTypeRawValue.localizedCaseInsensitiveCompare(rhs.itemTypeRawValue)
+        if typeComparison != .orderedSame {
+            return typeComparison == .orderedAscending
+        }
+
+        if lhs.colorName.caseInsensitiveCompare(rhs.colorName) != .orderedSame {
+            return lhs.colorName.localizedCaseInsensitiveCompare(rhs.colorName) == .orderedAscending
+        }
+
+        if lhs.name.caseInsensitiveCompare(rhs.name) != .orderedSame {
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+
+        return lhs.partID.localizedCaseInsensitiveCompare(rhs.partID) == .orderedAscending
     }
 
     private func applyPartSnapshot(

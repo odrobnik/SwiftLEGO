@@ -322,7 +322,7 @@ struct ListSidebarView: View {
     }
 
     private func beginInventoryExport() {
-        let snapshot = InventorySnapshot.make(from: Array(lists))
+        let snapshot = InventorySnapshot.make(from: Array(lists), orders: Array(orders))
         let document = InventorySnapshotDocument(snapshot: snapshot)
         exportConfiguration.present(
             document: ExportDocumentEnvelope(document),
@@ -596,82 +596,135 @@ struct ListSidebarView: View {
 
     @MainActor
     private func performImport(using snapshot: InventorySnapshot) async throws -> Text {
-        if snapshot.lists.isEmpty && snapshot.sets.isEmpty {
+        if snapshot.lists.isEmpty && snapshot.sets.isEmpty && snapshot.orders.isEmpty {
             throw InventoryImportError.emptySnapshot
         }
 
         importingListIDs.removeAll()
 
         let existingLists = Array(lists)
+        var lines: [String] = []
 
         if snapshot.lists.isEmpty {
-            let applyResult = snapshot.apply(to: existingLists)
-            try modelContext.save()
-            return Text(applyResult.summaryDescription)
-        }
-
-        let setProvider = InventoryImportSetProvider(modelContext: modelContext, service: brickLinkService)
-        let setRestorer = InventorySnapshotSetRestorer(modelContext: modelContext, setProvider: setProvider)
-        var usedNames = Set(existingLists.map { $0.name })
-        var createdLists: [CollectionList] = []
-        var totalImportedSets = 0
-        var missingSetNumbers = Set<String>()
-
-        for listSnapshot in snapshot.lists {
-            let uniqueName = uniqueListName(for: listSnapshot.name, usedNames: &usedNames)
-            let newList = CollectionList(name: uniqueName)
-            modelContext.insert(newList)
-            let listID = newList.persistentModelID
-            importingListIDs.insert(listID)
-            importStatusMessage = "Importing \(uniqueName)…"
-
-            var importedCount = 0
-            for setSnapshot in listSnapshot.sets {
-                do {
-                    importStatusMessage = "Syncing \(setSnapshot.setNumber)…"
-                    _ = try await setRestorer.importSet(setSnapshot, into: newList)
-                    importedCount += 1
-                    totalImportedSets += 1
-                } catch {
-                    missingSetNumbers.insert(setSnapshot.setNumber)
-                }
-                importStatusMessage = "Importing \(uniqueName)…"
+            if !snapshot.sets.isEmpty {
+                let applyResult = snapshot.apply(to: existingLists)
+                try modelContext.save()
+                lines.append(applyResult.summaryDescription)
             }
-
-            if importedCount > 0 {
-                createdLists.append(newList)
-            } else {
-                modelContext.delete(newList)
-            }
-
-            importingListIDs.remove(listID)
-        }
-
-        importingListIDs.removeAll()
-
-        try modelContext.save()
-
-        var lines: [String] = []
-        func appendLine(_ line: String) {
-            lines.append(line)
-        }
-
-        if !createdLists.isEmpty {
-            let names = createdLists.map(\.name).joined(separator: ", ")
-            let importedSummary: LocalizedStringResource = "Imported ^[\(createdLists.count) list](inflect: true) (\(names)) with ^[\(totalImportedSets) set](inflect: true)."
-            appendLine(String(localized: importedSummary))
         } else {
-            appendLine("No lists were imported.")
+            let setProvider = InventoryImportSetProvider(modelContext: modelContext, service: brickLinkService)
+            let setRestorer = InventorySnapshotSetRestorer(modelContext: modelContext, setProvider: setProvider)
+            var usedNames = Set(existingLists.map { $0.name })
+            var createdLists: [CollectionList] = []
+            var totalImportedSets = 0
+            var missingSetNumbers = Set<String>()
+
+            for listSnapshot in snapshot.lists {
+                let uniqueName = uniqueListName(for: listSnapshot.name, usedNames: &usedNames)
+                let newList = CollectionList(name: uniqueName)
+                modelContext.insert(newList)
+                let listID = newList.persistentModelID
+                importingListIDs.insert(listID)
+                importStatusMessage = "Importing \(uniqueName)…"
+
+                var importedCount = 0
+                for setSnapshot in listSnapshot.sets {
+                    do {
+                        importStatusMessage = "Syncing \(setSnapshot.setNumber)…"
+                        _ = try await setRestorer.importSet(setSnapshot, into: newList)
+                        importedCount += 1
+                        totalImportedSets += 1
+                    } catch {
+                        missingSetNumbers.insert(setSnapshot.setNumber)
+                    }
+                    importStatusMessage = "Importing \(uniqueName)…"
+                }
+
+                if importedCount > 0 {
+                    createdLists.append(newList)
+                } else {
+                    modelContext.delete(newList)
+                }
+
+                importingListIDs.remove(listID)
+            }
+
+            importingListIDs.removeAll()
+
+            try modelContext.save()
+
+            if !createdLists.isEmpty {
+                let names = createdLists.map(\.name).joined(separator: ", ")
+                let importedSummary: LocalizedStringResource = "Imported ^[\(createdLists.count) list](inflect: true) (\(names)) with ^[\(totalImportedSets) set](inflect: true)."
+                lines.append(String(localized: importedSummary))
+            } else {
+                lines.append("No lists were imported.")
+            }
+
+            if !missingSetNumbers.isEmpty {
+                let missing = missingSetNumbers.sorted().joined(separator: ", ")
+                let missingSummary: LocalizedStringResource = "Skipped ^[\(missingSetNumbers.count) set](inflect: true) not found in your collection: \(missing)."
+                lines.append(String(localized: missingSummary))
+            }
         }
 
-        if !missingSetNumbers.isEmpty {
-            let missing = missingSetNumbers.sorted().joined(separator: ", ")
-            let missingSummary: LocalizedStringResource = "Skipped ^[\(missingSetNumbers.count) set](inflect: true) not found in your collection: \(missing)."
-            appendLine(String(localized: missingSummary))
+        if let orderSummary = try importOrders(from: snapshot) {
+            lines.append(orderSummary)
         }
 
         guard !lines.isEmpty else { return Text("") }
         return Text(lines.joined(separator: "\n"))
+    }
+
+    @MainActor
+    private func importOrders(from snapshot: InventorySnapshot) throws -> String? {
+        guard !snapshot.orders.isEmpty else { return nil }
+        importStatusMessage = "Importing orders…"
+
+        var usedOrderIDs = Set(orders.map(\.id))
+        var importedOrders = 0
+        var totalParts = 0
+
+        for orderSnapshot in snapshot.orders {
+            let resolvedID: UUID
+            if let snapshotID = orderSnapshot.id, !usedOrderIDs.contains(snapshotID) {
+                resolvedID = snapshotID
+            } else {
+                resolvedID = UUID()
+            }
+
+            let order = BrickOrder(
+                id: resolvedID,
+                name: orderSnapshot.name,
+                orderNumber: orderSnapshot.orderNumber,
+                sourceFilename: orderSnapshot.sourceFilename,
+                importedAt: orderSnapshot.importedAt ?? Date()
+            )
+            modelContext.insert(order)
+
+            let parts = orderSnapshot.parts.map { part in
+                OrderPart(
+                    itemType: OrderPart.ItemType(rawValue: part.itemTypeRawValue) ?? .part,
+                    partID: part.partID,
+                    name: part.name,
+                    colorID: part.colorID,
+                    colorName: part.colorName,
+                    quantity: part.quantity,
+                    imageURLString: part.imageURLString,
+                    order: order
+                )
+            }
+            order.parts = parts
+
+            importedOrders += 1
+            totalParts += parts.count
+            usedOrderIDs.insert(order.id)
+        }
+
+        try modelContext.save()
+
+        let summary: LocalizedStringResource = "Imported ^[\(importedOrders) order](inflect: true) with ^[\(totalParts) part](inflect: true)."
+        return String(localized: summary)
     }
 
     private func uniqueListName(for rawName: String, usedNames: inout Set<String>) -> String {
