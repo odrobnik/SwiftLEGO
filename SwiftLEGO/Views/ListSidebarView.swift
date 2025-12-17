@@ -6,20 +6,26 @@ import BrickCore
 struct ListSidebarView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(animation: .default) private var lists: [CollectionList]
+    @Query(animation: .default) private var orders: [BrickOrder]
     @Binding var selectionID: PersistentIdentifier?
+    @Binding var selectedOrderID: PersistentIdentifier?
     @Binding var selectedCategoryPath: [String]?
     @State private var editorState: EditorState?
     @State private var expandedCategoryIDs: Set<String> = []
     @State private var setBeingEdited: BrickSet?
     @State private var exportConfiguration = ExportConfiguration()
     @State private var isImportingInventory = false
-    @State private var inventoryAlert: InventoryAlert?
+    @State private var isImportingOrder = false
+    @State private var importAlert: ImportAlert?
     @State private var importingListIDs: Set<PersistentIdentifier> = []
     @State private var importStatusMessage: String?
     @State private var pendingImportURL: URL?
+    @State private var pendingOrderImportURL: URL?
     let onSetSelected: (BrickSet) -> Void
     let onCategorySelected: ([String]?) -> Void
+    let onOrderSelected: (BrickOrder) -> Void
     private let brickLinkService = BrickLinkService()
+    private let orderParser = BrickLinkOrderDetailParser()
 
     private var listCountDescription: String {
         "\(lists.count) list\(lists.count == 1 ? "" : "s")"
@@ -93,6 +99,46 @@ struct ListSidebarView: View {
                 }
             }
 
+            if !orders.isEmpty {
+                Section("Orders") {
+                    ForEach(orders) { order in
+                        Button {
+                            selectOrder(order)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "cart")
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(order.displayName)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                    Text("^[\(order.parts.count) item](inflect: true)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(orderSelectionBackground(for: order))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                delete(order)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                    .onDelete { indexSet in
+                        indexSet.map { orders[$0] }.forEach(delete)
+                    }
+                }
+            }
+
             if !categoryNodes.isEmpty {
                 Section {
                     if let root = rootCategoryNode {
@@ -124,6 +170,12 @@ struct ListSidebarView: View {
                     Label("Import Collection", systemImage: "square.and.arrow.down")
                 }
 
+                Button {
+                    beginOrderImport()
+                } label: {
+                    Label("Import Order", systemImage: "cart.badge.plus")
+                }
+
                 Menu {
                     Button {
                         beginInventoryExport()
@@ -142,7 +194,7 @@ struct ListSidebarView: View {
             }
         }
         .overlay {
-            if lists.isEmpty {
+            if lists.isEmpty && orders.isEmpty {
                 EmptyStateView(
                     icon: "square.stack.3d.up",
                     title: "Create Your First List",
@@ -152,6 +204,9 @@ struct ListSidebarView: View {
             }
         }
         .onChange(of: lists.count) { _, _ in
+            ensureSelection()
+        }
+        .onChange(of: orders.count) { _, _ in
             ensureSelection()
         }
         .sheet(item: $editorState) { state in
@@ -176,7 +231,7 @@ struct ListSidebarView: View {
             defaultFilename: exportConfiguration.filename
         ) { result in
             if case .failure(let error) = result {
-                inventoryAlert = .error("\(exportConfiguration.failurePrefix): \(error.localizedDescription)")
+                importAlert = .error("\(exportConfiguration.failurePrefix): \(error.localizedDescription)")
             }
         }
         .fileImporter(
@@ -188,10 +243,22 @@ struct ListSidebarView: View {
             case .success(let url):
                 pendingImportURL = url
             case .failure(let error):
-                inventoryAlert = .error("Import failed: \(error.localizedDescription)")
+                importAlert = .error("Import failed: \(error.localizedDescription)")
             }
         }
-        .alert(item: $inventoryAlert) { alert in
+        .fileImporter(
+            isPresented: $isImportingOrder,
+            allowedContentTypes: [.html]
+        ) { result in
+            isImportingOrder = false
+            switch result {
+            case .success(let url):
+                pendingOrderImportURL = url
+            case .failure(let error):
+                importAlert = .error("Order import failed: \(error.localizedDescription)")
+            }
+        }
+        .alert(item: $importAlert) { alert in
             Alert(
                 title: Text(alert.title),
                 message: alert.message,
@@ -203,6 +270,13 @@ struct ListSidebarView: View {
             await processImport(from: url)
             await MainActor.run {
                 pendingImportURL = nil
+            }
+        }
+        .task(id: pendingOrderImportURL) {
+            guard let url = pendingOrderImportURL else { return }
+            await processOrderImport(from: url)
+            await MainActor.run {
+                pendingOrderImportURL = nil
             }
         }
     }
@@ -218,6 +292,15 @@ struct ListSidebarView: View {
             selectedCategoryPath = nil
             onCategorySelected(nil)
         }
+    }
+
+    private func delete(_ order: BrickOrder) {
+        if selectedOrderID == order.persistentModelID {
+            selectedOrderID = nil
+        }
+        modelContext.delete(order)
+        try? modelContext.save()
+        ensureSelection()
     }
 
     private func handleEditorSubmit(_ result: EditorResult) {
@@ -264,6 +347,10 @@ struct ListSidebarView: View {
         isImportingInventory = true
     }
 
+    private func beginOrderImport() {
+        isImportingOrder = true
+    }
+
     @MainActor
     private func processImport(from sourceURL: URL) async {
         importStatusMessage = "Reading file…"
@@ -275,17 +362,217 @@ struct ListSidebarView: View {
             importStatusMessage = "Importing lists…"
 
             let summary = try await performImport(using: snapshot)
-            inventoryAlert = .success(summary)
+            importAlert = .success(summary)
             importStatusMessage = nil
         } catch {
             if let importError = error as? InventoryImportError {
-                inventoryAlert = .error(importError.localizedDescription)
+                importAlert = .error(importError.localizedDescription)
             } else {
-                inventoryAlert = .error("Import failed: \(error.localizedDescription)")
+                importAlert = .error("Import failed: \(error.localizedDescription)")
             }
             importingListIDs.removeAll()
             importStatusMessage = nil
         }
+    }
+
+    @MainActor
+    private func processOrderImport(from sourceURL: URL) async {
+        importStatusMessage = "Reading order…"
+        do {
+            let data = try await loadFileData(from: sourceURL)
+            importStatusMessage = "Parsing order…"
+
+            let parsed = try await orderParser.parseOrderDetail(
+                htmlData: data,
+                baseURL: URL(string: "https://www.bricklink.com")
+            )
+
+            try await ensureBrickColors(for: parsed)
+            importStatusMessage = "Importing order…"
+            let orderName = inferredOrderName(from: parsed, sourceURL: sourceURL)
+            let parts = makeOrderParts(from: parsed)
+            guard !parts.isEmpty else {
+                throw OrderImportError.noParts
+            }
+
+            let order = BrickOrder(
+                name: orderName,
+                orderNumber: parsed.orderID,
+                sourceFilename: sourceURL.lastPathComponent
+            )
+            modelContext.insert(order)
+            order.parts = parts
+            for part in parts {
+                part.order = order
+            }
+            try modelContext.save()
+
+            let summary: LocalizedStringResource = "Imported \(orderName) with ^[\(parts.count) part](inflect: true)."
+            importAlert = .success(Text(summary))
+            importStatusMessage = nil
+        } catch {
+            if let importError = error as? OrderImportError {
+                importAlert = .error(importError.localizedDescription)
+            } else {
+                importAlert = .error("Order import failed: \(error.localizedDescription)")
+            }
+            importStatusMessage = nil
+        }
+    }
+
+    private func inferredOrderName(from parsed: BrickLinkOrderDetail, sourceURL: URL) -> String {
+        if let orderID = parsed.orderID, !orderID.isEmpty {
+            return "Order #\(orderID)"
+        }
+        let filename = sourceURL.deletingPathExtension().lastPathComponent
+        return filename.isEmpty ? "Order" : filename
+    }
+
+    private func makeOrderParts(from parsed: BrickLinkOrderDetail) -> [OrderPart] {
+        let colorLookup = brickColorLookup()
+        var aggregated: [OrderPartKey: OrderPart] = [:]
+
+        for entry in parsed.parts {
+            let trimmedName = entry.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let resolvedName = trimmedName.isEmpty ? defaultName(for: entry) : trimmedName
+            let colorName = resolvedColorName(for: entry, lookup: colorLookup)
+            let key = OrderPartKey(
+                itemType: entry.itemType,
+                partID: entry.partID,
+                colorID: entry.colorID
+            )
+
+            if let existing = aggregated[key] {
+                existing.quantity += entry.quantity
+                if shouldReplaceOrderPartName(
+                    current: existing.name,
+                    candidate: resolvedName,
+                    itemType: entry.itemType
+                ) {
+                    existing.name = resolvedName
+                }
+            } else {
+                aggregated[key] = OrderPart(
+                    itemType: OrderPart.ItemType(rawValue: entry.itemType.rawValue) ?? .part,
+                    partID: entry.partID,
+                    name: resolvedName,
+                    colorID: entry.colorID,
+                    colorName: colorName,
+                    quantity: entry.quantity,
+                    imageURLString: entry.imageURL?.absoluteString
+                )
+            }
+        }
+
+        return aggregated.values.sorted { lhs, rhs in
+            let typeComparison = lhs.itemTypeRawValue.localizedCaseInsensitiveCompare(rhs.itemTypeRawValue)
+            if typeComparison != .orderedSame {
+                return typeComparison == .orderedAscending
+            }
+            if lhs.colorName != rhs.colorName {
+                return lhs.colorName.localizedCaseInsensitiveCompare(rhs.colorName) == .orderedAscending
+            }
+            let nameComparison = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            if nameComparison != .orderedSame {
+                return nameComparison == .orderedAscending
+            }
+            return lhs.partID.localizedCaseInsensitiveCompare(rhs.partID) == .orderedAscending
+        }
+    }
+
+    private func shouldReplaceOrderPartName(
+        current: String,
+        candidate: String,
+        itemType: BrickLinkOrderPart.ItemType
+    ) -> Bool {
+        let trimmedCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedCandidate.isEmpty else { return false }
+        if !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let defaultPrefix = itemType == .minifigure ? "Minifigure " : "Part "
+            return current.hasPrefix(defaultPrefix) && current != trimmedCandidate
+        }
+        return true
+    }
+
+    private func defaultName(for entry: BrickLinkOrderPart) -> String {
+        switch entry.itemType {
+        case .part:
+            return "Part \(entry.partID)"
+        case .minifigure:
+            return "Minifigure \(entry.partID)"
+        }
+    }
+
+    private func resolvedColorName(
+        for entry: BrickLinkOrderPart,
+        lookup: [String: String]
+    ) -> String {
+        switch entry.itemType {
+        case .minifigure:
+            return "Minifigure"
+        case .part:
+            return lookup[entry.colorID] ?? ""
+        }
+    }
+
+    private struct OrderPartKey: Hashable {
+        let itemType: BrickLinkOrderPart.ItemType
+        let partID: String
+        let colorID: String
+    }
+
+    private func brickColorLookup() -> [String: String] {
+        let descriptor = FetchDescriptor<BrickColor>()
+        guard let colors = try? modelContext.fetch(descriptor), !colors.isEmpty else {
+            return [:]
+        }
+        return Dictionary(uniqueKeysWithValues: colors.map { (String($0.brickLinkColorID), $0.brickLinkName) })
+    }
+
+    private func ensureBrickColors(for parsed: BrickLinkOrderDetail) async throws {
+        let neededColorIDs = Set(
+            parsed.parts
+                .filter { $0.itemType == .part }
+                .compactMap { Int($0.colorID) }
+                .filter { $0 > 0 }
+        )
+
+        guard !neededColorIDs.isEmpty else { return }
+
+        var missing = missingColorIDs(from: neededColorIDs)
+        guard !missing.isEmpty else { return }
+
+        importStatusMessage = "Refreshing colors…"
+        let localeIdentifier = localeIdentifier(for: .current)
+        _ = try await ColorImportUtilities.refreshBrickLinkColors(
+            modelContext: modelContext,
+            locale: localeIdentifier
+        )
+
+        missing = missingColorIDs(from: neededColorIDs)
+        guard missing.isEmpty else {
+            throw OrderImportError.missingColors(missing.sorted())
+        }
+    }
+
+    private func missingColorIDs(from neededIDs: Set<Int>) -> Set<Int> {
+        let descriptor = FetchDescriptor<BrickColor>()
+        let existingIDs = (try? modelContext.fetch(descriptor))?.map { $0.brickLinkColorID } ?? []
+        return neededIDs.subtracting(existingIDs)
+    }
+
+    private func localeIdentifier(for locale: Locale) -> String {
+        let normalized = locale.identifier
+            .replacingOccurrences(of: "_", with: "-")
+            .lowercased()
+
+        let components = normalized.split(separator: "-")
+        guard let language = components.first else {
+            return "en-us"
+        }
+
+        let region = components.dropFirst().first ?? Substring("us")
+        return "\(language)-\(region)"
     }
 
     private func loadFileData(from url: URL) async throws -> Data {
@@ -414,14 +701,29 @@ struct ListSidebarView: View {
         }
     }
 
-    private func ensureSelection() {
-        guard !lists.isEmpty else {
-            selectionID = nil
-            return
-        }
+    private enum OrderImportError: LocalizedError {
+        case noParts
+        case missingColors([Int])
 
-        if selectionID == nil {
-            selectionID = lists.first?.persistentModelID
+        var errorDescription: String? {
+            switch self {
+            case .noParts:
+                return "The selected file does not contain any order parts."
+            case .missingColors(let ids):
+                let list = ids.map(String.init).joined(separator: ", ")
+                return "Color lookup is incomplete. Missing BrickLink color IDs: \(list)."
+            }
+        }
+    }
+
+    private func ensureSelection() {
+        guard selectedCategoryPath == nil else { return }
+        guard selectionID == nil, selectedOrderID == nil else { return }
+
+        if let firstList = lists.first {
+            selectionID = firstList.persistentModelID
+        } else if let firstOrder = orders.first {
+            selectedOrderID = firstOrder.persistentModelID
         }
     }
 
@@ -590,6 +892,7 @@ struct ListSidebarView: View {
 
     private func selectCategory(_ node: CategoryNode) {
         selectionID = nil
+        selectedOrderID = nil
         selectedCategoryPath = node.path
         onCategorySelected(node.path)
         expandAncestors(of: node.path)
@@ -598,7 +901,16 @@ struct ListSidebarView: View {
     private func selectList(_ list: CollectionList) {
         selectedCategoryPath = nil
         selectionID = list.persistentModelID
+        selectedOrderID = nil
         onCategorySelected(nil)
+    }
+
+    private func selectOrder(_ order: BrickOrder) {
+        selectionID = nil
+        selectedCategoryPath = nil
+        selectedOrderID = order.persistentModelID
+        onCategorySelected(nil)
+        onOrderSelected(order)
     }
 
     private func toggleCategoryExpansion(_ node: CategoryNode) {
@@ -632,6 +944,14 @@ struct ListSidebarView: View {
 
     private func listSelectionBackground(for list: CollectionList) -> some View {
         if selectionID == list.persistentModelID {
+            return AnyView(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.accentColor.opacity(0.12)))
+        }
+        return AnyView(Color.clear)
+    }
+
+    private func orderSelectionBackground(for order: BrickOrder) -> some View {
+        if selectedOrderID == order.persistentModelID {
             return AnyView(RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.accentColor.opacity(0.12)))
         }
@@ -675,7 +995,7 @@ struct ListSidebarView: View {
     private func selectionHighlight(for set: BrickSet) -> some View { Color.clear }
 }
 
-private struct InventoryAlert: Identifiable {
+private struct ImportAlert: Identifiable {
     enum Kind {
         case success
         case error
@@ -690,16 +1010,16 @@ private struct InventoryAlert: Identifiable {
         case .success:
             return "Import Complete"
         case .error:
-            return "Inventory Error"
+            return "Import Error"
         }
     }
 
-    static func success(_ message: Text) -> InventoryAlert {
-        InventoryAlert(kind: .success, message: message)
+    static func success(_ message: Text) -> ImportAlert {
+        ImportAlert(kind: .success, message: message)
     }
 
-    static func error(_ message: String) -> InventoryAlert {
-        InventoryAlert(kind: .error, message: Text(verbatim: message))
+    static func error(_ message: String) -> ImportAlert {
+        ImportAlert(kind: .error, message: Text(verbatim: message))
     }
 }
 

@@ -62,4 +62,20 @@ extension Minifigure: QuickLookPreviewable {
         "Minifigure \(identifier)"
     }
 }
+
+extension OrderPart: QuickLookPreviewable {
+    var quickLookID: AnyHashable { persistentModelID }
+
+    var quickLookPreferredURL: URL? {
+        imageURL
+    }
+
+    var quickLookFallbackURL: URL? {
+        nil
+    }
+
+    var quickLookPreviewBaseName: String {
+        "Order Part \(partID)"
+    }
+}
 #endif

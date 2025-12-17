@@ -7,8 +7,10 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(animation: .default) private var lists: [CollectionList]
+    @Query(animation: .default) private var orders: [BrickOrder]
     @State private var path = NavigationPath()
     @State private var selectedListID: PersistentIdentifier?
+    @State private var selectedOrderID: PersistentIdentifier?
     @State private var selectedCategoryPath: [String]?
     private let uncategorizedCategoryTitle = "Uncategorized"
     private let rootCategoryTitle = CategoryConstants.rootCategoryTitle
@@ -17,9 +19,11 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: .constant(.automatic)) {
             ListSidebarView(
                 selectionID: bindingSelectedListID,
+                selectedOrderID: $selectedOrderID,
                 selectedCategoryPath: $selectedCategoryPath,
                 onSetSelected: handleSidebarSetSelection(_:),
-                onCategorySelected: handleSidebarCategorySelection(_:)
+                onCategorySelected: handleSidebarCategorySelection(_:),
+                onOrderSelected: handleSidebarOrderSelection(_:)
             )
                 .background(Color(uiColor: .systemGroupedBackground))
         } detail: {
@@ -31,12 +35,18 @@ struct ContentView: View {
                             sets: setsMatchingCategory(path: categoryPath)
                         )
                         .id(categoryPath.joined(separator: "|"))
+                    } else if let order = selectedOrder {
+                        OrderDetailView(order: order)
+                            .id(order.persistentModelID)
                     } else if let list = selectedList {
                         SetCollectionView(list: list)
                         .id(list.persistentModelID)
                     } else if let first = lists.first {
                         SetCollectionView(list: first)
                         .task { setSelectedList(first) }
+                    } else if let firstOrder = orders.first {
+                        OrderDetailView(order: firstOrder)
+                            .task { setSelectedOrder(firstOrder) }
                     } else {
                         EmptyStateView(
                             icon: "square.stack.3d.up.slash",
@@ -64,6 +74,9 @@ struct ContentView: View {
         .onChange(of: lists.count) { _, _ in
             ensureSelection()
         }
+        .onChange(of: orders.count) { _, _ in
+            ensureSelection()
+        }
         .task {
             #if canImport(BrickCore)
             await BrickColorRefreshManager.shared.refreshIfNeeded(using: modelContext)
@@ -77,6 +90,7 @@ struct ContentView: View {
             selectedListID = newID
             if newID != nil {
                 selectedCategoryPath = nil
+                selectedOrderID = nil
             }
         })
     }
@@ -85,14 +99,28 @@ struct ContentView: View {
         guard let selectedListID else { return nil }
         return lists.first(where: { $0.persistentModelID == selectedListID })
     }
+
+    private var selectedOrder: BrickOrder? {
+        guard let selectedOrderID else { return nil }
+        return orders.first(where: { $0.persistentModelID == selectedOrderID })
+    }
     
     private func ensureSelection() {
         if selectedCategoryPath != nil { return }
+        if let selectedOrderID, orders.contains(where: { $0.persistentModelID == selectedOrderID }) {
+            return
+        }
+        if let selectedListID, lists.contains(where: { $0.persistentModelID == selectedListID }) {
+            return
+        }
 
-        if selectedListID == nil {
-            setSelectedList(lists.first)
-        } else if selectedList == nil {
-            setSelectedList(lists.first)
+        if let firstList = lists.first {
+            setSelectedList(firstList)
+        } else if let firstOrder = orders.first {
+            setSelectedOrder(firstOrder)
+        } else {
+            selectedListID = nil
+            selectedOrderID = nil
         }
     }
     
@@ -101,11 +129,23 @@ struct ContentView: View {
             selectedCategoryPath = nil
         }
         selectedListID = list?.persistentModelID
+        if list != nil {
+            selectedOrderID = nil
+        }
+    }
+
+    private func setSelectedOrder(_ order: BrickOrder?) {
+        if order != nil {
+            selectedCategoryPath = nil
+            selectedListID = nil
+        }
+        selectedOrderID = order?.persistentModelID
     }
 
     private func handleSidebarSetSelection(_ set: BrickSet) {
         guard let list = set.collection else { return }
         setSelectedList(list)
+        selectedOrderID = nil
         path = NavigationPath()
         path.append(set)
     }
@@ -114,9 +154,15 @@ struct ContentView: View {
         selectedCategoryPath = pathComponents
         if pathComponents != nil {
             selectedListID = nil
+            selectedOrderID = nil
         } else {
             ensureSelection()
         }
+        path = NavigationPath()
+    }
+
+    private func handleSidebarOrderSelection(_ order: BrickOrder) {
+        setSelectedOrder(order)
         path = NavigationPath()
     }
     private func setsMatchingCategory(path: [String]) -> [BrickSet] {

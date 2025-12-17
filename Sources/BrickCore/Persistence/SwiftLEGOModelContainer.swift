@@ -35,7 +35,9 @@ public enum SwiftLEGOModelContainer {
             Part.self,
             Minifigure.self,
             MinifigCategory.self,
-            BrickColor.self
+            BrickColor.self,
+            BrickOrder.self,
+            OrderPart.self
         ])
         let configuration = ModelConfiguration(isStoredInMemoryOnly: inMemory)
         let container = try ModelContainer(for: schema, configurations: configuration)
