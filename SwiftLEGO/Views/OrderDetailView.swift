@@ -41,6 +41,11 @@ struct OrderDetailView: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private var forwardedSearchQuery: String? {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     var body: some View {
         Group {
             if partsByColor.isEmpty {
@@ -54,9 +59,7 @@ struct OrderDetailView: View {
                     ForEach(partsByColor, id: \.color) { group in
                         Section(group.color) {
                             ForEach(group.parts) { part in
-                                NavigationLink {
-                                    OrderPartDistributionView(orderPart: part)
-                                } label: {
+                                NavigationLink(value: OrderPartRoute(orderPart: part, searchQuery: forwardedSearchQuery)) {
                                     OrderPartRowView(
                                         part: part,
                                         colorName: resolvedColorName(for: part)

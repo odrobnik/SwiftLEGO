@@ -58,6 +58,12 @@ struct ContentView: View {
                 .navigationDestination(for: BrickSet.self) { set in
                     SetDetailView(brickSet: set)
                 }
+                .navigationDestination(for: OrderPartRoute.self) { route in
+                    OrderPartDistributionView(
+                        orderPart: route.orderPart,
+                        searchQuery: route.searchQuery
+                    )
+                }
                 .navigationDestination(for: SearchResult.self) { result in
                     SetDetailView(
                         brickSet: result.set,

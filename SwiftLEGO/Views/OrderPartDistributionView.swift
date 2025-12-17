@@ -4,11 +4,13 @@ import BrickCore
 
 struct OrderPartDistributionView: View {
     let orderPart: OrderPart
+    let searchQuery: String?
     @Query private var matchingParts: [Part]
     @Query private var matchingMinifigures: [Minifigure]
 
-    init(orderPart: OrderPart) {
+    init(orderPart: OrderPart, searchQuery: String? = nil) {
         self.orderPart = orderPart
+        self.searchQuery = searchQuery
         let partID = orderPart.partID
         let colorID = orderPart.colorID
         _matchingParts = Query(filter: #Predicate<Part> { part in
@@ -90,7 +92,7 @@ struct OrderPartDistributionView: View {
                     List {
                         Section {
                             ForEach(matches) { match in
-                                NavigationLink(value: match.set) {
+                                NavigationLink(value: searchResult(for: match)) {
                                     PartSearchResultRow(
                                         set: match.set,
                                         part: match.part,
@@ -119,7 +121,7 @@ struct OrderPartDistributionView: View {
                     List {
                         Section {
                             ForEach(minifigureMatches) { match in
-                                NavigationLink(value: match.set) {
+                                NavigationLink(value: searchResult(for: match)) {
                                     MinifigureSearchResultRow(
                                         set: match.set,
                                         minifigure: match.minifigure
@@ -171,6 +173,27 @@ struct OrderPartDistributionView: View {
 
         return chain.reversed()
     }
+
+    private func searchResult(for match: OrderPartMatch) -> SearchResult {
+        SearchResult(
+            set: match.set,
+            searchQuery: forwardedSearchQuery,
+            section: match.part.inventorySection
+        )
+    }
+
+    private func searchResult(for match: OrderMinifigureMatch) -> SearchResult {
+        SearchResult(
+            set: match.set,
+            searchQuery: forwardedSearchQuery,
+            section: .regular
+        )
+    }
+
+    private var forwardedSearchQuery: String {
+        let trimmed = searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed
+    }
 }
 
 private struct OrderPartMatch: Identifiable {
@@ -211,7 +234,7 @@ private struct OrderPartHeaderView: View {
     context.insert(orderPart)
 
     return NavigationStack {
-        OrderPartDistributionView(orderPart: orderPart)
+        OrderPartDistributionView(orderPart: orderPart, searchQuery: "3001")
     }
     .modelContainer(container)
 }
