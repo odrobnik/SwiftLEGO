@@ -157,11 +157,13 @@ public final class BrickLinkOrderDetailParser {
             return nil
         }
         if let range = raw.range(of: "Name:") {
-            return raw[range.upperBound...]
+            let trimmed = raw[range.upperBound...]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalizeWhitespace(String(trimmed))
         }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        guard !trimmed.isEmpty else { return nil }
+        return normalizeWhitespace(trimmed)
     }
 
     private func descendantElements(named name: String, from root: DOMElement) -> [DOMElement] {
@@ -198,5 +200,11 @@ public final class BrickLinkOrderDetailParser {
             return element.children.map { textContent(of: $0) }.joined()
         }
         return ""
+    }
+
+    private func normalizeWhitespace(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

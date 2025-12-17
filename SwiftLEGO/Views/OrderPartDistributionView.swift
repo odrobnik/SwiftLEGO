@@ -90,12 +90,14 @@ struct OrderPartDistributionView: View {
                     List {
                         Section {
                             ForEach(matches) { match in
-                                PartSearchResultRow(
-                                    set: match.set,
-                                    part: match.part,
-                                    owningMinifigure: match.owningMinifigure,
-                                    parentChain: match.parentChain
-                                )
+                                NavigationLink(value: match.set) {
+                                    PartSearchResultRow(
+                                        set: match.set,
+                                        part: match.part,
+                                        owningMinifigure: match.owningMinifigure,
+                                        parentChain: match.parentChain
+                                    )
+                                }
                             }
                         } header: {
                             OrderPartHeaderView(
@@ -117,10 +119,12 @@ struct OrderPartDistributionView: View {
                     List {
                         Section {
                             ForEach(minifigureMatches) { match in
-                                MinifigureSearchResultRow(
-                                    set: match.set,
-                                    minifigure: match.minifigure
-                                )
+                                NavigationLink(value: match.set) {
+                                    MinifigureSearchResultRow(
+                                        set: match.set,
+                                        minifigure: match.minifigure
+                                    )
+                                }
                             }
                         } header: {
                             OrderPartHeaderView(

@@ -6,14 +6,14 @@ struct OrderDetailView: View {
     @Query private var colors: [BrickColor]
     @Bindable var order: BrickOrder
     @State private var searchText: String = ""
+    @State private var effectiveSearchText: String = ""
 
     private var filteredParts: [OrderPart] {
         guard let query = normalizedSearchQuery else {
             return order.parts
         }
         return order.parts.filter { part in
-            let searchable = "\(part.partID) \(part.name) \(resolvedColorName(for: part)) \(part.itemType.rawValue)"
-            return searchable.lowercased().contains(query)
+            matchesOrderPart(part, query: query)
         }
     }
 
@@ -37,8 +37,8 @@ struct OrderDetailView: View {
     }
 
     private var normalizedSearchQuery: String? {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed.lowercased()
+        let trimmed = effectiveSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     var body: some View {
@@ -70,6 +70,9 @@ struct OrderDetailView: View {
             }
         }
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search order parts")
+        .task(id: searchText) {
+            await updateSearchQuery()
+        }
         .navigationTitle(order.displayName)
         .toolbarTitleDisplayMode(.inline)
     }
@@ -95,6 +98,191 @@ struct OrderDetailView: View {
     private func normalizeColorName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Unknown Color" : trimmed
+    }
+
+    private func matchesOrderPart(_ part: OrderPart, query: String) -> Bool {
+        let rawQuery = normalized(query)
+        guard !rawQuery.isEmpty else { return false }
+
+        let startsWithNumber = rawQuery.first?.isNumber == true
+        let components = rawQuery.split(whereSeparator: { $0.isWhitespace })
+        let primaryToken = components.first.map(String.init) ?? rawQuery
+        let primaryTokenIsShortLength = isShortLengthToken(primaryToken)
+        let primaryTokenIsNumericOnly = primaryToken.allSatisfy { $0.isNumber }
+        let primaryTokenIsNumeric = primaryTokenIsNumericOnly && !primaryTokenIsShortLength
+        let primaryTokenIsDimensionQuery = normalizedDimensionQuery(for: primaryToken) != nil
+        let numericPrefixToken = String(primaryToken.prefix { $0.isNumber })
+        let dimensionPrefixQuery = normalizedDimensionPrefix(in: rawQuery)
+        let shouldEnforceNumericPrefix = !numericPrefixToken.isEmpty && dimensionPrefixQuery == nil && !primaryTokenIsShortLength
+        let shouldMatchPartIDPrefix = startsWithNumber && !primaryTokenIsNumericOnly && !primaryTokenIsDimensionQuery && !primaryTokenIsShortLength
+        let normalizedQueryTokens = queryTokens(from: rawQuery)
+        let secondaryTokens = normalizedQueryTokens.dropFirst()
+
+        let resolvedColor = resolvedColorName(for: part)
+        let partIDLower = normalized(part.partID)
+        let colorLower = normalized(resolvedColor)
+        let nameLower = normalized(part.name)
+        let searchable = searchableText(for: part, colorName: resolvedColor)
+        let partTokens = partSearchTokens(for: part, colorName: resolvedColor)
+
+        if shouldEnforceNumericPrefix, !matchesNumericPartID(part.partID, numericQuery: numericPrefixToken) {
+            return false
+        }
+
+        if let dimensionPrefixQuery, !searchable.contains(dimensionPrefixQuery) {
+            return false
+        }
+
+        let matches: Bool
+        if dimensionPrefixQuery != nil {
+            if normalizedQueryTokens.count <= 1 {
+                matches = true
+            } else {
+                matches = secondaryTokens.allSatisfy { token in
+                    matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
+                }
+            }
+        } else if primaryTokenIsNumeric {
+            if secondaryTokens.isEmpty {
+                matches = true
+            } else {
+                matches = secondaryTokens.allSatisfy { token in
+                    matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
+                }
+            }
+        } else if primaryTokenIsDimensionQuery {
+            matches = matchesToken(primaryToken, partID: part.partID, partTokens: partTokens, searchableText: searchable) &&
+            secondaryTokens.allSatisfy { token in
+                matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
+            }
+        } else if shouldMatchPartIDPrefix {
+            if !partIDLower.hasPrefix(primaryToken) {
+                return false
+            }
+            if secondaryTokens.isEmpty {
+                matches = true
+            } else {
+                matches = secondaryTokens.allSatisfy { token in
+                    matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
+                }
+            }
+        } else if colorLower.contains(rawQuery) || nameLower.contains(rawQuery) {
+            matches = true
+        } else {
+            matches = normalizedQueryTokens.allSatisfy { token in
+                matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
+            }
+        }
+
+        return matches
+    }
+
+    private func partSearchTokens(for part: OrderPart, colorName: String) -> [String] {
+        let combined = "\(part.partID) \(colorName) \(part.name)"
+        return Array(Set(queryTokens(from: combined)))
+    }
+
+    private func matchesToken(
+        _ token: String,
+        partID: String,
+        partTokens: [String],
+        searchableText: String
+    ) -> Bool {
+        if token.allSatisfy({ $0.isNumber }) && !isShortLengthToken(token) {
+            if matchesNumericPartID(partID, numericQuery: token) {
+                return true
+            }
+
+            return partTokens.contains { $0 == token }
+        }
+
+        if let dimensionQuery = normalizedDimensionQuery(for: token),
+           searchableText.contains(dimensionQuery) {
+            return true
+        }
+
+        return partTokens.contains { $0.hasPrefix(token) || $0.contains(token) }
+    }
+
+    private func isShortLengthToken(_ token: String) -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        var normalizedToken = trimmed.lowercased()
+        if normalizedToken.hasSuffix("l") {
+            normalizedToken.removeLast()
+        }
+
+        guard (1...2).contains(normalizedToken.count) else { return false }
+        return normalizedToken.allSatisfy { $0.isNumber }
+    }
+
+    private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {
+        let normalizedQuery = normalized(numericQuery.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard !normalizedQuery.isEmpty else { return false }
+
+        let numericPrefix = normalized(partID.trimmingCharacters(in: .whitespacesAndNewlines))
+            .prefix { $0.isNumber }
+
+        guard !numericPrefix.isEmpty else { return false }
+        return numericPrefix == normalizedQuery
+    }
+
+    private func normalizedDimensionPrefix(in query: String) -> String? {
+        let prefix = query.prefix { character in
+            character.isNumber || character.isWhitespace || character == "x" || character == "X" || character == "×"
+        }
+        guard !prefix.isEmpty else { return nil }
+        return normalizedDimensionQuery(for: String(prefix))
+    }
+
+    private func normalizedDimensionQuery(for token: String) -> String? {
+        let lowercased = normalized(token).replacingOccurrences(of: "×", with: "x")
+        let compact = lowercased.replacingOccurrences(of: " ", with: "")
+
+        guard compact.contains("x") else { return nil }
+
+        let components = compact.split(separator: "x", omittingEmptySubsequences: false)
+        guard components.count >= 2 else { return nil }
+
+        let numericComponents = components.map(String.init)
+        guard numericComponents.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isNumber } }) else {
+            return nil
+        }
+
+        return numericComponents.joined(separator: " x ")
+    }
+
+    private func searchableText(for part: OrderPart, colorName: String) -> String {
+        let combined = normalized("\(part.partID) \(colorName) \(part.name)")
+            .replacingOccurrences(of: "×", with: "x")
+
+        return combined
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+    }
+
+    private func queryTokens(from text: String) -> [String] {
+        text
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map { normalized(String($0)) }
+    }
+
+    private func normalized(_ text: String) -> String {
+        text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+    }
+
+    private func updateSearchQuery() async {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            await MainActor.run { effectiveSearchText = "" }
+            return
+        }
+
+        do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
+        guard !Task.isCancelled else { return }
+        await MainActor.run { effectiveSearchText = trimmed }
     }
 }
 
