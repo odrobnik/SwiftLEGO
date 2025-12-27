@@ -1030,7 +1030,12 @@ struct PartRowView: View {
             try? modelContext.save()
         }
 
-        withAnimation {
+        let shouldAnimate = isFilteringMissing && oldValue < part.quantityNeeded && clampedValue == part.quantityNeeded
+        if shouldAnimate {
+            withAnimation {
+                update()
+            }
+        } else {
             update()
         }
     }
