@@ -8,6 +8,8 @@ struct OrderDetailView: View {
     @Bindable var order: BrickOrder
     @State private var searchText: String = ""
     @State private var effectiveSearchText: String = ""
+    @State private var missingInSetsLookup: [MissingInSetsKey: Int] = [:]
+    @State private var hasComputedMissingInSets: Bool = false
 
     private var filteredParts: [OrderPart] {
         guard let query = normalizedSearchQuery else {
@@ -121,20 +123,23 @@ struct OrderDetailView: View {
                 )
             } else {
                 List {
-            if setSearchFilter == nil {
-                ForEach(orderPartsByColor, id: \.color) { group in
-                    Section(group.color) {
-                        ForEach(group.parts) { part in
-                            NavigationLink(value: OrderPartRoute(orderPart: part, searchQuery: forwardedSearchQuery)) {
-                                OrderPartRowView(
-                                    part: part,
-                                    colorName: resolvedColorName(for: part),
-                                    missingInSets: missingInSets(for: part, lookup: missingInSetsLookup)
-                                )
+                    if setSearchFilter == nil {
+                        ForEach(orderPartsByColor, id: \.color) { group in
+                            Section(group.color) {
+                                ForEach(group.parts) { part in
+                                    let missingInSetsValue = hasComputedMissingInSets
+                                        ? missingInSets(for: part, lookup: missingInSetsLookup)
+                                        : nil
+                                    NavigationLink(value: OrderPartRoute(orderPart: part, searchQuery: forwardedSearchQuery)) {
+                                        OrderPartRowView(
+                                            part: part,
+                                            colorName: resolvedColorName(for: part),
+                                            missingInSets: missingInSetsValue
+                                        )
+                                    }
+                                }
                             }
                         }
-                    }
-                }
             } else {
                         ForEach(setFilterPartsByColor, id: \.color) { group in
                             Section(group.color) {
@@ -166,6 +171,9 @@ struct OrderDetailView: View {
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search order parts")
         .task(id: searchText) {
             await updateSearchQuery()
+        }
+        .task(id: missingInSetsTaskID) {
+            await loadMissingInSetsLookup()
         }
         .navigationTitle(order.displayName)
         .toolbarTitleDisplayMode(.inline)
@@ -269,37 +277,67 @@ struct OrderDetailView: View {
         number.split(separator: "-").first.map(String.init) ?? number
     }
 
-    private var missingInSetsLookup: [MissingInSetsKey: Int] {
+    private var missingInSetsTaskID: String {
+        let orderToken = order.parts.map {
+            "\($0.itemTypeRawValue)|\($0.partID)|\($0.colorID)|\($0.quantity)"
+        }.joined(separator: ",")
+        return "\(order.persistentModelID)|\(orderToken)|\(sets.count)"
+    }
+
+    @MainActor
+    private func loadMissingInSetsLookup() async {
+        hasComputedMissingInSets = false
+
         let orderKeys = Set(order.parts.map { missingInSetsKey(for: $0) })
-        guard !orderKeys.isEmpty else { return [:] }
-
-        var lookup: [MissingInSetsKey: Int] = [:]
-
-        for set in sets {
-            for part in set.parts {
-                accumulateMissing(part: part, orderKeys: orderKeys, lookup: &lookup)
-            }
-            for minifigure in set.minifigures {
-                let key = MissingInSetsKey(
-                    itemType: .minifigure,
-                    partID: normalized(minifigure.identifier),
-                    colorID: ""
-                )
-                if orderKeys.contains(key) {
-                    let missing = max(minifigure.quantityNeeded - minifigure.quantityHave, 0)
-                    if missing > 0 {
-                        lookup[key, default: 0] += missing
-                    }
-                }
-                for part in minifigure.parts {
-                    accumulateMissing(part: part, orderKeys: orderKeys, lookup: &lookup)
-                }
-            }
+        guard !orderKeys.isEmpty else {
+            missingInSetsLookup = [:]
+            hasComputedMissingInSets = true
+            return
         }
 
+        let lookup = await buildMissingInSetsLookup(orderKeys: orderKeys)
+        missingInSetsLookup = lookup
+        hasComputedMissingInSets = true
+    }
+
+    @MainActor
+    private func buildMissingInSetsLookup(orderKeys: Set<MissingInSetsKey>) async -> [MissingInSetsKey: Int] {
+        var lookup: [MissingInSetsKey: Int] = [:]
+        for set in sets {
+            accumulateMissing(in: set, orderKeys: orderKeys, lookup: &lookup)
+            await Task.yield()
+        }
         return lookup
     }
 
+    @MainActor
+    private func accumulateMissing(
+        in set: BrickSet,
+        orderKeys: Set<MissingInSetsKey>,
+        lookup: inout [MissingInSetsKey: Int]
+    ) {
+        for part in set.parts {
+            accumulateMissing(part: part, orderKeys: orderKeys, lookup: &lookup)
+        }
+        for minifigure in set.minifigures {
+            let key = MissingInSetsKey(
+                itemType: .minifigure,
+                partID: normalized(minifigure.identifier),
+                colorID: ""
+            )
+            if orderKeys.contains(key) {
+                let missing = max(minifigure.quantityNeeded - minifigure.quantityHave, 0)
+                if missing > 0 {
+                    lookup[key, default: 0] += missing
+                }
+            }
+            for part in minifigure.parts {
+                accumulateMissing(part: part, orderKeys: orderKeys, lookup: &lookup)
+            }
+        }
+    }
+
+    @MainActor
     private func accumulateMissing(
         part: Part,
         orderKeys: Set<MissingInSetsKey>,
@@ -752,7 +790,7 @@ struct OrderDetailView: View {
 private struct OrderPartRowView: View {
     let part: OrderPart
     let colorName: String
-    let missingInSets: Int
+    let missingInSets: Int?
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
@@ -774,9 +812,15 @@ private struct OrderPartRowView: View {
                     .font(.title3.bold())
                     .foregroundStyle(.primary)
 
-                Text("\(missingInSets) missing in sets")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if let missingInSets {
+                    Text("^[\(missingInSets) missing in sets](inflect: true)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else if part.quantity > 0 {
+                    Text("Missing in sets...")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.vertical, 4)
