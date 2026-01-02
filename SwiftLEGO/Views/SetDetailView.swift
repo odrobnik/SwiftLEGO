@@ -906,6 +906,13 @@ struct PartRowView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var part: Part
     let isFilteringMissing: Bool
+    let orderQuantity: Int?
+
+    init(part: Part, isFilteringMissing: Bool, orderQuantity: Int? = nil) {
+        self._part = Bindable(part)
+        self.isFilteringMissing = isFilteringMissing
+        self.orderQuantity = orderQuantity
+    }
 
     private var quantityBinding: Binding<Int> {
         Binding(
@@ -938,6 +945,12 @@ struct PartRowView: View {
 
                 Stepper("", value: quantityBinding, in: 0...part.quantityNeeded)
                     .labelsHidden()
+
+                if let orderQuantity, orderQuantity > 0 {
+                    Text("^[\(orderQuantity) part](inflect: true) in order")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .frame(minWidth: 80, idealWidth: 100)
         }
@@ -1044,15 +1057,22 @@ struct PartRowView: View {
 struct PartRowNavigationWrapper: View {
     @Bindable var part: Part
     let isFilteringMissing: Bool
+    let orderQuantity: Int?
+
+    init(part: Part, isFilteringMissing: Bool, orderQuantity: Int? = nil) {
+        self._part = Bindable(part)
+        self.isFilteringMissing = isFilteringMissing
+        self.orderQuantity = orderQuantity
+    }
 
     var body: some View {
         if part.subparts.isEmpty {
-            PartRowView(part: part, isFilteringMissing: isFilteringMissing)
+            PartRowView(part: part, isFilteringMissing: isFilteringMissing, orderQuantity: orderQuantity)
         } else {
             NavigationLink {
                 PartDetailView(part: part)
             } label: {
-                PartRowView(part: part, isFilteringMissing: isFilteringMissing)
+                PartRowView(part: part, isFilteringMissing: isFilteringMissing, orderQuantity: orderQuantity)
             }
         }
     }
