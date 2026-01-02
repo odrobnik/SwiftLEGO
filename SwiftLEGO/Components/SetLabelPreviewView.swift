@@ -26,6 +26,8 @@ struct SetLabelPreviewView: View {
   let brickSet: BrickSet
   var labelSize: CGSize?
   var displayScale: CGFloat = LabelMetrics.previewScale
+  var bagIndex: Int? = nil
+  var bagCount: Int = 1
 
   private var resolvedLabelSize: CGSize {
     labelSize ?? LabelMetrics.labelSize(for: brickSet)
@@ -35,7 +37,9 @@ struct SetLabelPreviewView: View {
     ScaledLabelCanvas(
       brickSet: brickSet,
       labelSize: resolvedLabelSize,
-      scale: displayScale
+      scale: displayScale,
+      bagIndex: bagIndex,
+      bagCount: bagCount
     )
         .padding()
         .background(.white)
@@ -44,6 +48,8 @@ struct SetLabelPreviewView: View {
 
 private struct SetLabelCanvas: View {
     let brickSet: BrickSet
+    var bagIndex: Int? = nil
+    var bagCount: Int = 1
 
     var body: some View {
         ZStack {
@@ -75,6 +81,15 @@ private struct SetLabelCanvas: View {
             .padding(.horizontal, LabelMetrics.horizontalPadding)
             .padding(.vertical, LabelMetrics.verticalPadding)
         }
+        .overlay(alignment: .topTrailing) {
+            if let bagIndex, bagCount > 1 {
+                Text("\(bagIndex)/\(bagCount)")
+                    .font(LabelMetrics.bagFont)
+                    .foregroundStyle(.black)
+                    .padding(.top, LabelMetrics.bagInset)
+                    .padding(.trailing, LabelMetrics.bagInset)
+            }
+        }
     }
 }
 
@@ -82,9 +97,11 @@ private struct ScaledLabelCanvas: View {
     let brickSet: BrickSet
     let labelSize: CGSize
     let scale: CGFloat
+    var bagIndex: Int? = nil
+    var bagCount: Int = 1
 
     var body: some View {
-        let canvas = SetLabelCanvas(brickSet: brickSet)
+        let canvas = SetLabelCanvas(brickSet: brickSet, bagIndex: bagIndex, bagCount: bagCount)
             .frame(width: labelSize.width, height: labelSize.height)
             .background(Color.white)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -125,6 +142,9 @@ private enum LabelMetrics {
 
   private static let titleMultiLineFontSize: CGFloat = 14
   private static let titleMultiLineFontWeight: Font.Weight = .regular
+  private static let bagFontSize: CGFloat = 10
+  private static let bagFontWeight: Font.Weight = .semibold
+  static let bagInset: CGFloat = 4
 
   static var identifierFont: Font {
     swiftUIFont(size: identifierFontSize, weight: identifierFontWeight)
@@ -136,6 +156,10 @@ private enum LabelMetrics {
 
   static var titleMultiLineFont: Font {
     swiftUIFont(size: titleMultiLineFontSize, weight: titleMultiLineFontWeight)
+  }
+
+  static var bagFont: Font {
+    swiftUIFont(size: bagFontSize, weight: bagFontWeight)
   }
 
   static func labelSize(for brickSet: BrickSet) -> CGSize {
@@ -287,16 +311,38 @@ private enum LabelMetrics {
     return SetLabelPreviewView(brickSet: brickSet)
         .modelContainer(container)
 }
+
+private struct BagSelectionView: View {
+    @Binding var bagCount: Int
+
+    private let maxBagCount: Int = 50
+
+    var body: some View {
+        Stepper(value: $bagCount, in: 1...maxBagCount) {
+            Text("Total bags: \(bagCount)")
+        }
+    }
+}
 #if os(macOS)
 struct LabelPrintSheet: View {
     @Environment(\.dismiss) private var dismiss
     let brickSet: BrickSet
     @State private var isPrinting = false
+    @State private var bagCount: Int = 1
     private let labelSize: CGSize
 
     init(brickSet: BrickSet) {
         self.brickSet = brickSet
         self.labelSize = LabelMetrics.labelSize(for: brickSet)
+    }
+
+    private var bagNumbers: [Int] {
+        guard bagCount > 0 else { return [1] }
+        return Array(1...bagCount)
+    }
+
+    private var previewBagIndex: Int? {
+        bagCount > 1 ? 1 : nil
     }
 
     var body: some View {
@@ -313,10 +359,14 @@ struct LabelPrintSheet: View {
             SetLabelPreviewView(
                 brickSet: brickSet,
                 labelSize: labelSize,
-                displayScale: LabelMetrics.previewScale
+                displayScale: LabelMetrics.previewScale,
+                bagIndex: previewBagIndex,
+                bagCount: bagCount
             )
                 .frame(maxWidth: .infinity)
                 .background(Color.clear)
+
+            BagSelectionView(bagCount: $bagCount)
 
             HStack {
                 Button("Cancel") {
@@ -360,13 +410,14 @@ struct LabelPrintSheet: View {
         let printInfo = NSPrintInfo()
         configurePrintInfo(printInfo, desiredSize: labelSize)
 
-        let renderingView = NSHostingView(rootView:
-            SetLabelCanvas(brickSet: brickSet)
-                .frame(width: labelSize.width, height: labelSize.height)
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let renderingView = LabelPrintPagingView(
+            brickSet: brickSet,
+            labelSize: labelSize,
+            bagNumbers: bagNumbers,
+            bagCount: bagCount,
+            scale: scale
         )
-        let nsSize = NSSize(width: labelSize.width, height: labelSize.height)
-        renderingView.frame = NSRect(origin: .zero, size: nsSize)
-        renderingView.layoutSubtreeIfNeeded()
 
         let operation = NSPrintOperation(view: renderingView, printInfo: printInfo)
         operation.showsPrintPanel = true
@@ -374,6 +425,59 @@ struct LabelPrintSheet: View {
         operation.showsPreview = true
         operation.printPanel.options = [.showsOrientation]
         return operation
+    }
+}
+
+private final class LabelPrintPagingView: NSView {
+    private let labelSize: CGSize
+    private let labelImages: [NSImage]
+
+    init(
+        brickSet: BrickSet,
+        labelSize: CGSize,
+        bagNumbers: [Int],
+        bagCount: Int,
+        scale: CGFloat
+    ) {
+        let resolvedBags = bagNumbers.isEmpty ? [1] : bagNumbers
+        self.labelSize = labelSize
+        self.labelImages = resolvedBags.map { bagNumber in
+            let renderer = ImageRenderer(content:
+                SetLabelCanvas(brickSet: brickSet, bagIndex: bagNumber, bagCount: bagCount)
+                    .frame(width: labelSize.width, height: labelSize.height)
+            )
+            renderer.scale = scale
+            return renderer.nsImage ?? NSImage(size: NSSize(width: labelSize.width, height: labelSize.height))
+        }
+        let totalHeight = labelSize.height * CGFloat(self.labelImages.count)
+        super.init(frame: NSRect(x: 0, y: 0, width: labelSize.width, height: totalHeight))
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func knowsPageRange(_ range: NSRangePointer) -> Bool {
+        let pages = max(1, labelImages.count)
+        range.pointee = NSRange(location: 1, length: pages)
+        return true
+    }
+
+    override func rectForPage(_ page: Int) -> NSRect {
+        let originY = CGFloat(page - 1) * labelSize.height
+        return NSRect(x: 0, y: originY, width: labelSize.width, height: labelSize.height)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        for (index, image) in labelImages.enumerated() {
+            let pageRect = rectForPage(index + 1)
+            if dirtyRect.intersects(pageRect) {
+                image.draw(in: pageRect)
+            }
+        }
     }
 }
 
@@ -509,6 +613,7 @@ struct LabelPrintSheet: View {
     @State private var isPrinting = false
     @State private var anchorView: UIView?
     @State private var printDelegate: LabelPrintDelegate
+    @State private var bagCount: Int = 1
     private let labelSize: CGSize
 
     init(brickSet: BrickSet) {
@@ -516,6 +621,15 @@ struct LabelPrintSheet: View {
         let resolvedSize = LabelMetrics.labelSize(for: brickSet)
         self._printDelegate = State(initialValue: LabelPrintDelegate(labelSize: resolvedSize))
         self.labelSize = resolvedSize
+    }
+
+    private var bagNumbers: [Int] {
+        guard bagCount > 0 else { return [1] }
+        return Array(1...bagCount)
+    }
+
+    private var previewBagIndex: Int? {
+        bagCount > 1 ? 1 : nil
     }
 
     var body: some View {
@@ -526,9 +640,14 @@ struct LabelPrintSheet: View {
                 SetLabelPreviewView(
                     brickSet: brickSet,
                     labelSize: labelSize,
-                    displayScale: LabelMetrics.previewScale
+                    displayScale: LabelMetrics.previewScale,
+                    bagIndex: previewBagIndex,
+                    bagCount: bagCount
                 )
                     .frame(maxWidth: .infinity, alignment: .center)
+
+                BagSelectionView(bagCount: $bagCount)
+                    .padding(.horizontal)
 
                 Spacer(minLength: 24)
 
@@ -564,7 +683,7 @@ struct LabelPrintSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 
     private func printLabel() {
@@ -582,7 +701,9 @@ struct LabelPrintSheet: View {
         controller.printPageRenderer = LabelPrintPageRenderer(
             brickSet: brickSet,
             labelSize: labelSize,
-            displayScale: resolvedScale
+            displayScale: resolvedScale,
+            bagNumbers: bagNumbers,
+            bagCount: bagCount
         )
         controller.delegate = printDelegate
         printDelegate.labelSize = labelSize
@@ -616,15 +737,19 @@ private final class LabelPrintPageRenderer: UIPrintPageRenderer {
     private let brickSet: BrickSet
     private let labelSize: CGSize
     private let displayScale: CGFloat
+    private let bagNumbers: [Int]
+    private let bagCount: Int
 
-    init(brickSet: BrickSet, labelSize: CGSize, displayScale: CGFloat) {
+    init(brickSet: BrickSet, labelSize: CGSize, displayScale: CGFloat, bagNumbers: [Int], bagCount: Int) {
         self.brickSet = brickSet
         self.labelSize = labelSize
         self.displayScale = displayScale
+        self.bagNumbers = bagNumbers
+        self.bagCount = bagCount
         super.init()
     }
 
-    override var numberOfPages: Int { 1 }
+    override var numberOfPages: Int { max(1, bagNumbers.count) }
 
     override var paperRect: CGRect {
         CGRect(origin: .zero, size: labelSize)
@@ -635,12 +760,12 @@ private final class LabelPrintPageRenderer: UIPrintPageRenderer {
     }
 
     override func drawPage(at pageIndex: Int, in printableRect: CGRect) {
-        guard pageIndex == 0 else { return }
         guard let context = UIGraphicsGetCurrentContext() else { return }
 
+        let bagIndex = bagNumbers.indices.contains(pageIndex) ? bagNumbers[pageIndex] : nil
         context.saveGState()
         let renderer = ImageRenderer(content:
-            SetLabelCanvas(brickSet: brickSet)
+            SetLabelCanvas(brickSet: brickSet, bagIndex: bagIndex, bagCount: bagCount)
                 .frame(width: labelSize.width, height: labelSize.height)
         )
         renderer.scale = displayScale

@@ -137,6 +137,9 @@ struct CategorySetsView: View {
                                             }
                                             .buttonStyle(.plain)
                                             .contextMenu {
+                                                QuickLookMenuButton(item: set) {
+                                                    Label("View Set", systemImage: "eye")
+                                                }
                                                 Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
                                                     refreshInventory(for: set)
                                                 }
@@ -206,6 +209,7 @@ struct CategorySetsView: View {
                 )
             }
         }
+        .quickLookPresenter()
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -318,6 +322,9 @@ struct CategorySetsView: View {
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
+                                QuickLookMenuButton(item: set) {
+                                    Label("View Set", systemImage: "eye")
+                                }
                                 Button("Refresh from BrickLink", systemImage: "arrow.clockwise") {
                                     refreshInventory(for: set)
                                 }

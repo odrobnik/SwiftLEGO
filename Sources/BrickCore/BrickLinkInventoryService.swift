@@ -245,10 +245,10 @@ public final class BrickLinkInventoryService {
 
 	private func fetchMinifigureParts(for minifigure: ParsedMinifigure) async throws -> [BrickLinkPart] {
 		let url = minifigure.inventoryURL ?? inventoryURL(forMinifigure: minifigure.identifier)
-		return try await fetchParts(from: url)
+		return try await fetchParts(from: url, allowMinifigures: true)
 	}
 
-	private func fetchParts(from inventoryURL: URL) async throws -> [BrickLinkPart] {
+	private func fetchParts(from inventoryURL: URL, allowMinifigures: Bool = false) async throws -> [BrickLinkPart] {
 		let converter = HTML💡Markdown(url: inventoryURL)
 		let markdown = try await converter.markdown()
 
@@ -258,14 +258,32 @@ public final class BrickLinkInventoryService {
 		}
 
 		do {
-			let (parts, _) = try parseInventoryItems(
+			let (parts, minifigures) = try parseInventoryItems(
 				lines: lines,
 				startIndex: tableHeaderIndex + 2,
 				baseURL: inventoryURL,
-				allowMinifigures: false
+				allowMinifigures: allowMinifigures
 			)
 
-			return parts
+			guard allowMinifigures, !minifigures.isEmpty else { return parts }
+
+			let minifigureParts = minifigures.map { minifigure in
+				let resolvedInventoryURL = minifigure.inventoryURL ?? self.inventoryURL(forMinifigure: minifigure.identifier)
+				return BrickLinkPart(
+					partID: minifigure.identifier,
+					partURL: minifigure.catalogURL,
+					name: minifigure.name.isEmpty ? minifigure.identifier : minifigure.name,
+					colorName: "Minifigure",
+					colorID: "0",
+					imageURL: preferredMinifigureImageURL(for: minifigure.identifier, fallback: minifigure.imageURL),
+					fullImageURL: nil,
+					quantity: minifigure.quantity,
+					section: .regular,
+					inventoryURL: resolvedInventoryURL
+				)
+			}
+
+			return parts + minifigureParts
 		} catch InventoryError.partsTableNotFound {
 			return []
 		}
