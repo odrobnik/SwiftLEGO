@@ -7,6 +7,8 @@ struct OrderPartDistributionView: View {
     let searchQuery: String?
     @Query private var matchingParts: [Part]
     @Query private var matchingMinifigures: [Minifigure]
+    @State private var cachedMatches: [OrderPartMatch]?
+    @State private var cachedMinifigureMatches: [OrderMinifigureMatch]?
 
     init(orderPart: OrderPart, searchQuery: String? = nil) {
         self.orderPart = orderPart
@@ -27,7 +29,15 @@ struct OrderPartDistributionView: View {
         })
     }
 
-    private var matches: [OrderPartMatch] {
+    private var matchingPartIDs: [PersistentIdentifier] {
+        matchingParts.map(\.persistentModelID)
+    }
+
+    private var matchingMinifigureIDs: [PersistentIdentifier] {
+        matchingMinifigures.map(\.persistentModelID)
+    }
+
+    private func computeMatches() -> [OrderPartMatch] {
         matchingParts.compactMap { part in
             guard let set = part.set ?? part.minifigure?.set else {
                 return nil
@@ -56,7 +66,7 @@ struct OrderPartDistributionView: View {
         }
     }
 
-    private var minifigureMatches: [OrderMinifigureMatch] {
+    private func computeMinifigureMatches() -> [OrderMinifigureMatch] {
         matchingMinifigures.compactMap { minifigure in
             guard let set = minifigure.set else { return nil }
             return OrderMinifigureMatch(
@@ -82,6 +92,7 @@ struct OrderPartDistributionView: View {
         Group {
             switch orderPart.itemType {
             case .part:
+                let matches = cachedMatches ?? computeMatches()
                 if matches.isEmpty {
                     EmptyStateView(
                         icon: "cube.transparent",
@@ -111,6 +122,7 @@ struct OrderPartDistributionView: View {
                     .listStyle(.insetGrouped)
                 }
             case .minifigure:
+                let minifigureMatches = cachedMinifigureMatches ?? computeMinifigureMatches()
                 if minifigureMatches.isEmpty {
                     EmptyStateView(
                         icon: "person.fill",
@@ -138,6 +150,12 @@ struct OrderPartDistributionView: View {
                     .listStyle(.insetGrouped)
                 }
             }
+        }
+        .task(id: matchingPartIDs) {
+            cachedMatches = computeMatches()
+        }
+        .task(id: matchingMinifigureIDs) {
+            cachedMinifigureMatches = computeMinifigureMatches()
         }
         .navigationTitle(displayName)
         .toolbarTitleDisplayMode(.inline)

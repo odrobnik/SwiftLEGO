@@ -10,6 +10,7 @@ struct OrderDetailView: View {
     @State private var effectiveSearchText: String = ""
     @State private var missingInSetsLookup: [MissingInSetsKey: Int] = [:]
     @State private var hasComputedMissingInSets: Bool = false
+    @State private var cachedOrderPartsByColor: [OrderPartColorGroup]?
 
     private var filteredParts: [OrderPart] {
         guard let query = normalizedSearchQuery else {
@@ -28,7 +29,7 @@ struct OrderDetailView: View {
         }
     }
 
-    private var orderPartsByColor: [(color: String, parts: [OrderPart])] {
+    private func computeOrderPartsByColor() -> [OrderPartColorGroup] {
         let grouped = Dictionary(grouping: filteredParts) { part in
             normalizeColorName(resolvedColorName(for: part))
         }
@@ -42,9 +43,18 @@ struct OrderDetailView: View {
                     }
                     return lhs.partID.localizedCaseInsensitiveCompare(rhs.partID) == .orderedAscending
                 }
-                return (color: key, parts: sortedParts)
+                return OrderPartColorGroup(color: key, parts: sortedParts)
             }
             .sorted { lhs, rhs in lhs.color.localizedCaseInsensitiveCompare(rhs.color) == .orderedAscending }
+    }
+
+    private var orderPartsByColorCacheKey: OrderPartsByColorCacheKey {
+        OrderPartsByColorCacheKey(
+            searchText: effectiveSearchText,
+            hasSetFilter: setSearchFilter != nil,
+            orderPartIDs: order.parts.map(\.persistentModelID),
+            colorCount: colors.count
+        )
     }
 
     private var setFilterPartsByColor: [(color: String, parts: [SetFilterPartRow])] {
@@ -114,7 +124,8 @@ struct OrderDetailView: View {
 
     var body: some View {
         Group {
-            if (setSearchFilter == nil && orderPartsByColor.isEmpty) ||
+            let partsByColor = cachedOrderPartsByColor ?? computeOrderPartsByColor()
+            if (setSearchFilter == nil && partsByColor.isEmpty) ||
                 (setSearchFilter != nil && setFilterPartsByColor.isEmpty && setFilterMinifigures.isEmpty) {
                 EmptyStateView(
                     icon: "shippingbox",
@@ -124,7 +135,7 @@ struct OrderDetailView: View {
             } else {
                 List {
                     if setSearchFilter == nil {
-                        ForEach(orderPartsByColor, id: \.color) { group in
+                        ForEach(partsByColor) { group in
                             Section(group.color) {
                                 ForEach(group.parts) { part in
                                     let missingInSetsValue = hasComputedMissingInSets
@@ -175,6 +186,9 @@ struct OrderDetailView: View {
         .task(id: missingInSetsTaskID) {
             await loadMissingInSetsLookup()
         }
+        .task(id: orderPartsByColorCacheKey) {
+            cachedOrderPartsByColor = computeOrderPartsByColor()
+        }
         .navigationTitle(order.displayName)
         .toolbarTitleDisplayMode(.inline)
     }
@@ -184,6 +198,20 @@ struct OrderDetailView: View {
             return "No missing parts from \(setFilter.set.setNumber) match your search."
         }
         return normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search."
+    }
+
+    private struct OrderPartColorGroup: Identifiable {
+        let color: String
+        let parts: [OrderPart]
+
+        var id: String { color }
+    }
+
+    private struct OrderPartsByColorCacheKey: Equatable {
+        let searchText: String
+        let hasSetFilter: Bool
+        let orderPartIDs: [PersistentIdentifier]
+        let colorCount: Int
     }
 
     private struct SetSearchFilter {
