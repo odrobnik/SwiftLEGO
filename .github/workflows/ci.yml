@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS · BrickCore build & test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      # swift build/test target the host (macOS) and cover the cross-platform
+      # BrickCore package. The 35 Swift Testing tests run here.
+      - name: Build BrickCore (macOS)
+        run: swift build
+
+      - name: Test BrickCore (macOS)
+        run: swift test
+
+  ios:
+    name: iOS · App build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Versions
+        run: xcodebuild -version
+
+      # The SwiftLEGO app target is iOS-only (deployment target 26.0). Building
+      # it for the simulator also compiles BrickCore for iOS. A generic
+      # destination only needs the iOS SDK, not a specific booted simulator.
+      - name: Build app (iOS Simulator)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project SwiftLEGO.xcodeproj \
+            -scheme SwiftLEGO \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO
