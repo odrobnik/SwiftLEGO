@@ -42,6 +42,7 @@ struct OrderPartDistributionView: View {
             guard let set = part.set ?? part.minifigure?.set else {
                 return nil
             }
+            guard !set.excludeFromWantedList else { return nil }
             return OrderPartMatch(
                 id: part.persistentModelID,
                 set: set,
@@ -69,6 +70,7 @@ struct OrderPartDistributionView: View {
     private func computeMinifigureMatches() -> [OrderMinifigureMatch] {
         matchingMinifigures.compactMap { minifigure in
             guard let set = minifigure.set else { return nil }
+            guard !set.excludeFromWantedList else { return nil }
             return OrderMinifigureMatch(
                 id: minifigure.persistentModelID,
                 set: set,

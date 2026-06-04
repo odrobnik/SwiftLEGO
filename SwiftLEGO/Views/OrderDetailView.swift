@@ -12,6 +12,12 @@ struct OrderDetailView: View {
     @State private var hasComputedMissingInSets: Bool = false
     @State private var cachedOrderPartsByColor: [OrderPartColorGroup]?
 
+    /// Sets that participate in the wanted list. Sets the user has excluded
+    /// must not contribute to the order's "missing in sets" data.
+    private var wantedSets: [BrickSet] {
+        sets.filter { !$0.excludeFromWantedList }
+    }
+
     private var filteredParts: [OrderPart] {
         guard let query = normalizedSearchQuery else {
             return order.parts
@@ -118,13 +124,14 @@ struct OrderDetailView: View {
         if let remainingQuery = setSearchFilter?.remainingQuery {
             return remainingQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : remainingQuery
         }
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = effectiveSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
     var body: some View {
         Group {
             let partsByColor = cachedOrderPartsByColor ?? computeOrderPartsByColor()
+            let forwardedQuery = forwardedSearchQuery
             if (setSearchFilter == nil && partsByColor.isEmpty) ||
                 (setSearchFilter != nil && setFilterPartsByColor.isEmpty && setFilterMinifigures.isEmpty) {
                 EmptyStateView(
@@ -141,7 +148,7 @@ struct OrderDetailView: View {
                                     let missingInSetsValue = hasComputedMissingInSets
                                         ? missingInSets(for: part, lookup: missingInSetsLookup)
                                         : nil
-                                    NavigationLink(value: OrderPartRoute(orderPart: part, searchQuery: forwardedSearchQuery)) {
+                                    NavigationLink(value: OrderPartRoute(orderPart: part, searchQuery: forwardedQuery)) {
                                         OrderPartRowView(
                                             part: part,
                                             colorName: resolvedColorName(for: part),
@@ -189,7 +196,7 @@ struct OrderDetailView: View {
         .task(id: orderPartsByColorCacheKey) {
             cachedOrderPartsByColor = computeOrderPartsByColor()
         }
-        .navigationTitle(order.displayName)
+        .navigationTitle(navigationTitleText)
         .toolbarTitleDisplayMode(.inline)
     }
 
@@ -198,6 +205,13 @@ struct OrderDetailView: View {
             return "No missing parts from \(setFilter.set.setNumber) match your search."
         }
         return normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search."
+    }
+
+    private var navigationTitleText: String {
+        if let setFilter = setSearchFilter {
+            return "\(setFilter.set.setNumber) \(setFilter.set.name)"
+        }
+        return order.displayName
     }
 
     private struct OrderPartColorGroup: Identifiable {
@@ -288,7 +302,7 @@ struct OrderDetailView: View {
         let normalizedToken = normalized(token)
         let strippedToken = normalizeSetNumber(normalizedToken)
 
-        return sets.first { set in
+        return wantedSets.first { set in
             let normalizedSetNumber = normalized(set.setNumber)
             if normalizedSetNumber == normalizedToken {
                 return true
@@ -309,7 +323,7 @@ struct OrderDetailView: View {
         let orderToken = order.parts.map {
             "\($0.itemTypeRawValue)|\($0.partID)|\($0.colorID)|\($0.quantity)"
         }.joined(separator: ",")
-        return "\(order.persistentModelID)|\(orderToken)|\(sets.count)"
+        return "\(order.persistentModelID)|\(orderToken)|\(wantedSets.count)"
     }
 
     @MainActor
@@ -331,7 +345,7 @@ struct OrderDetailView: View {
     @MainActor
     private func buildMissingInSetsLookup(orderKeys: Set<MissingInSetsKey>) async -> [MissingInSetsKey: Int] {
         var lookup: [MissingInSetsKey: Int] = [:]
-        for set in sets {
+        for set in wantedSets {
             accumulateMissing(in: set, orderKeys: orderKeys, lookup: &lookup)
             await Task.yield()
         }
