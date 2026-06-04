@@ -386,16 +386,24 @@ struct OrderDetailView: View {
         lookup: inout [MissingInSetsKey: Int]
     ) {
         guard part.inventorySection != .extra else { return }
-        let missing = part.missingQuantity
-        guard missing > 0 else { return }
 
-        let key = MissingInSetsKey(
-            itemType: .part,
-            partID: normalized(part.partID),
-            colorID: normalized(part.colorID)
-        )
-        guard orderKeys.contains(key) else { return }
-        lookup[key, default: 0] += missing
+        let missing = part.missingQuantity
+        if missing > 0 {
+            let key = MissingInSetsKey(
+                itemType: .part,
+                partID: normalized(part.partID),
+                colorID: normalized(part.colorID)
+            )
+            if orderKeys.contains(key) {
+                lookup[key, default: 0] += missing
+            }
+        }
+
+        // Subparts carry no `.set`/`.minifigure` backref, so they never appear in
+        // `set.parts`/`minifigure.parts`. Recurse to count parts missing only as subparts.
+        for child in part.subparts {
+            accumulateMissing(part: child, orderKeys: orderKeys, lookup: &lookup)
+        }
     }
 
     private func missingInSetsKey(for orderPart: OrderPart) -> MissingInSetsKey {
@@ -427,6 +435,10 @@ struct OrderDetailView: View {
                 colorID: normalized(part.colorID)
             )
             partKeys.insert(key)
+            // Recurse so parts missing only as subparts (no `.set` backref) still match.
+            for child in part.subparts {
+                recordMissing(part: child)
+            }
         }
 
         for part in set.parts {

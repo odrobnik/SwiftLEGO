@@ -116,7 +116,6 @@ struct OrderPartDistributionView: View {
                             }
                         } header: {
                             OrderPartHeaderView(
-                                name: displayName,
                                 detail: "\(orderPart.partID) • \(displayColorName)"
                             )
                         }
@@ -144,7 +143,6 @@ struct OrderPartDistributionView: View {
                             }
                         } header: {
                             OrderPartHeaderView(
-                                name: displayName,
                                 detail: "Minifigure • \(orderPart.partID)"
                             )
                         }
@@ -231,19 +229,14 @@ private struct OrderMinifigureMatch: Identifiable {
 }
 
 private struct OrderPartHeaderView: View {
-    let name: String
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(name)
-                .font(.headline)
-            Text(detail)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .textCase(nil)
-        .padding(.vertical, 4)
+        Text(detail)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .textCase(nil)
+            .padding(.vertical, 4)
     }
 }
 
