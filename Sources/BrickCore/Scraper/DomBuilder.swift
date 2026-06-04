@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import HTMLParser
+import SwiftTextHTML
 
 public final class DomBuilder
 {
@@ -35,8 +35,8 @@ public final class DomBuilder
 	
 	private func parseHTML(_ html: Data) async throws {
 		let parser = HTMLParser(data: html, encoding: .utf8, options: [.noWarning, .noError, .noNet, .recover])
-		
-		for try await event in parser.parse() {
+
+		for await event in parser.parseEvents() {
 			switch event {
 				case .startElement(let elementName, let attributes):
 					handleStartElement(elementName, attributes: attributes)
@@ -90,6 +90,11 @@ public final class DomBuilder
 	}
 	
 	private func handleCharacters(_ string: String) {
+		// SwiftText's parser can flush accumulated text at structural boundaries
+		// (e.g. trailing whitespace after the root element closes) when no element
+		// is open. Such text has nowhere to attach, so ignore it.
+		guard currentElement != nil else { return }
+
 		let isWhiteSpace = string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 		
 		if (["pre", "code"].contains(currentElement.name))

@@ -1,13 +1,40 @@
 {
-  "originHash" : "f3d4790e64f0b7a776b7f0ba6b6ba413c8313522f6c7dff8c1c69b8dc062c1a7",
+  "originHash" : "3308e57208779948063f4215ef268055928697c4cbd16673dc11bcc1622c3661",
   "pins" : [
     {
-      "identity" : "htmlparser",
+      "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/odrobnik/HTMLParser.git",
+      "location" : "https://github.com/apple/swift-argument-parser",
       "state" : {
-        "branch" : "main",
-        "revision" : "42be6657022b56cc5827b2589cd9d58efc48b8cf"
+        "revision" : "ca37474853a4b5f59a22c74bfdd449b1f6bc4cc2",
+        "version" : "1.8.1"
+      }
+    },
+    {
+      "identity" : "swift-cmark",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-cmark.git",
+      "state" : {
+        "revision" : "924936d0427cb25a61169739a7660230bffa6ea6",
+        "version" : "0.8.0"
+      }
+    },
+    {
+      "identity" : "swift-markdown",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-markdown.git",
+      "state" : {
+        "revision" : "3c6f9523da3a1ec2fd829673e472d95b8097a3b8",
+        "version" : "0.8.0"
+      }
+    },
+    {
+      "identity" : "swifttext",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Cocoanetics/SwiftText.git",
+      "state" : {
+        "revision" : "d095c12420826fe28e67fd1b3f6baa32e4606a80",
+        "version" : "1.1.9"
       }
     },
     {
@@ -17,6 +44,15 @@
       "state" : {
         "revision" : "b1e944cbd0ef33787b13f639a5418d55b3bed501",
         "version" : "0.17.1"
+      }
+    },
+    {
+      "identity" : "zipfoundation",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/weichsel/ZIPFoundation.git",
+      "state" : {
+        "revision" : "22787ffb59de99e5dc1fbfe80b19c97a904ad48d",
+        "version" : "0.9.20"
       }
     }
   ],
