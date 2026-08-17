@@ -27,6 +27,11 @@ struct BrickLinkInventoryTable: Equatable {
 		/// True when the row carries an "(inv)" link, i.e. the item has subparts.
 		let hasOwnInventory: Bool
 		let section: BrickLinkPartSection
+
+		/// Whether reading this row fully costs another request.
+		func needsInventoryFetch(depth: Int, maximumDepth: Int) -> Bool {
+			hasOwnInventory && idItem != nil && depth < maximumDepth
+		}
 	}
 
 	let parts: [ItemRow]

@@ -15,7 +15,7 @@ let package = Package(
 		)
 	],
 	dependencies: [
-		.package(url: "https://github.com/Cocoanetics/SwiftText.git", from: "1.1.9"),
+		.package(url: "https://github.com/Cocoanetics/SwiftText.git", from: "1.2.0"),
 		.package(url: "https://github.com/CoreOffice/XMLCoder.git", from: "0.17.1")
 	],
 	targets: [
