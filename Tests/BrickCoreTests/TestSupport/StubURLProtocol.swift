@@ -20,19 +20,47 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 	/// Consumed front to back, one per request; the last entry repeats.
 	nonisolated(unsafe) private static var queue: [Response] = []
 	nonisolated(unsafe) private static var recordedRequests = 0
+	nonisolated(unsafe) private static var inFlight = 0
+	nonisolated(unsafe) private static var peakInFlight = 0
+	/// Held open per request, to make overlap observable.
+	nonisolated(unsafe) private static var responseDelay: Duration = .zero
 	private static let lock = NSLock()
 
-	static func reset(with responses: [Response]) {
+	static func reset(with responses: [Response], responseDelay: Duration = .zero) {
 		lock.lock()
 		defer { lock.unlock() }
 		queue = responses
 		recordedRequests = 0
+		inFlight = 0
+		peakInFlight = 0
+		Self.responseDelay = responseDelay
 	}
 
 	static var requestCount: Int {
 		lock.lock()
 		defer { lock.unlock() }
 		return recordedRequests
+	}
+
+	/// The most requests that were ever being served at the same moment.
+	static var peakConcurrentRequests: Int {
+		lock.lock()
+		defer { lock.unlock() }
+		return peakInFlight
+	}
+
+	private static func beginRequest() -> Duration {
+		lock.lock()
+		defer { lock.unlock() }
+		inFlight += 1
+		peakInFlight = max(peakInFlight, inFlight)
+		return responseDelay
+	}
+
+	private static func endRequest() {
+		lock.lock()
+		defer { lock.unlock() }
+		inFlight -= 1
 	}
 
 	private static func nextResponse() -> Response {
@@ -50,6 +78,9 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 	static func makeSession() -> URLSession {
 		let configuration = URLSessionConfiguration.ephemeral
 		configuration.protocolClasses = [StubURLProtocol.self]
+		// URLSession would otherwise cap connections per host at 6 on its own,
+		// which would mask whether our throttle is the thing doing the limiting.
+		configuration.httpMaximumConnectionsPerHost = 100
 		return URLSession(configuration: configuration)
 	}
 
@@ -58,6 +89,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 	override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
 	override func startLoading() {
+		let delay = Self.beginRequest()
 		let stub = Self.nextResponse()
 		let response = HTTPURLResponse(
 			url: request.url!,
@@ -66,9 +98,22 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 			headerFields: ["Content-Type": "text/html"]
 		)!
 
-		client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-		client?.urlProtocol(self, didLoad: stub.body)
-		client?.urlProtocolDidFinishLoading(self)
+		let finish = {
+			self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+			self.client?.urlProtocol(self, didLoad: stub.body)
+			self.client?.urlProtocolDidFinishLoading(self)
+			Self.endRequest()
+		}
+
+		guard delay > .zero else {
+			finish()
+			return
+		}
+
+		Task {
+			try? await Task.sleep(for: delay)
+			finish()
+		}
 	}
 
 	override func stopLoading() {}

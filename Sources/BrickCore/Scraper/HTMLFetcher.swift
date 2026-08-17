@@ -22,6 +22,15 @@ enum HTMLFetcher
 	static let maximumAttempts = 3
 	static let requestTimeout: TimeInterval = 30
 
+	/// Ceiling on requests in flight, shared by every caller.
+	///
+	/// It lives here rather than at the call sites because an import fans out as
+	/// a tree — parts and minifigures walk concurrently, and each minifigure
+	/// walks its own parts — so per-call-site limits would multiply.
+	static let maximumConcurrentRequests = 6
+
+	private static let gate = RequestGate(limit: maximumConcurrentRequests)
+
 	static func data(from url: URL, session: URLSession = .shared) async throws -> Data
 	{
 		var attempt = 1
@@ -51,7 +60,12 @@ enum HTMLFetcher
 
 	private static func fetchOnce(_ url: URL, session: URLSession) async throws -> Data
 	{
-		let (data, response) = try await session.data(for: request(for: url))
+		// The permit covers the round trip only — parsing and retry backoff must
+		// not hold a slot that another request could be using.
+		let request = request(for: url)
+		let (data, response) = try await gate.withPermit {
+			try await session.data(for: request)
+		}
 
 		if let http = response as? HTTPURLResponse,
 		   !(200..<300).contains(http.statusCode)

@@ -17,9 +17,11 @@ public final class BrickLinkInventoryService {
 	/// Guards against an item whose inventory transitively contains itself.
 	private static let maximumInventoryDepth = 4
 
-	/// Ceiling on requests in flight, so importing a large set stays a polite
-	/// trickle rather than a burst BrickLink would throttle.
-	private static let maximumConcurrentRequests = 6
+	/// How many rows are walked at once. This bounds task creation only — an
+	/// import fans out as a tree, so these windows nest and multiply. The ceiling
+	/// that actually protects BrickLink is `HTMLFetcher.maximumConcurrentRequests`,
+	/// which every request shares.
+	private static let maximumConcurrentRows = 6
 
 	public init() {}
 
@@ -83,7 +85,7 @@ public final class BrickLinkInventoryService {
 			return rows.map { makePart(from: $0, inventoryURL: nil, subparts: []) }
 		}
 
-		let enriched = try await mapConcurrently(fetchable, limit: Self.maximumConcurrentRequests) { index in
+		let enriched = try await mapConcurrently(fetchable, limit: Self.maximumConcurrentRows) { index in
 			(index, try await self.part(from: rows[index], depth: depth))
 		}
 
@@ -138,7 +140,7 @@ public final class BrickLinkInventoryService {
 	private func enrichedMinifigures(
 		from rows: [BrickLinkInventoryTable.ItemRow]
 	) async throws -> [BrickLinkMinifigure] {
-		try await mapConcurrently(rows, limit: Self.maximumConcurrentRequests) { row in
+		try await mapConcurrently(rows, limit: Self.maximumConcurrentRows) { row in
 			try await self.minifigure(from: row)
 		}
 	}

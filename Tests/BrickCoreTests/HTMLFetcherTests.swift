@@ -82,6 +82,46 @@ struct HTMLFetcherTests {
 		#expect(StubURLProtocol.requestCount == 1)
 	}
 
+	/// The cap has to hold across the whole import, not per call site: parts and
+	/// minifigures are walked concurrently and each minifigure walks its own
+	/// parts, so limits applied at each fan-out point would multiply.
+	@Test
+	func concurrentRequestsShareOneCeiling() async throws {
+		StubURLProtocol.reset(
+			with: [.html("<html><body>ok</body></html>")],
+			responseDelay: .milliseconds(20)
+		)
+
+		let session = StubURLProtocol.makeSession()
+
+		// Nested fan-out: several groups, each fetching several pages.
+		try await withThrowingTaskGroup(of: Void.self) { outer in
+			for group in 0..<5 {
+				outer.addTask {
+					try await withThrowingTaskGroup(of: Void.self) { inner in
+						for page in 0..<6 {
+							inner.addTask {
+								let url = URL(string: "https://www.bricklink.com/p/\(group)-\(page)")!
+								_ = try await HTMLFetcher.data(from: url, session: session)
+							}
+						}
+						try await inner.waitForAll()
+					}
+				}
+			}
+			try await outer.waitForAll()
+		}
+
+		#expect(StubURLProtocol.requestCount == 30)
+		#expect(
+			StubURLProtocol.peakConcurrentRequests <= HTMLFetcher.maximumConcurrentRequests,
+			"""
+			Expected at most \(HTMLFetcher.maximumConcurrentRequests) requests in flight, \
+			saw \(StubURLProtocol.peakConcurrentRequests).
+			"""
+		)
+	}
+
 	@Test
 	func retryClassificationMatchesStatusSemantics() {
 		#expect(HTMLFetcher.FetchError.unexpectedStatus(429, Self.url).isWorthRetrying)
