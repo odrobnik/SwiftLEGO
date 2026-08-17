@@ -1,4 +1,5 @@
 import Foundation
+import SwiftTextHTML
 
 public struct BrickLinkColorGuideEntry: Sendable, Equatable {
     public let brickLinkColorID: Int
@@ -36,7 +37,7 @@ public actor BrickLinkColorGuideService {
             throw ColorGuideError.invalidResponse
         }
 
-        let data = try Data(contentsOf: url)
+        let data = try await HTMLFetcher.data(from: url)
         return try await parseColorGuide(htmlData: data, baseURL: url)
     }
 
@@ -145,45 +146,4 @@ public actor BrickLinkColorGuideService {
     }
 }
 
-private extension DOMElement {
-    func descendantElements(named name: String) -> [DOMElement] {
-        var results: [DOMElement] = []
-        if self.name == name {
-            results.append(self)
-        }
-
-        for child in children {
-            guard let element = child as? DOMElement else { continue }
-            results.append(contentsOf: element.descendantElements(named: name))
-        }
-
-        return results
-    }
-
-    func firstDescendant(where predicate: (DOMElement) -> Bool) -> DOMElement? {
-        for child in children {
-            if let element = child as? DOMElement {
-                if predicate(element) {
-                    return element
-                }
-                if let match = element.firstDescendant(where: predicate) {
-                    return match
-                }
-            }
-        }
-
-        return nil
-    }
-}
-
-private extension DOMNode {
-    func textContent() -> String {
-        if let textNode = self as? DOMText {
-            return textNode.text
-        } else if let element = self as? DOMElement {
-            return element.children.map { $0.textContent() }.joined()
-        } else {
-            return ""
-        }
-    }
-}
+// DOM query helpers live in Scraper/DOMElement+Query.swift.

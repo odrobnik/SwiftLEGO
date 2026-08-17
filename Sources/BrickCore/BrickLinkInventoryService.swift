@@ -1,240 +1,145 @@
 import Foundation
 
+/// Reads set and minifigure inventories from BrickLink.
+///
+/// The legacy `catalogItemInv.asp` endpoint is behind a JavaScript challenge and
+/// answers scripted requests with a WAF interstitial, so inventories come from
+/// the pair of pages BrickLink's own catalog view uses:
+///
+/// 1. `catalogitem.page` resolves an item number to BrickLink's internal
+///    numeric id, and carries the display name, thumbnail and categories.
+/// 2. `catalogitem_invtab.page`, keyed by that id, returns the inventory table.
 public final class BrickLinkInventoryService {
-	private struct ParsedInventory {
-		let name: String?
-		let thumbnailURL: URL?
-		let categories: [BrickLinkCategory]
-		let parts: [BrickLinkPart]
-		let minifigures: [ParsedMinifigure]
-	}
-
-	private struct ParsedMinifigure {
-		let identifier: String
-		let name: String
-		let quantity: Int
-		let imageURL: URL?
-		let catalogURL: URL?
-		let inventoryURL: URL?
-		let categories: [BrickLinkCategory]
-	}
-
 	public enum InventoryError: Error {
-		case invalidResponse
 		case partsTableNotFound
-		case malformedRow(String)
-		case missingSetName
 	}
+
+	/// Guards against an item whose inventory transitively contains itself.
+	private static let maximumInventoryDepth = 4
 
 	public init() {}
 
 	public func fetchInventory(for setNumber: String) async throws -> BrickLinkInventory {
-		let url = inventoryURL(for: setNumber)
-		let converter = HTML💡Markdown(url: url)
-		let markdown = try await converter.markdown()
+		let page = try await catalogItemPage(type: .set, number: setNumber)
+		let table = try await inventoryTable(idItem: page.idItem, itemNumber: setNumber)
 
-		let parsed = try parse(markdown: markdown, setNumber: setNumber, baseURL: url)
-		let enrichedParts = try await enrichParts(parsed.parts)
-		let minifigures = try await enrichMinifigures(parsed.minifigures)
-
-		return BrickLinkInventory(
-			setNumber: setNumber,
-			name: parsed.name ?? "Set \(setNumber)",
-			thumbnailURL: parsed.thumbnailURL,
-			parts: enrichedParts,
-			categories: parsed.categories,
-			minifigures: minifigures
-		)
-	}
-
-	// MARK: - Parsing
-
-	private func parse(markdown: String, setNumber: String, baseURL: URL) throws -> ParsedInventory {
-		let lines = markdown.components(separatedBy: .newlines)
-
-		guard let tableHeaderIndex = lines.firstIndex(where: { $0.contains("| **Image**") }) else {
+		guard !table.parts.isEmpty || !table.minifigures.isEmpty else {
 			throw InventoryError.partsTableNotFound
 		}
 
-		let metadata = parseMetadata(from: lines, baseURL: baseURL)
+		async let parts = enrichedParts(from: table.parts, depth: 0)
+		async let minifigures = enrichedMinifigures(from: table.minifigures)
 
-		let (parts, minifigures) = try parseInventoryItems(
-			lines: lines,
-			startIndex: tableHeaderIndex + 2,
-			baseURL: baseURL,
-			allowMinifigures: true
-		)
+		let resolvedName = sanitizeSetName(page.name)
 
-		return ParsedInventory(
-			name: metadata.name,
-			thumbnailURL: metadata.thumbnailURL,
-			categories: metadata.categories,
-			parts: parts,
-			minifigures: minifigures
+		return BrickLinkInventory(
+			setNumber: setNumber,
+			name: resolvedName.isEmpty ? "Set \(setNumber)" : resolvedName,
+			thumbnailURL: page.thumbnailURL,
+			parts: try await parts,
+			categories: page.categories,
+			minifigures: try await minifigures
 		)
 	}
 
-	private enum InventoryItemType {
-		case parts
-		case minifigures
+	// MARK: - Fetching
+
+	private func catalogItemPage(
+		type: BrickLinkCatalogItemPage.ItemType,
+		number: String
+	) async throws -> BrickLinkCatalogItemPage {
+		let url = BrickLinkCatalogItemPage.url(for: type, number: number)
+		let data = try await HTMLFetcher.data(from: url)
+
+		return try await BrickLinkCatalogItemPage.parse(html: data, baseURL: url)
 	}
 
-	private func parseInventoryItems(
-			lines: [String],
-			startIndex: Int,
-			baseURL: URL,
-			allowMinifigures: Bool
-		) throws -> ([BrickLinkPart], [ParsedMinifigure]) {
-		var parts: [BrickLinkPart] = []
-		var minifigures: [ParsedMinifigure] = []
-			var index = startIndex
-			var currentSection: BrickLinkPartSection = .regular
-			var currentItemType: InventoryItemType = .parts
+	private func inventoryTable(idItem: String, itemNumber: String) async throws -> BrickLinkInventoryTable {
+		let url = BrickLinkInventoryTable.url(idItem: idItem, itemNumber: itemNumber)
+		let data = try await HTMLFetcher.data(from: url)
 
-			while index < lines.count {
-				let line = lines[index].trimmingCharacters(in: .whitespaces)
-			if line.isEmpty {
-				index += 1
-				continue
-			}
+		return try await BrickLinkInventoryTable.parse(html: data, baseURL: url)
+	}
 
-			if !line.hasPrefix("|") {
-				index += 1
-				continue
-			}
+	// MARK: - Parts
 
-			if let detectedSection = detectSection(from: line) {
-				currentSection = detectedSection
-				index += 1
-				continue
-			}
-
-			if allowMinifigures, let detectedItemType = detectItemType(from: line) {
-				currentItemType = detectedItemType
-				index += 1
-				continue
-			}
-
-			var columns = line
-				.split(separator: "|", omittingEmptySubsequences: false)
-				.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-			while let first = columns.first, first.isEmpty {
-				columns.removeFirst()
-			}
-
-			while let last = columns.last, last.isEmpty {
-				columns.removeLast()
-			}
-
-				var didConsumeNextLine = false
-
-				do {
-					switch currentItemType {
-					case .parts:
-						guard columns.contains(where: { $0.contains("catalog/catalogitem.page?P=") }) else {
-							index += 1
-							continue
-						}
-						let part = try parsePartRow(columns: columns, baseURL: baseURL, section: currentSection)
-						parts.append(part)
-					case .minifigures:
-						guard columns.contains(where: { $0.contains("catalogitem.page?M=") }) else {
-							index += 1
-							continue
-						}
-						let nextLine = lines[safe: index + 1]?.trimmingCharacters(in: .whitespacesAndNewlines)
-						let minifigure = try parseMinifigureRow(
-							columns: columns,
-							nextLine: nextLine,
-							baseURL: baseURL,
-							consumedNextLine: &didConsumeNextLine
-						)
-						minifigures.append(minifigure)
-					}
-				} catch {
-					throw InventoryError.malformedRow(line)
-				}
-
-				if didConsumeNextLine {
-					index += 1
-				}
-
-				index += 1
-			}
-
-			return (parts, minifigures)
-		}
-
-	private func enrichParts(_ parts: [BrickLinkPart]) async throws -> [BrickLinkPart] {
-		guard parts.contains(where: { $0.inventoryURL != nil }) else {
-			return parts
-		}
+	private func enrichedParts(
+		from rows: [BrickLinkInventoryTable.ItemRow],
+		depth: Int
+	) async throws -> [BrickLinkPart] {
+		guard !rows.isEmpty else { return [] }
 
 		return try await withThrowingTaskGroup(of: (Int, BrickLinkPart).self) { group in
-			for (index, part) in parts.enumerated() where part.inventoryURL != nil {
-				guard let inventoryURL = part.inventoryURL else {
-					continue
-				}
-
+			for (index, row) in rows.enumerated() {
 				group.addTask {
-					let rawSubparts = try await self.fetchParts(from: inventoryURL)
-					let enrichedSubparts = try await self.enrichParts(rawSubparts)
-
-					let enrichedPart = BrickLinkPart(
-						partID: part.partID,
-						partURL: part.partURL,
-						name: part.name,
-						colorName: part.colorName,
-						colorID: part.colorID,
-						imageURL: part.imageURL,
-						fullImageURL: part.fullImageURL,
-						quantity: part.quantity,
-						section: part.section,
-						inventoryURL: part.inventoryURL,
-						subparts: enrichedSubparts
-					)
-
-					return (index, enrichedPart)
+					(index, try await self.part(from: row, depth: depth))
 				}
 			}
 
-			var updatedParts = parts
-			for try await (index, enriched) in group {
-				updatedParts[index] = enriched
+			var ordered: [BrickLinkPart?] = Array(repeating: nil, count: rows.count)
+			for try await (index, part) in group {
+				ordered[index] = part
 			}
 
-			return updatedParts
+			return ordered.compactMap { $0 }
 		}
 	}
 
-	private func enrichMinifigures(_ minifigures: [ParsedMinifigure]) async throws -> [BrickLinkMinifigure] {
-		guard !minifigures.isEmpty else { return [] }
+	private func part(from row: BrickLinkInventoryTable.ItemRow, depth: Int) async throws -> BrickLinkPart {
+		var subparts: [BrickLinkPart] = []
+		var inventoryURL: URL?
+
+		if row.hasOwnInventory,
+		   let idItem = row.idItem,
+		   depth < Self.maximumInventoryDepth {
+			inventoryURL = BrickLinkInventoryTable.url(idItem: idItem, itemNumber: row.itemNumber)
+
+			// A missing sub-inventory should not fail the whole import.
+			if let table = try? await inventoryTable(idItem: idItem, itemNumber: row.itemNumber) {
+				subparts = try await enrichedParts(from: table.parts, depth: depth + 1)
+			}
+		}
+
+		return makePart(from: row, inventoryURL: inventoryURL, subparts: subparts)
+	}
+
+	private func makePart(
+		from row: BrickLinkInventoryTable.ItemRow,
+		inventoryURL: URL?,
+		subparts: [BrickLinkPart]
+	) -> BrickLinkPart {
+		let name = row.name.isEmpty ? row.description : row.name
+
+		return BrickLinkPart(
+			partID: row.itemNumber,
+			partURL: row.itemURL,
+			name: name,
+			colorName: Self.colorName(description: row.description, name: row.name),
+			colorID: row.colorID,
+			imageURL: row.imageURL,
+			fullImageURL: Self.fullSizeImageURL(from: row.imageURL),
+			quantity: row.quantity,
+			section: row.section,
+			inventoryURL: inventoryURL,
+			subparts: subparts
+		)
+	}
+
+	// MARK: - Minifigures
+
+	private func enrichedMinifigures(
+		from rows: [BrickLinkInventoryTable.ItemRow]
+	) async throws -> [BrickLinkMinifigure] {
+		guard !rows.isEmpty else { return [] }
 
 		return try await withThrowingTaskGroup(of: (Int, BrickLinkMinifigure).self) { group in
-			for (index, minifigure) in minifigures.enumerated() {
+			for (index, row) in rows.enumerated() {
 				group.addTask {
-					let parts = try await self.fetchMinifigureParts(for: minifigure)
-					return (
-						index,
-						BrickLinkMinifigure(
-							identifier: minifigure.identifier,
-							name: minifigure.name,
-							quantity: minifigure.quantity,
-							imageURL: self.preferredMinifigureImageURL(
-								for: minifigure.identifier,
-								fallback: minifigure.imageURL
-							),
-							catalogURL: minifigure.catalogURL,
-							inventoryURL: minifigure.inventoryURL,
-							categories: minifigure.categories,
-							parts: parts
-						)
-					)
+					(index, try await self.minifigure(from: row))
 				}
 			}
 
-			var ordered: [BrickLinkMinifigure?] = Array(repeating: nil, count: minifigures.count)
+			var ordered: [BrickLinkMinifigure?] = Array(repeating: nil, count: rows.count)
 			for try await (index, minifigure) in group {
 				ordered[index] = minifigure
 			}
@@ -243,566 +148,125 @@ public final class BrickLinkInventoryService {
 		}
 	}
 
-	private func fetchMinifigureParts(for minifigure: ParsedMinifigure) async throws -> [BrickLinkPart] {
-		let url = minifigure.inventoryURL ?? inventoryURL(forMinifigure: minifigure.identifier)
-		return try await fetchParts(from: url, allowMinifigures: true)
-	}
+	private func minifigure(from row: BrickLinkInventoryTable.ItemRow) async throws -> BrickLinkMinifigure {
+		// The minifigure's own catalog page carries its category breadcrumb by
+		// name; the inventory row only has the numeric category path.
+		let page = try? await catalogItemPage(type: .minifigure, number: row.itemNumber)
+		let idItem = page?.idItem ?? row.idItem
 
-	private func fetchParts(from inventoryURL: URL, allowMinifigures: Bool = false) async throws -> [BrickLinkPart] {
-		let converter = HTML💡Markdown(url: inventoryURL)
-		let markdown = try await converter.markdown()
+		var parts: [BrickLinkPart] = []
+		var inventoryURL: URL?
 
-		let lines = markdown.components(separatedBy: .newlines)
-		guard let tableHeaderIndex = lines.firstIndex(where: { $0.contains("| **Image**") }) else {
-			return []
-		}
+		if let idItem {
+			inventoryURL = BrickLinkInventoryTable.url(idItem: idItem, itemNumber: row.itemNumber)
 
-		do {
-			let (parts, minifigures) = try parseInventoryItems(
-				lines: lines,
-				startIndex: tableHeaderIndex + 2,
-				baseURL: inventoryURL,
-				allowMinifigures: allowMinifigures
-			)
+			if let table = try? await inventoryTable(idItem: idItem, itemNumber: row.itemNumber) {
+				parts = try await enrichedParts(from: table.parts, depth: 1)
 
-			guard allowMinifigures, !minifigures.isEmpty else { return parts }
-
-			let minifigureParts = minifigures.map { minifigure in
-				let resolvedInventoryURL = minifigure.inventoryURL ?? self.inventoryURL(forMinifigure: minifigure.identifier)
-				return BrickLinkPart(
-					partID: minifigure.identifier,
-					partURL: minifigure.catalogURL,
-					name: minifigure.name.isEmpty ? minifigure.identifier : minifigure.name,
-					colorName: "Minifigure",
-					colorID: "0",
-					imageURL: preferredMinifigureImageURL(for: minifigure.identifier, fallback: minifigure.imageURL),
-					fullImageURL: nil,
-					quantity: minifigure.quantity,
-					section: .regular,
-					inventoryURL: resolvedInventoryURL
-				)
-			}
-
-			return parts + minifigureParts
-		} catch InventoryError.partsTableNotFound {
-			return []
-		}
-	}
-
-	private func detectSection(from line: String) -> BrickLinkPartSection? {
-		let sanitizedColumns = line
-			.replacingOccurrences(of: "**", with: "")
-			.split(separator: "|", omittingEmptySubsequences: false)
-			.map {
-				$0
-						.trimmingCharacters(in: .whitespacesAndNewlines)
-						.lowercased()
-				}
-				.filter { !$0.isEmpty }
-
-			for column in sanitizedColumns {
-				let normalized = column
-					.replacingOccurrences(of: ":", with: "")
-					.replacingOccurrences(of: ".", with: "")
-					.trimmingCharacters(in: .whitespacesAndNewlines)
-
-				switch normalized {
-				case "regular", "regular items", "regular item":
-					return .regular
-				case "extra", "extras", "extra items", "extra item":
-					return .extra
-				case "counterpart", "counterparts", "counterpart items", "counterparts items":
-					return .counterpart
-				case "alternate", "alternate items", "alternates":
-					return .alternate
-				default:
-					continue
+				// A minifigure inventory can itself list minifigures; the old
+				// scraper folded those in as parts, so keep doing that.
+				parts += table.minifigures.map { nested in
+					BrickLinkPart(
+						partID: nested.itemNumber,
+						partURL: nested.itemURL,
+						name: nested.name.isEmpty ? nested.itemNumber : nested.name,
+						colorName: "Minifigure",
+						colorID: "0",
+						imageURL: nested.imageURL,
+						fullImageURL: Self.fullSizeImageURL(from: nested.imageURL),
+						quantity: nested.quantity,
+						section: .regular,
+						inventoryURL: nested.idItem.map {
+							BrickLinkInventoryTable.url(idItem: $0, itemNumber: nested.itemNumber)
+						}
+					)
 				}
 			}
-
-			return nil
 		}
 
-	private func parsePartRow(
-		columns: [String],
-		baseURL: URL,
-		section: BrickLinkPartSection
-	) throws -> BrickLinkPart {
-		let imageColumn = columns.first(where: { $0.contains("catalogItemPic.asp") })
-		let partLinkColumn = columns.first(where: { $0.contains("catalog/catalogitem.page?P=") })
-		let descriptionColumn = columns.first(where: { $0.contains("**") && !$0.contains("Part No:") })
+		let resolvedName = page?.name.isEmpty == false ? page!.name : row.name
 
-		let imageURLs = extractImageURLs(from: imageColumn)
-
-		let quantity = columns
-			.compactMap { Int($0) }
-			.first ?? 0
-
-		let partName = normalizeWhitespace(extractPartName(from: imageColumn))
-
-		let (partID, partURL) = extractLink(from: partLinkColumn, baseURL: baseURL)
-		let inventoryURL = extractInventoryURL(from: partLinkColumn, baseURL: baseURL)
-
-		let rawDescription = descriptionColumn?
-			.replacingOccurrences(of: "**", with: "")
-			.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-		let normalizedDescription = normalizeWhitespace(rawDescription)
-		let sanitizedDescription = sanitizeColorDescription(normalizedDescription)
-
-		var colorName = ""
-		if !partName.isEmpty, let range = sanitizedDescription.range(of: partName) {
-			colorName = String(sanitizedDescription[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-		}
-
-		if colorName.isEmpty {
-			colorName = sanitizedDescription
-		}
-
-		var colorID = partURL.flatMap { url in
-			URLComponents(url: url, resolvingAgainstBaseURL: false)?
-				.queryItems?
-				.first(where: { $0.name.lowercased() == "idcolor" })?
-				.value
-		} ?? ""
-		colorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
-		if colorID == "0" {
-			colorID = ""
-		}
-
-		let colorSpecificThumbnail = makeColorSpecificThumbnailURL(partID: partID, colorID: colorID)
-		let colorSpecificFull = makeColorSpecificImageURL(partID: partID, colorID: colorID)
-
-		let resolvedThumbnail: URL?
-		if let existing = imageURLs.thumbnail,
-		   !existing.path.lowercased().contains("no_image") {
-			resolvedThumbnail = existing
-		} else {
-			resolvedThumbnail = colorSpecificThumbnail ?? imageURLs.thumbnail
-		}
-
-		let preferredFullImage = colorSpecificFull ?? imageURLs.fullsize
-
-		return BrickLinkPart(
-			partID: partID,
-			partURL: partURL,
-			name: partName.isEmpty ? normalizedDescription : partName,
-			colorName: colorName,
-			colorID: colorID,
-			imageURL: resolvedThumbnail,
-			fullImageURL: preferredFullImage,
-			quantity: quantity,
-			section: section,
-			inventoryURL: inventoryURL
-		)
-	}
-
-	private func parseMinifigureRow(
-		columns: [String],
-		nextLine: String?,
-		baseURL: URL,
-		consumedNextLine: inout Bool
-	) throws -> ParsedMinifigure {
-		let imageColumn = columns.first(where: { $0.contains("catalogItemPic.asp?M=") })
-		let minifigLinkColumn = columns.first(where: { $0.contains("catalogitem.page?M=") })
-		let descriptionColumn = columns.first(where: { $0.contains("Catalog") })
-
-		let imageURL = extractImageURLs(from: imageColumn).thumbnail
-		let quantity = columns
-			.compactMap { Int($0) }
-			.first ?? 0
-
-		let rawName = normalizeWhitespace(extractPartName(from: imageColumn))
-		let (identifier, catalogURL) = extractLink(from: minifigLinkColumn, baseURL: baseURL)
-		guard !identifier.isEmpty else {
-			throw InventoryError.malformedRow(columns.joined(separator: "|"))
-		}
-		let inventoryURL = extractInventoryURL(from: minifigLinkColumn, baseURL: baseURL)
-
-		var categories: [BrickLinkCategory] = []
-		if let descriptionColumn {
-			categories = extractCategories(from: descriptionColumn, baseURL: baseURL)
-		} else if let nextLine,
-				  let categoriesColumn = categoriesColumn(from: nextLine) {
-			categories = extractCategories(from: categoriesColumn, baseURL: baseURL)
-			consumedNextLine = true
-		}
-
-		var resolvedName = rawName
-		if resolvedName.isEmpty, let descriptionColumn {
-			let sanitized = descriptionColumn
-				.replacingOccurrences(of: "**", with: "")
-				.replacingOccurrences(of: "[Catalog]", with: "")
-			let components = sanitized.split(separator: "\n")
-			if let first = components.first {
-				resolvedName = normalizeWhitespace(String(first))
-			}
-		}
-
-		return ParsedMinifigure(
-			identifier: identifier,
-			name: resolvedName,
-			quantity: quantity,
-			imageURL: imageURL,
-			catalogURL: catalogURL,
+		return BrickLinkMinifigure(
+			identifier: row.itemNumber,
+			name: resolvedName.isEmpty ? row.itemNumber : resolvedName,
+			quantity: row.quantity,
+			imageURL: Self.fullSizeImageURL(from: row.imageURL) ?? row.imageURL,
+			catalogURL: BrickLinkCatalogItemPage.url(for: .minifigure, number: row.itemNumber),
 			inventoryURL: inventoryURL,
-			categories: categories
+			categories: page?.categories ?? [],
+			parts: parts
 		)
-	}
-
-	private func extractImageURLs(from column: String?) -> (thumbnail: URL?, fullsize: URL?) {
-		guard let column else { return (nil, nil) }
-		let nsRange = NSRange(column.startIndex..<column.endIndex, in: column)
-		var thumbnailURL: URL?
-
-		if let match = imageRegex.firstMatch(in: column, options: [], range: nsRange),
-		   let range = Range(match.range(at: 1), in: column) {
-			let urlString = String(column[range])
-			thumbnailURL = makeAbsoluteURL(from: urlString)
-		}
-
-		var fullsizeURL: URL?
-		if let anchorRange = column.range(of: ")](") {
-			let tail = column[anchorRange.upperBound...]
-			if let closingParenthesis = tail.firstIndex(of: ")") {
-				let candidate = String(tail[..<closingParenthesis])
-				fullsizeURL = makeAbsoluteURL(from: candidate)
-			}
-		}
-
-		let resolvedFullsize = resolveFullsizeImageURL(thumbnail: thumbnailURL, candidate: fullsizeURL)
-		return (thumbnailURL, resolvedFullsize)
-	}
-
-	private func makeAbsoluteURL(from input: String) -> URL? {
-		if let url = URL(string: input), url.scheme != nil {
-			return url
-		}
-		return URL(string: "https://www.bricklink.com\(input)")
-	}
-
-	private func makeColorSpecificImageURL(partID: String, colorID: String) -> URL? {
-		let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
-		let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
-		let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
-		guard !trimmedPartID.isEmpty, !sanitizedColorID.isEmpty else { return nil }
-
-		var components = URLComponents()
-		components.scheme = "https"
-		components.host = "img.bricklink.com"
-		components.path = "/ItemImage/PN/\(sanitizedColorID)/\(trimmedPartID).png"
-		return components.url
-	}
-
-	private func makeColorSpecificThumbnailURL(partID: String, colorID: String) -> URL? {
-		let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
-		let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
-		let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
-		guard !trimmedPartID.isEmpty, !sanitizedColorID.isEmpty else { return nil }
-
-		var components = URLComponents()
-		components.scheme = "https"
-		components.host = "img.bricklink.com"
-		components.path = "/ItemImage/PT/\(sanitizedColorID)/\(trimmedPartID).t1.png"
-		return components.url
-	}
-
-	private func resolveFullsizeImageURL(thumbnail: URL?, candidate: URL?) -> URL? {
-		if let candidate {
-			let lowercasedPath = candidate.path.lowercased()
-			if lowercasedPath.contains("/catalogitempic.asp"),
-			   let components = URLComponents(url: candidate, resolvingAgainstBaseURL: false),
-			   let partID = components.queryItems?.first(where: { $0.name.lowercased() == "p" })?.value,
-			   !partID.isEmpty {
-				var directComponents = URLComponents()
-				directComponents.scheme = "https"
-				directComponents.host = "www.bricklink.com"
-				directComponents.path = "/PL/\(partID).jpg"
-				directComponents.query = "0"
-				return directComponents.url
-			}
-
-			let pathExtension = (candidate.path as NSString).pathExtension
-			if !pathExtension.isEmpty {
-				return candidate
-			}
-		}
-
-		if let thumbnail {
-			return promoteToHighResolution(thumbnail)
-		}
-
-		return candidate
-	}
-
-	private func extractPartName(from column: String?) -> String {
-		guard let column, let nameRange = column.range(of: "Name:") else {
-			return ""
-		}
-
-		let nameStart = column.index(nameRange.upperBound, offsetBy: 0)
-		let remainder = column[nameStart...]
-		guard let endRange = remainder.range(of: "](") else {
-			return ""
-		}
-
-		let name = remainder[..<endRange.lowerBound]
-		return name.trimmingCharacters(in: .whitespacesAndNewlines)
-	}
-
-	private func extractLink(from column: String?, baseURL: URL) -> (String, URL?) {
-		guard let column else { return ("", nil) }
-
-		let nsRange = NSRange(column.startIndex..<column.endIndex, in: column)
-		guard let match = linkRegex.firstMatch(in: column, options: [], range: nsRange) else {
-			return (column, nil)
-		}
-
-		guard
-			let textRange = Range(match.range(at: 1), in: column),
-			let urlRange = Range(match.range(at: 2), in: column)
-		else {
-			return (column, nil)
-		}
-
-		let text = String(column[textRange])
-		let urlString = String(column[urlRange])
-		let url = URL(string: urlString, relativeTo: baseURL)
-		return (text, url?.absoluteURL)
-	}
-
-	private func extractInventoryURL(from column: String?, baseURL: URL) -> URL? {
-		guard let column else { return nil }
-		let nsRange = NSRange(column.startIndex..<column.endIndex, in: column)
-		let matches = linkRegex.matches(in: column, options: [], range: nsRange)
-		guard matches.count >= 2 else { return nil }
-
-		let inventoryMatch = matches[1]
-		guard let urlRange = Range(inventoryMatch.range(at: 2), in: column) else {
-			return nil
-		}
-
-		let urlString = String(column[urlRange])
-		return URL(string: urlString, relativeTo: baseURL)?.absoluteURL
-	}
-
-	private func categoriesColumn(from line: String) -> String? {
-		var columns = line
-			.split(separator: "|", omittingEmptySubsequences: false)
-			.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-		while let first = columns.first, first.isEmpty {
-			columns.removeFirst()
-		}
-
-		while let last = columns.last, last.isEmpty {
-			columns.removeLast()
-		}
-
-		return columns.first(where: { $0.contains("Catalog") })
-	}
-
-	private func preferredMinifigureImageURL(for identifier: String, fallback: URL?) -> URL? {
-		let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
-		guard !trimmed.isEmpty else { return fallback }
-
-		let candidates = [trimmed.lowercased(), trimmed.uppercased(), trimmed]
-
-		for candidate in candidates {
-			var components = URLComponents()
-			components.scheme = "https"
-			components.host = "img.bricklink.com"
-			components.path = "/ItemImage/MN/0/\(candidate).png"
-
-			if let url = components.url {
-				return url
-			}
-		}
-
-		return fallback
-	}
-
-	private func extractCategories(from line: String, baseURL: URL) -> [BrickLinkCategory] {
-		let nsRange = NSRange(line.startIndex..<line.endIndex, in: line)
-		let matches = linkRegex.matches(in: line, options: [], range: nsRange)
-
-		var categories: [BrickLinkCategory] = []
-
-		for match in matches {
-			guard
-				let textRange = Range(match.range(at: 1), in: line),
-				let urlRange = Range(match.range(at: 2), in: line)
-			else {
-				continue
-			}
-
-			let text = normalizeWhitespace(String(line[textRange]))
-			let rawURLString = String(line[urlRange])
-			guard let url = URL(string: rawURLString, relativeTo: baseURL)?.absoluteURL else {
-				continue
-			}
-
-			let lowercasedURL = url.absoluteString.lowercased()
-
-			if lowercasedURL.contains("catalogitem.page?s=") {
-				break
-			}
-
-			if lowercasedURL.contains("catalogiteminv.asp?s=") {
-				break
-			}
-
-			if text.caseInsensitiveCompare("Catalog") == .orderedSame {
-				continue
-			}
-
-			let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-				.queryItems?
-				.first(where: { item in
-					let name = item.name.lowercased()
-					return name == "catstring" || name == "catid"
-				})?
-				.value
-
-			categories.append(BrickLinkCategory(id: id, name: text))
-		}
-
-		return categories
-	}
-
-	private func sanitizeColorDescription(_ text: String) -> String {
-		var cleaned = text
-		let fullRange = NSRange(cleaned.startIndex..<cleaned.endIndex, in: cleaned)
-		cleaned = imageRegex.stringByReplacingMatches(
-			in: cleaned,
-			options: [],
-			range: fullRange,
-			withTemplate: ""
-		)
-
-		cleaned = cleaned.replacingOccurrences(
-			of: #"!\[[^\]]*\]"#,
-			with: "",
-			options: .regularExpression
-		)
-
-		return normalizeWhitespace(cleaned)
-	}
-
-	private func extractSetName(from line: String) -> String? {
-		guard line.contains("catalogItemPic.asp?S=") else { return nil }
-
-		let nsRange = NSRange(line.startIndex..<line.endIndex, in: line)
-
-		if let match = setNameRegex.firstMatch(in: line, options: [], range: nsRange),
-		   let range = Range(match.range(at: 1), in: line) {
-			return normalizeWhitespace(String(line[range]))
-		}
-
-		if let match = boldRegex.firstMatch(in: line, options: [], range: nsRange),
-		   let range = Range(match.range(at: 1), in: line) {
-			let candidate = normalizeWhitespace(String(line[range]))
-			let disallowed = ["image", "qty", "parts", "regular items", "mid"]
-			if disallowed.allSatisfy({ !candidate.lowercased().contains($0) }) {
-				return candidate
-			}
-		}
-
-		return nil
-	}
-
-	private func detectItemType(from line: String) -> InventoryItemType? {
-		let lowercased = line.lowercased()
-		let isMetadataRow = lowercased.contains("[catalog]")
-		guard !isMetadataRow else { return nil }
-
-		if lowercased.contains("minifigures:") {
-			return .minifigures
-		}
-
-		if lowercased.contains("parts:") {
-			return .parts
-		}
-
-		return nil
-	}
-
-	private func parseMetadata(
-		from lines: [String],
-		baseURL: URL
-	) -> (name: String?, thumbnailURL: URL?, categories: [BrickLinkCategory]) {
-		var name: String?
-		var thumbnailURL: URL?
-		var categories: [BrickLinkCategory] = []
-
-		for line in lines {
-			if name == nil, let extracted = extractSetName(from: line) {
-				name = sanitizeSetName(extracted)
-			}
-
-			if categories.isEmpty, line.contains("[Catalog]") {
-				categories = extractCategories(from: line, baseURL: baseURL)
-			}
-
-			if line.contains("catalogItemPic.asp?S="),
-			   let preferred = extractImageURLs(from: line).thumbnail,
-			   preferred.absoluteString.contains("/S/") {
-				thumbnailURL = promoteToHighResolution(preferred)
-			} else if thumbnailURL == nil,
-					  let candidate = extractImageURLs(from: line).thumbnail {
-				thumbnailURL = promoteToHighResolution(candidate)
-			}
-
-			if name != nil, thumbnailURL != nil, !categories.isEmpty {
-				break
-			}
-		}
-
-		return (name, thumbnailURL, categories)
 	}
 
 	// MARK: - Helpers
 
-	private func inventoryURL(for setNumber: String) -> URL {
-		var components = URLComponents()
-		components.scheme = "https"
-		components.host = "www.bricklink.com"
-		components.path = "/catalogItemInv.asp"
-		components.queryItems = [
-			URLQueryItem(name: "S", value: setNumber),
-			URLQueryItem(name: "viewType", value: "R")
-		]
+	/// The bold description is the color name followed by the item name, and the
+	/// image `alt` is that item name on its own.
+	static func colorName(description: String, name: String) -> String {
+		let description = description.collapsedWhitespace()
+		guard !name.isEmpty else { return description }
 
-		return components.url!
+		let colorName: String
+		if description.hasSuffix(name) {
+			colorName = String(description.dropLast(name.count))
+				.trimmingCharacters(in: .whitespacesAndNewlines)
+		} else if let range = description.range(of: name) {
+			colorName = String(description[..<range.lowerBound])
+				.trimmingCharacters(in: .whitespacesAndNewlines)
+		} else {
+			return description
+		}
+
+		return isPlaceholderColorName(colorName) ? "" : colorName
 	}
 
-	private func inventoryURL(forMinifigure identifier: String) -> URL {
-		var components = URLComponents()
-		components.scheme = "https"
-		components.host = "www.bricklink.com"
-		components.path = "/catalogItemInv.asp"
-		components.queryItems = [
-			URLQueryItem(name: "M", value: identifier),
-			URLQueryItem(name: "viewType", value: "R")
-		]
-
-		return components.url!
+	/// Subparts of a multipack are listed as "(Variable Color)" because the color
+	/// depends on the pack. Reporting no color lets the importer inherit the
+	/// parent part's color instead of showing the placeholder to the user.
+	private static func isPlaceholderColorName(_ colorName: String) -> Bool {
+		colorName.hasPrefix("(") && colorName.hasSuffix(")")
 	}
 
-	private let linkRegex = try! NSRegularExpression(pattern: #"\[([^\]]+)\]\(([^)]+)\)"#, options: [])
-	private let imageRegex = try! NSRegularExpression(pattern: #"!\[[^\]]*\]\(([^)]+)\)"#, options: [])
-	private let setNameRegex = try! NSRegularExpression(pattern: #"Name:\s*([^)\]]+)"#, options: [])
-	private let boldRegex = try! NSRegularExpression(pattern: #"\*\*([^*]+)\*\*"#, options: [])
-	private let braceContentRegex = try! NSRegularExpression(pattern: #"\{\s*([^}]+)\s*\}"#, options: [])
+	/// BrickLink thumbnails live under a two-letter code ending in `T` with a
+	/// `.t1` filename suffix; the full-size image swaps both.
+	/// `/ItemImage/PT/11/32828.t1.png` → `/ItemImage/PN/11/32828.png`
+	static func fullSizeImageURL(from thumbnail: URL?) -> URL? {
+		guard let thumbnail,
+			  var components = URLComponents(url: thumbnail, resolvingAgainstBaseURL: false) else {
+			return nil
+		}
 
+		var segments = components.path.split(separator: "/").map(String.init)
+
+		guard let imageIndex = segments.firstIndex(of: "ItemImage"),
+			  segments.index(after: imageIndex) < segments.endIndex else {
+			return nil
+		}
+
+		let code = segments[imageIndex + 1]
+		if code.count == 2, code.hasSuffix("T") {
+			segments[imageIndex + 1] = code.dropLast() + "N"
+		}
+
+		if let filename = segments.last {
+			segments[segments.count - 1] = filename.replacingOccurrences(of: ".t1.", with: ".")
+		}
+
+		components.path = "/" + segments.joined(separator: "/")
+
+		return components.url
+	}
 }
 
 private extension BrickLinkInventoryService {
+	/// Drops a `{Word}` qualifier that merely repeats the word before it.
 	func sanitizeSetName(_ raw: String) -> String {
+		guard let regex = try? NSRegularExpression(pattern: #"\{\s*([^}]+)\s*\}"#) else { return raw }
+
 		var result = raw
 		let fullRange = NSRange(result.startIndex..<result.endIndex, in: result)
-		let matches = braceContentRegex.matches(in: result, options: [], range: fullRange)
 
-		for match in matches.reversed() {
+		for match in regex.matches(in: result, range: fullRange).reversed() {
 			guard let braceRange = Range(match.range, in: result),
 				  let contentRange = Range(match.range(at: 1), in: result) else {
 				continue
@@ -819,28 +283,26 @@ private extension BrickLinkInventoryService {
 			}
 
 			let precedingWord = result[wordRange].trimmingCharacters(in: .whitespacesAndNewlines)
+			guard normalizedToken(precedingWord) == normalizedToken(braceWord) else { continue }
 
-			if normalizedToken(precedingWord) == normalizedToken(braceWord) {
-				var removalRange = braceRange
-
-				var whitespaceStart = braceRange.lowerBound
-				var cursor = braceRange.lowerBound
-				while cursor > result.startIndex {
-					let prior = result.index(before: cursor)
-					if result[prior].isWhitespace {
-						cursor = prior
-					} else {
-						whitespaceStart = result.index(after: prior)
-						break
-					}
+			var whitespaceStart = braceRange.lowerBound
+			var cursor = braceRange.lowerBound
+			while cursor > result.startIndex {
+				let prior = result.index(before: cursor)
+				if result[prior].isWhitespace {
+					cursor = prior
+				} else {
+					whitespaceStart = result.index(after: prior)
+					break
 				}
-
-				removalRange = whitespaceStart..<removalRange.upperBound
-				result.removeSubrange(removalRange)
 			}
+
+			result.removeSubrange(whitespaceStart..<braceRange.upperBound)
 		}
 
-		return result.replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+		return result
+			.replacingOccurrences(of: "  ", with: " ")
+			.trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
 	func precedingWordRange(before boundary: String.Index, in text: String) -> Range<String.Index>? {
@@ -871,41 +333,11 @@ private extension BrickLinkInventoryService {
 		}
 
 		guard found, wordStart < wordEnd else { return nil }
+
 		return wordStart..<wordEnd
 	}
 
 	func normalizedToken(_ text: String) -> String {
 		text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
 	}
-}
-
-	private extension Array where Element == String {
-		subscript(safe index: Int) -> String? {
-			guard indices.contains(index) else { return nil }
-			return self[index]
-		}
-	}
-
-private func normalizeWhitespace(_ string: String) -> String {
-	string
-		.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-		.trimmingCharacters(in: .whitespacesAndNewlines)
-}
-
-private func promoteToHighResolution(_ url: URL) -> URL {
-	guard let host = url.host, host.contains("bricklink.com") else {
-		return url
-	}
-
-	var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-	if var path = components?.path, path.contains("/S/") {
-		path = path.replacingOccurrences(of: "/S/", with: "/SL/")
-		components?.path = path
-
-		if let upgraded = components?.url {
-			return upgraded
-		}
-	}
-
-	return url
 }
