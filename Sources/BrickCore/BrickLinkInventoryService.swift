@@ -17,6 +17,10 @@ public final class BrickLinkInventoryService {
 	/// Guards against an item whose inventory transitively contains itself.
 	private static let maximumInventoryDepth = 4
 
+	/// Ceiling on requests in flight, so importing a large set stays a polite
+	/// trickle rather than a burst BrickLink would throttle.
+	private static let maximumConcurrentRequests = 6
+
 	public init() {}
 
 	public func fetchInventory(for setNumber: String) async throws -> BrickLinkInventory {
@@ -69,19 +73,24 @@ public final class BrickLinkInventoryService {
 	) async throws -> [BrickLinkPart] {
 		guard !rows.isEmpty else { return [] }
 
-		return try await withThrowingTaskGroup(of: (Int, BrickLinkPart).self) { group in
-			for (index, row) in rows.enumerated() {
-				group.addTask {
-					(index, try await self.part(from: row, depth: depth))
-				}
-			}
+		// Most rows are plain parts that need no request at all; building those
+		// inline keeps the concurrent window for the few that have subparts.
+		let fetchable = rows.indices.filter {
+			rows[$0].needsInventoryFetch(depth: depth, maximumDepth: Self.maximumInventoryDepth)
+		}
 
-			var ordered: [BrickLinkPart?] = Array(repeating: nil, count: rows.count)
-			for try await (index, part) in group {
-				ordered[index] = part
-			}
+		guard !fetchable.isEmpty else {
+			return rows.map { makePart(from: $0, inventoryURL: nil, subparts: []) }
+		}
 
-			return ordered.compactMap { $0 }
+		let enriched = try await mapConcurrently(fetchable, limit: Self.maximumConcurrentRequests) { index in
+			(index, try await self.part(from: rows[index], depth: depth))
+		}
+
+		var byIndex = Dictionary(uniqueKeysWithValues: enriched)
+
+		return rows.indices.map { index in
+			byIndex.removeValue(forKey: index) ?? makePart(from: rows[index], inventoryURL: nil, subparts: [])
 		}
 	}
 
@@ -89,9 +98,8 @@ public final class BrickLinkInventoryService {
 		var subparts: [BrickLinkPart] = []
 		var inventoryURL: URL?
 
-		if row.hasOwnInventory,
-		   let idItem = row.idItem,
-		   depth < Self.maximumInventoryDepth {
+		if row.needsInventoryFetch(depth: depth, maximumDepth: Self.maximumInventoryDepth),
+		   let idItem = row.idItem {
 			inventoryURL = BrickLinkInventoryTable.url(idItem: idItem, itemNumber: row.itemNumber)
 
 			// A missing sub-inventory should not fail the whole import.
@@ -130,21 +138,8 @@ public final class BrickLinkInventoryService {
 	private func enrichedMinifigures(
 		from rows: [BrickLinkInventoryTable.ItemRow]
 	) async throws -> [BrickLinkMinifigure] {
-		guard !rows.isEmpty else { return [] }
-
-		return try await withThrowingTaskGroup(of: (Int, BrickLinkMinifigure).self) { group in
-			for (index, row) in rows.enumerated() {
-				group.addTask {
-					(index, try await self.minifigure(from: row))
-				}
-			}
-
-			var ordered: [BrickLinkMinifigure?] = Array(repeating: nil, count: rows.count)
-			for try await (index, minifigure) in group {
-				ordered[index] = minifigure
-			}
-
-			return ordered.compactMap { $0 }
+		try await mapConcurrently(rows, limit: Self.maximumConcurrentRequests) { row in
+			try await self.minifigure(from: row)
 		}
 	}
 

@@ -1,5 +1,5 @@
 {
-  "originHash" : "3308e57208779948063f4215ef268055928697c4cbd16673dc11bcc1622c3661",
+  "originHash" : "4de44190d8d97022aab07590d7c3642ffe186579197f9a334fa0c528fca7d0cf",
   "pins" : [
     {
       "identity" : "swift-argument-parser",
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Cocoanetics/SwiftText.git",
       "state" : {
-        "revision" : "d095c12420826fe28e67fd1b3f6baa32e4606a80",
-        "version" : "1.1.9"
+        "revision" : "3076cdfd22f82b0ec4adf3856b83dd269d15b039",
+        "version" : "1.2.0"
       }
     },
     {
@@ -44,6 +44,15 @@
       "state" : {
         "revision" : "b1e944cbd0ef33787b13f639a5418d55b3bed501",
         "version" : "0.17.1"
+      }
+    },
+    {
+      "identity" : "xmlkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Cocoanetics/XMLKit.git",
+      "state" : {
+        "revision" : "92f0051ab9f2d570647b8b76f688b53bdfc1bf06",
+        "version" : "1.0.1"
       }
     },
     {
