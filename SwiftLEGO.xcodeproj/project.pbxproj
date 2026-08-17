@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		A706E0F02EB24E4A008E98D6 /* BrickCore in Frameworks */ = {isa = PBXBuildFile; productRef = A706E0EF2EB24E4A008E98D6 /* BrickCore */; };
-		A7AB6DDF2E945E6300C813E2 /* SwiftTextHTML in Frameworks */ = {isa = PBXBuildFile; productRef = FEEDBEEFCAFEDADA12345678 /* SwiftTextHTML */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,7 +33,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A7AB6DDF2E945E6300C813E2 /* SwiftTextHTML in Frameworks */,
 				A706E0F02EB24E4A008E98D6 /* BrickCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -80,14 +78,12 @@
 			buildRules = (
 			);
 			dependencies = (
-				A7AB6DE12E94638A00C813E2 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A72308412EAA728700C4C287 /* SwiftLEGO */,
 			);
 			name = SwiftLEGO;
 			packageProductDependencies = (
-				FEEDBEEFCAFEDADA12345678 /* SwiftTextHTML */,
 				A706E0EF2EB24E4A008E98D6 /* BrickCore */,
 			);
 			productName = SwiftLEGO;
@@ -119,7 +115,6 @@
 			);
 			mainGroup = 4b9c990f617d4737865d90dc;
 			packageReferences = (
-				DADADA00A1B2C3D4E5F60708 /* XCRemoteSwiftPackageReference "SwiftText" */,
 				A706E0EE2EB24E4A008E98D6 /* XCLocalSwiftPackageReference "../SwiftLEGO" */,
 			);
 			productRefGroup = 39cdcbe6fa9b4cec8e34ec53 /* Products */;
@@ -151,12 +146,6 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXTargetDependency section */
-		A7AB6DE12E94638A00C813E2 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = A7AB6DE02E94638A00C813E2 /* SwiftTextHTML */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		20fea35c5b7a40bca22d1f96 /* Debug */ = {
@@ -406,31 +395,11 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		DADADA00A1B2C3D4E5F60708 /* XCRemoteSwiftPackageReference "SwiftText" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Cocoanetics/SwiftText.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.1.9;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		A706E0EF2EB24E4A008E98D6 /* BrickCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BrickCore;
-		};
-		A7AB6DE02E94638A00C813E2 /* SwiftTextHTML */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = DADADA00A1B2C3D4E5F60708 /* XCRemoteSwiftPackageReference "SwiftText" */;
-			productName = SwiftTextHTML;
-		};
-		FEEDBEEFCAFEDADA12345678 /* SwiftTextHTML */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = DADADA00A1B2C3D4E5F60708 /* XCRemoteSwiftPackageReference "SwiftText" */;
-			productName = SwiftTextHTML;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
