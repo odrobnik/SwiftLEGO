@@ -1,4 +1,5 @@
 import Foundation
+import SwiftTextHTML
 
 public struct BrickLinkOrderDetail: Sendable, Equatable {
     public let orderID: String?
@@ -193,13 +194,7 @@ public final class BrickLinkOrderDetailParser {
     }
 
     private func textContent(of node: DOMNode) -> String {
-        if let textNode = node as? DOMText {
-            return textNode.text
-        }
-        if let element = node as? DOMElement {
-            return element.children.map { textContent(of: $0) }.joined()
-        }
-        return ""
+        node.textContent()
     }
 
     private func normalizeWhitespace(_ string: String) -> String {

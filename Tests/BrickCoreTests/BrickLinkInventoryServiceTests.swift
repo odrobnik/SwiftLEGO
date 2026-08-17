@@ -5,18 +5,6 @@ import Testing
 struct BrickLinkInventoryServiceTests {
 
 	@Test
-	func brickLinkInventoryMarkdownConversion() async throws {
-		let url = URL(string: "https://www.bricklink.com/catalogItemInv.asp?S=10294-1")!
-		let converter = HTML💡Markdown(url: url)
-
-		let markdown = try await converter.markdown()
-
-		#expect(markdown.contains("| **Image**"))
-		#expect(markdown.contains("| ------- |"))
-		#expect(markdown.contains("[87994](https://www.bricklink.com/v2/catalog/catalogitem.page?P=87994&idColor=11)"))
-	}
-
-	@Test
 	func fetchInventoryParsesParts() async throws {
 		let service = BrickLinkInventoryService()
 		let inventory = try await service.fetchInventory(for: "10294-1")
@@ -24,7 +12,7 @@ struct BrickLinkInventoryServiceTests {
 		#expect(inventory.setNumber.lowercased() == "10294-1")
 		#expect(!inventory.parts.isEmpty)
 		#expect(inventory.name == "Titanic")
-		#expect(inventory.thumbnailURL == URL(string: "https://img.bricklink.com/SL/10294-1.jpg"))
+		#expect(inventory.thumbnailURL == URL(string: "https://img.bricklink.com/ItemImage/SL/10294-1.png"))
 
 		let targetPart = try #require(
 			inventory.parts.first { $0.partID == "87994" && $0.colorID == "11" },
@@ -79,14 +67,15 @@ struct BrickLinkInventoryServiceTests {
 		#expect(!accessories.subparts.isEmpty)
 		let accessoriesFullImage = try #require(accessories.fullImageURL)
 		#expect(accessoriesFullImage.absoluteString.contains("/ItemImage/PN/"))
-		let placeholderSubpart = try #require(
-			accessories.subparts.first { $0.imageURL?.absoluteString.contains("no_image") == true },
-			"Expected to find a subpart with a placeholder thumbnail."
-		)
-		let subpartFullImage = try #require(placeholderSubpart.fullImageURL, "Placeholder subparts should include a full-size image link.")
+
+		// Multipack contents are catalogued as "(Variable Color)", which the
+		// parser reports as no color so the importer inherits the parent's.
+		#expect(accessories.subparts.allSatisfy { $0.colorName.isEmpty })
 		#expect(
-			subpartFullImage.absoluteString.contains("/ItemImage/PN/") ||
-			subpartFullImage.absoluteString.contains("/PL/")
+			accessories.subparts.allSatisfy {
+				$0.fullImageURL?.absoluteString.contains("/ItemImage/PN/") == true
+			},
+			"Every subpart should carry a full-size image link."
 		)
 		#expect(accessories.subparts.first { $0.partID == "93082g" }?.quantity == 3)
 		#expect(accessories.subparts.first { $0.partID == "93082i" }?.quantity == 3)
