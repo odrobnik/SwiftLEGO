@@ -2,12 +2,13 @@ import SwiftUI
 import SwiftData
 import BrickCore
 
+/// Creates a collection list, or renames or deletes one, and selects it in the sidebar.
 struct ListEditorView: View {
     let mode: EditorState
-    let onSubmit: (EditorResult) -> Void
-    var onDelete: ((CollectionList) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppNavigation.self) private var navigation
     @State private var name: String = ""
     @FocusState private var isNameFocused: Bool
 
@@ -39,10 +40,10 @@ struct ListEditorView: View {
                         .onSubmit(save)
                 }
 
-                if case let .rename(list) = mode, let onDelete {
+                if case let .rename(list) = mode {
                     Section {
                         Button(role: .destructive) {
-                            onDelete(list)
+                            navigation.delete(list, in: modelContext)
                             dismiss()
                         } label: {
                             Label("Delete List", systemImage: "trash")
@@ -67,9 +68,15 @@ struct ListEditorView: View {
             }
             .onAppear {
                 name = initialName()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    isNameFocused = true
+            }
+            .task {
+                // Wait for the sheet to finish presenting before raising the keyboard.
+                do {
+                    try await Task.sleep(for: .milliseconds(400))
+                } catch {
+                    return
                 }
+                isNameFocused = true
             }
         }
         .presentationDetents([.medium])
@@ -88,21 +95,27 @@ struct ListEditorView: View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { return }
 
+        let list: CollectionList
         switch mode {
         case .create:
-            onSubmit(.created(trimmed))
-        case .rename(let list):
-            onSubmit(.renamed(list, trimmed))
+            list = CollectionList(name: trimmed)
+            modelContext.insert(list)
+        case .rename(let existingList):
+            list = existingList
+            list.name = trimmed
         }
+
+        // Save before selecting: a new model's identifier changes when it is first saved.
+        try? modelContext.save()
+        navigation.select(.list(list.persistentModelID))
         dismiss()
     }
 }
 
 #Preview("Create") {
-    ListEditorView(
-        mode: .create,
-        onSubmit: { _ in }
-    )
+    ListEditorView(mode: .create)
+        .environment(AppNavigation())
+        .modelContainer(SwiftLEGOModelContainer.preview)
 }
 
 #Preview("Rename") {
@@ -111,9 +124,7 @@ struct ListEditorView: View {
     let list = CollectionList(name: "Used Collection #3")
     context.insert(list)
 
-    return ListEditorView(
-        mode: .rename(list),
-        onSubmit: { _ in }
-    )
-    .modelContainer(container)
+    return ListEditorView(mode: .rename(list))
+        .environment(AppNavigation())
+        .modelContainer(container)
 }

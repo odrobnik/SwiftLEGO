@@ -5,16 +5,14 @@ import BrickCore
 struct AddSetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.brickLinkService) private var brickLinkService
 
-    var list: CollectionList
-    let completion: (Result<BrickSet, Error>) -> Void
+    let list: CollectionList
 
     @State private var setNumber: String = ""
     @State private var customName: String = ""
-    @State private var isSaving = false
+    @State private var saveTask: Task<Void, Never>?
     @State private var errorMessage: String?
-
-    private let brickLinkService = BrickLinkService()
 
     var body: some View {
         NavigationStack {
@@ -39,7 +37,11 @@ struct AddSetView: View {
             .navigationTitle("Add BrickLink Set")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel) { dismiss() }
+                    Button("Cancel", role: .cancel) {
+                        // Also stops a save in progress, so the set isn't added after all.
+                        saveTask?.cancel()
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(action: save) {
@@ -56,22 +58,25 @@ struct AddSetView: View {
         .interactiveDismissDisabled(isSaving)
     }
 
+    private var isSaving: Bool {
+        saveTask != nil
+    }
+
     private var isValid: Bool {
         !setNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func save() {
-        guard isValid else { return }
+        guard isValid, !isSaving else { return }
         errorMessage = nil
-        isSaving = true
 
         let inputSetNumber = SetImportUtilities.normalizedSetNumber(setNumber)
 
-        Task { @MainActor in
-            do {
-                let existingSet = try existingSetWithInventory(for: inputSetNumber)
+        saveTask = Task {
+            defer { saveTask = nil }
 
-                if let existingSet {
+            do {
+                if let existingSet = try existingSetWithInventory(for: inputSetNumber) {
                     persistSet(
                         setNumber: existingSet.setNumber,
                         defaultName: existingSet.name,
@@ -82,6 +87,7 @@ struct AddSetView: View {
                     )
                 } else {
                     let payload = try await brickLinkService.fetchSetDetails(for: inputSetNumber)
+                    try Task.checkCancellation()
                     persistSet(
                         setNumber: payload.setNumber,
                         defaultName: payload.name,
@@ -92,15 +98,12 @@ struct AddSetView: View {
                     )
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 errorMessage = "We couldn’t load that BrickLink set yet. Try again soon."
-                completion(.failure(error))
             }
-
-            isSaving = false
         }
     }
 
-    @MainActor
     private func existingSetWithInventory(for setNumber: String) throws -> BrickSet? {
         let descriptor = FetchDescriptor<BrickSet>(
             predicate: #Predicate { $0.setNumber == setNumber }
@@ -110,7 +113,6 @@ struct AddSetView: View {
         return sets.first(where: { !$0.parts.isEmpty })
     }
 
-    @MainActor
     private func persistSet(
         setNumber: String,
         defaultName: String,
@@ -132,11 +134,9 @@ struct AddSetView: View {
         )
 
         applyInstanceNumbering(for: newSet, defaultName: defaultName)
-        completion(.success(newSet))
         dismiss()
     }
 
-    @MainActor
     private func applyInstanceNumbering(for set: BrickSet, defaultName: String) {
         let trimmedCustomName = customName.trimmingCharacters(in: .whitespacesAndNewlines)
         let preferredName = trimmedCustomName.isEmpty ? defaultName : trimmedCustomName
@@ -155,6 +155,6 @@ struct AddSetView: View {
     let context = ModelContext(container)
     let list = CollectionList(name: "Preview Lot")
     context.insert(list)
-    return AddSetView(list: list) { _ in }
+    return AddSetView(list: list)
         .modelContainer(container)
 }

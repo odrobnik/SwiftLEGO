@@ -2,9 +2,11 @@ import SwiftUI
 import QuickLook
 
 @MainActor
-final class QuickLookPresenter: ObservableObject {
-    @Published var previewURL: URL?
+@Observable
+final class QuickLookPresenter {
+    var previewURL: URL?
 
+    /// Items whose preview is being downloaded. Observed, so thumbnails show a spinner.
     private var loadingIDs: Set<AnyHashable> = []
 
     func present<Item: QuickLookPreviewable>(_ item: Item) {
@@ -13,8 +15,7 @@ final class QuickLookPresenter: ObservableObject {
         }
 
         let id = item.quickLookID
-        guard !loadingIDs.contains(id) else { return }
-        loadingIDs.insert(id)
+        guard loadingIDs.insert(id).inserted else { return }
 
         Task {
             let preview = await AssetQuickLookStore.shared.previewURL(
@@ -23,12 +24,10 @@ final class QuickLookPresenter: ObservableObject {
                 fallbackURL: item.quickLookFallbackURL
             )
 
-            await MainActor.run {
-                if let preview {
-                    self.previewURL = preview
-                }
-                self.loadingIDs.remove(id)
+            if let preview {
+                previewURL = preview
             }
+            loadingIDs.remove(id)
         }
     }
 
@@ -49,7 +48,7 @@ extension EnvironmentValues {
 }
 
 private struct QuickLookPresenterModifier: ViewModifier {
-    @StateObject private var presenter = QuickLookPresenter()
+    @State private var presenter = QuickLookPresenter()
 
     func body(content: Content) -> some View {
         content
@@ -59,6 +58,7 @@ private struct QuickLookPresenterModifier: ViewModifier {
 }
 
 extension View {
+    /// Lets `QuickLookThumbnail` and `QuickLookMenuButton` inside this view present previews.
     func quickLookPresenter() -> some View {
         modifier(QuickLookPresenterModifier())
     }

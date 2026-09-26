@@ -3,56 +3,48 @@ import SwiftData
 import BrickCore
 
 struct PartDetailView: View {
-    @Bindable var part: Part
+    let part: Part
     @State private var showMissingOnly: Bool = false
 
-    init(part: Part) {
-        self._part = Bindable(part)
-    }
-
     private var partsByColor: [(color: String, parts: [Part])] {
-        let grouped = Dictionary(grouping: filteredSubparts) { subpart in
-            normalizeColorName(subpart.colorName)
-        }
-
-        return grouped
-            .map { group in
-                let sortedParts = group.value.sorted { lhs, rhs in
-                    Part.subpartSortComparator(lhs, rhs, parentPartID: part.partID)
-                }
-                return (color: group.key, parts: sortedParts)
-            }
-            .sorted { lhs, rhs in lhs.color < rhs.color }
-    }
-
-    private var filteredSubparts: [Part] {
-        showMissingOnly
+        let subparts = showMissingOnly
             ? part.subparts.filter { $0.quantityHave < $0.quantityNeeded }
             : part.subparts
+
+        return Dictionary(grouping: subparts) { subpart in
+            normalizeColorName(subpart.colorName)
+        }
+        .map { color, parts in
+            let sortedParts = parts.sorted { lhs, rhs in
+                Part.subpartSortComparator(lhs, rhs, parentPartID: part.partID)
+            }
+            return (color: color, parts: sortedParts)
+        }
+        .sorted { lhs, rhs in lhs.color < rhs.color }
     }
 
     var body: some View {
-        List {
-            headerSection
+        let groups = partsByColor
 
-            if partsByColor.isEmpty {
+        List {
+            PartHeaderSection(part: part)
+
+            if groups.isEmpty {
                 Section {
                     Text("No sub-parts to display.")
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ForEach(partsByColor, id: \.color) { group in
+                ForEach(groups, id: \.color) { group in
                     Section(group.color) {
                         ForEach(group.parts) { subpart in
-                            PartRowNavigationWrapper(
-                                part: subpart,
-                                isFilteringMissing: showMissingOnly
-                            )
+                            PartRowNavigationWrapper(part: subpart)
                         }
                     }
                 }
             }
         }
+        .environment(\.isFilteringMissingParts, showMissingOnly)
         .quickLookPresenter()
         .listStyle(.insetGrouped)
         .navigationTitle("\(part.partID) \(part.name)")
@@ -76,7 +68,16 @@ struct PartDetailView: View {
         }
     }
 
-    private var headerSection: some View {
+    private func normalizeColorName(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Unknown Color" : trimmed
+    }
+}
+
+private struct PartHeaderSection: View {
+    let part: Part
+
+    var body: some View {
         Section {
             HStack(alignment: .top, spacing: 16) {
                 PartThumbnailImage(part: part)
@@ -104,12 +105,6 @@ struct PartDetailView: View {
             .padding(.vertical, 8)
         }
     }
-
-    private func normalizeColorName(_ name: String) -> String {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Unknown Color" : trimmed
-    }
-
 }
 
 private struct PartThumbnailImage: View {
@@ -131,7 +126,7 @@ private struct PartThumbnailImage: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     case .failure(let state):
                         ZStack {
-                            placeholder
+                            ThumbnailPlaceholder(systemImage: "cube.transparent", scalesSymbol: true, width: 96, height: 96)
                             VStack(spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.title3.weight(.bold))
@@ -147,26 +142,9 @@ private struct PartThumbnailImage: View {
                 }
                 .background(.white)
             } else {
-                placeholder
+                ThumbnailPlaceholder(systemImage: "cube.transparent", scalesSymbol: true, width: 96, height: 96)
             }
         }
         .frame(width: 96, height: 96)
-    }
-
-    private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color(uiColor: .tertiarySystemFill))
-            .frame(width: 96, height: 96)
-            .overlay {
-                GeometryReader { proxy in
-                    let dimension = min(proxy.size.width, proxy.size.height) * 0.6
-                    Image(systemName: "cube.transparent")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: dimension, height: dimension)
-                        .foregroundStyle(.secondary)
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                }
-            }
     }
 }

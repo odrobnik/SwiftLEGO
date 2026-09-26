@@ -11,21 +11,19 @@ import BrickCore
 struct BulkAddSetsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.brickLinkService) private var brickLinkService
 
-    var list: CollectionList
-    let completion: (Result<[BrickSet], Error>) -> Void
+    let list: CollectionList
 
     @State private var isImporterPresented = false
     @State private var fileName: String?
     @State private var entries: [ImportedSet] = []
-    @State private var statusByID: [UUID: ImportStatus] = [:]
     @State private var parseError: String?
     @State private var isProcessing = false
-    @State private var summaryMessage: String?
+    @State private var summaryMessage: AttributedString?
     @State private var didCompleteImport = false
     @State private var importTask: Task<Void, Never>?
 
-    private let brickLinkService = BrickLinkService()
     private let allowedContentTypes: [UTType] = [.plainText, .utf8PlainText, .commaSeparatedText]
 
     var body: some View {
@@ -56,7 +54,7 @@ struct BulkAddSetsView: View {
                             .foregroundStyle(.red)
                             .font(.callout)
                     } else if !entries.isEmpty {
-                        Text("Ready to import \(entries.count) set\(entries.count == 1 ? "" : "s").")
+                        Text("Ready to import ^[\(entries.count) set](inflect: true).")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -65,25 +63,12 @@ struct BulkAddSetsView: View {
                 if !entries.isEmpty {
                     Section("Import Queue") {
                         ForEach(entries) { entry in
-                            HStack(alignment: .firstTextBaseline) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(entry.normalizedSetNumber)
-                                        .font(.body.weight(.semibold))
-                                    if let customName = entry.customName, !customName.isEmpty {
-                                        Text(customName)
-                                            .font(.callout)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer(minLength: 12)
-                                statusView(for: statusByID[entry.id] ?? .pending)
-                            }
-                            .padding(.vertical, 4)
+                            ImportQueueRow(entry: entry)
                         }
                     }
                 }
 
-                if let summaryMessage, !summaryMessage.isEmpty {
+                if let summaryMessage, !summaryMessage.characters.isEmpty {
                     Section {
                         Text(summaryMessage)
                             .font(.callout)
@@ -119,6 +104,8 @@ struct BulkAddSetsView: View {
                 }
             }
         }
+        // Swiping the sheet away would leave the import running with no way to see or stop it.
+        .interactiveDismissDisabled(isProcessing)
         .fileImporter(
             isPresented: $isImporterPresented,
             allowedContentTypes: allowedContentTypes,
@@ -147,6 +134,7 @@ private extension BulkAddSetsView {
         let rawSetNumber: String
         let normalizedSetNumber: String
         let customName: String?
+        var status: ImportStatus = .pending
     }
 
     enum ImportStatus: Equatable {
@@ -154,19 +142,12 @@ private extension BulkAddSetsView {
         case inProgress
         case success
         case failure(String)
-    }
 
-    enum BulkImportError: LocalizedError {
-        case noSetsImported
-        case cancelled
-
-        var errorDescription: String? {
-            switch self {
-            case .noSetsImported:
-                return "No sets could be imported from the selected file."
-            case .cancelled:
-                return "The import was cancelled."
+        var isFailure: Bool {
+            if case .failure = self {
+                return true
             }
+            return false
         }
     }
 
@@ -187,7 +168,6 @@ private extension BulkAddSetsView {
         } catch {
             parseError = "We couldn’t read that file. \(error.localizedDescription)"
             entries = []
-            statusByID = [:]
             fileName = nil
             didCompleteImport = false
         }
@@ -246,7 +226,6 @@ private extension BulkAddSetsView {
         }
 
         entries = parsed
-        statusByID = Dictionary(uniqueKeysWithValues: parsed.map { ($0.id, .pending) })
         didCompleteImport = false
 
         if parsed.isEmpty {
@@ -270,35 +249,32 @@ private extension BulkAddSetsView {
 
         isProcessing = true
         summaryMessage = nil
-        statusByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, .pending) })
+        for index in entries.indices {
+            entries[index].status = .pending
+        }
         didCompleteImport = false
         importTask?.cancel()
 
-        importTask = Task { @MainActor in
-            var importedSets: [BrickSet] = []
+        importTask = Task {
+            var successCount = 0
             var wasCancelled = false
 
-            for entry in entries {
+            for index in entries.indices {
                 if Task.isCancelled {
                     wasCancelled = true
                     break
                 }
 
-                statusByID[entry.id] = .inProgress
+                entries[index].status = .inProgress
 
                 do {
                     try Task.checkCancellation()
 
+                    let entry = entries[index]
                     let normalizedNumber = entry.normalizedSetNumber
-                    let existingSet = try existingSetWithInventory(for: normalizedNumber)
 
-                    try Task.checkCancellation()
-
-                    let newSet: BrickSet
-
-                    if let existingSet {
-                        try Task.checkCancellation()
-                        newSet = SetImportUtilities.persistSet(
+                    if let existingSet = try existingSetWithInventory(for: normalizedNumber) {
+                        _ = SetImportUtilities.persistSet(
                             list: list,
                             modelContext: modelContext,
                             setNumber: existingSet.setNumber,
@@ -309,10 +285,13 @@ private extension BulkAddSetsView {
                             categories: SetImportUtilities.categoryPayloads(from: existingSet.categories),
                             minifigures: SetImportUtilities.minifigurePayloads(from: existingSet.minifigures)
                         )
+                        // Sets copied from the local inventory never suspend; let the queue
+                        // show their progress before moving on.
+                        await Task.yield()
                     } else {
                         let payload = try await brickLinkService.fetchSetDetails(for: normalizedNumber)
                         try Task.checkCancellation()
-                        newSet = SetImportUtilities.persistSet(
+                        _ = SetImportUtilities.persistSet(
                             list: list,
                             modelContext: modelContext,
                             setNumber: payload.setNumber,
@@ -325,14 +304,14 @@ private extension BulkAddSetsView {
                         )
                     }
 
-                    importedSets.append(newSet)
-                    statusByID[entry.id] = .success
+                    successCount += 1
+                    entries[index].status = .success
                 } catch is CancellationError {
-                    statusByID[entry.id] = .failure("Cancelled")
+                    entries[index].status = .failure("Cancelled")
                     wasCancelled = true
                     break
                 } catch {
-                    statusByID[entry.id] = .failure(error.localizedDescription)
+                    entries[index].status = .failure(error.localizedDescription)
                 }
             }
 
@@ -341,30 +320,23 @@ private extension BulkAddSetsView {
             }
 
             if wasCancelled {
-                for entry in entries where statusByID[entry.id] == .inProgress {
-                    statusByID[entry.id] = .failure("Cancelled")
+                for index in entries.indices where entries[index].status == .inProgress {
+                    entries[index].status = .failure("Cancelled")
                 }
             }
 
             isProcessing = false
             importTask = nil
 
-            let successCount = importedSets.count
-            let failureCount = statusByID.values.reduce(into: 0) { partialResult, status in
-                if case .failure = status {
-                    partialResult += 1
-                }
-            }
+            let failureCount = entries.count(where: \.status.isFailure)
             let pendingCount = entries.count - successCount - failureCount
 
             if wasCancelled {
                 if successCount > 0 {
-                    summaryMessage = "Import cancelled after importing \(successCount) set\(successCount == 1 ? "" : "s")."
-                    completion(.success(importedSets))
+                    summaryMessage = AttributedString(localized: "Import cancelled after importing ^[\(successCount) set](inflect: true).")
                     didCompleteImport = true
                 } else {
-                    summaryMessage = "Import cancelled."
-                    completion(.failure(BulkImportError.cancelled))
+                    summaryMessage = AttributedString(localized: "Import cancelled.")
                     didCompleteImport = false
                 }
                 return
@@ -372,29 +344,24 @@ private extension BulkAddSetsView {
 
             if successCount > 0 {
                 if failureCount > 0 {
-                    summaryMessage = "Imported \(successCount) set\(successCount == 1 ? "" : "s"). \(failureCount) failed."
+                    summaryMessage = AttributedString(localized: "Imported ^[\(successCount) set](inflect: true). \(failureCount) failed.")
                 } else if pendingCount > 0 {
-                    summaryMessage = "Imported \(successCount) set\(successCount == 1 ? "" : "s"). \(pendingCount) pending."
+                    summaryMessage = AttributedString(localized: "Imported ^[\(successCount) set](inflect: true). \(pendingCount) pending.")
                 } else {
-                    summaryMessage = "Successfully imported \(successCount) set\(successCount == 1 ? "" : "s")."
+                    summaryMessage = AttributedString(localized: "Successfully imported ^[\(successCount) set](inflect: true).")
                 }
-                completion(.success(importedSets))
                 didCompleteImport = true
             } else {
                 if failureCount > 0 {
-                    summaryMessage = "All imports failed. Review the errors above."
+                    summaryMessage = AttributedString(localized: "All imports failed. Review the errors above.")
                 } else {
-                    summaryMessage = "No sets could be imported. Review the results above and try again."
+                    summaryMessage = AttributedString(localized: "No sets could be imported. Review the results above and try again.")
                 }
-                completion(.failure(BulkImportError.noSetsImported))
                 didCompleteImport = false
             }
-
-            importTask = nil
         }
     }
 
-    @MainActor
     func existingSetWithInventory(for setNumber: String) throws -> BrickSet? {
         let descriptor = FetchDescriptor<BrickSet>(
             predicate: #Predicate { $0.setNumber == setNumber }
@@ -404,8 +371,36 @@ private extension BulkAddSetsView {
         return sets.first(where: { !$0.parts.isEmpty })
     }
 
-    @ViewBuilder
-    func statusView(for status: ImportStatus) -> some View {
+    func cancelImport() {
+        importTask?.cancel()
+    }
+}
+
+private struct ImportQueueRow: View {
+    let entry: BulkAddSetsView.ImportedSet
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.normalizedSetNumber)
+                    .font(.body.weight(.semibold))
+                if let customName = entry.customName, !customName.isEmpty {
+                    Text(customName)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 12)
+            ImportStatusView(status: entry.status)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct ImportStatusView: View {
+    let status: BulkAddSetsView.ImportStatus
+
+    var body: some View {
         switch status {
         case .pending:
             Label("Pending", systemImage: "clock")
@@ -427,10 +422,6 @@ private extension BulkAddSetsView {
             }
         }
     }
-
-    func cancelImport() {
-        importTask?.cancel()
-    }
 }
 
 #Preview {
@@ -438,6 +429,6 @@ private extension BulkAddSetsView {
     let context = ModelContext(container)
     let list = CollectionList(name: "Preview Lot")
     context.insert(list)
-    return BulkAddSetsView(list: list) { _ in }
+    return BulkAddSetsView(list: list)
         .modelContainer(container)
 }
