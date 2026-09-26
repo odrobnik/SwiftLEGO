@@ -8,8 +8,7 @@ public enum WantedListExporter {
         var aggregator = Aggregator()
 
         for list in lists {
-            for set in list.sets {
-                guard !set.excludeFromWantedList else { continue }
+            for set in list.sets where !set.excludeFromWantedList {
                 aggregator.collectMissingParts(from: set)
                 aggregator.collectMissingMinifigures(from: set)
             }

@@ -60,7 +60,7 @@ public actor ThumbnailCacheManager {
 
         let task = Task<Data, Error> { [weak self] in
             guard let self else { throw ThumbnailCacheError.managerDeallocated }
-            return try await self.fetchData(for: url)
+            return try await fetchData(for: url)
         }
 
         activeTasks[url] = task

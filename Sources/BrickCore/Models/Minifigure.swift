@@ -81,7 +81,7 @@ public extension Minifigure {
 public extension Minifigure {
     private var siblingInstanceCount: Int {
         guard let set else { return 1 }
-        return set.minifigures.filter { $0.identifier.caseInsensitiveCompare(identifier) == .orderedSame }.count
+        return set.minifigures.count(where: { $0.identifier.caseInsensitiveCompare(identifier) == .orderedSame })
     }
 
     var shouldDisplayInstanceSuffix: Bool {

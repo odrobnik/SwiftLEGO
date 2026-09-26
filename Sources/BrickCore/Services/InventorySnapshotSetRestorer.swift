@@ -31,8 +31,9 @@ public final class InventorySnapshotSetRestorer {
             minifigures: blueprint.minifigures
         )
 
-        let synchronizationSnapshot = InventorySnapshot(sets: [setSnapshot])
-        _ = synchronizationSnapshot.apply(to: [list])
+        // Straight onto the set just created: the list can already hold other
+        // copies of this set number, restored from their own snapshots.
+        InventorySnapshot.apply(setSnapshot, to: importedSet)
         try? modelContext.save()
         return importedSet
     }

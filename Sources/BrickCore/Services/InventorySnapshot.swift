@@ -394,7 +394,7 @@ extension InventorySnapshot {
         orders: [BrickOrder] = []
     ) -> InventorySnapshot {
         let allSets = lists
-            .flatMap { $0.sets }
+            .flatMap(\.sets)
             .sorted(by: setSortComparator)
             .map { makeSetSnapshot(from: $0) }
 
@@ -412,89 +412,24 @@ extension InventorySnapshot {
 
     @MainActor
     public func apply(to lists: [CollectionList]) -> ApplyResult {
-        let allSets = lists.flatMap { $0.sets }
-        var setLookup: [String: BrickSet] = [:]
-
-        for set in allSets {
-            let key = normalizedSetKey(for: set.setNumber)
-            setLookup[key] = set
-        }
+        let resolvedSnapshots = !sets.isEmpty ? sets : self.lists.flatMap(\.sets)
+        let targets = Self.matchTargets(for: resolvedSnapshots, among: lists.flatMap(\.sets))
 
         var updatedPartCount = 0
         var matchedSetCount = 0
         var unmatchedSetNumbers: [String] = []
         var unmatchedPartCount = 0
 
-        let resolvedSnapshots = !sets.isEmpty ? sets : self.lists.flatMap { $0.sets }
-
-        for setSnapshot in resolvedSnapshots {
-            guard let set = setLookup[normalizedSetKey(for: setSnapshot.setNumber)] else {
+        for (setSnapshot, target) in zip(resolvedSnapshots, targets) {
+            guard let set = target else {
                 unmatchedSetNumbers.append(setSnapshot.setNumber)
                 continue
             }
 
+            let result = Self.apply(setSnapshot, to: set)
             matchedSetCount += 1
-
-            let partsLookup = makePartLookup(from: set.parts)
-
-            for partSnapshot in setSnapshot.parts {
-                applyPartSnapshot(
-                    partSnapshot,
-                    parts: set.parts,
-                    precomputedLookup: partsLookup,
-                    updatedPartCount: &updatedPartCount,
-                    unmatchedPartCount: &unmatchedPartCount
-                )
-            }
-
-            if !setSnapshot.minifigures.isEmpty {
-                var minifigureLookup: [String: [Minifigure]] = [:]
-                for minifigure in set.minifigures {
-                    let key = minifigure.identifier.lowercased()
-                    minifigureLookup[key, default: []].append(minifigure)
-                }
-
-                for key in minifigureLookup.keys {
-                    minifigureLookup[key]?.sort { $0.instanceNumber < $1.instanceNumber }
-                }
-
-                for minifigureSnapshot in setSnapshot.minifigures {
-                    let identifierKey = minifigureSnapshot.identifier.lowercased()
-                    guard let candidates = minifigureLookup[identifierKey], !candidates.isEmpty else {
-                        unmatchedPartCount += 1
-                        continue
-                    }
-
-                    let targetMinifigure: Minifigure
-                    if let snapshotInstance = minifigureSnapshot.instanceNumber,
-                       let match = candidates.first(where: { $0.instanceNumber == snapshotInstance }) {
-                        targetMinifigure = match
-                    } else if let fallback = candidates.first {
-                        targetMinifigure = fallback
-                    } else {
-                        unmatchedPartCount += 1
-                        continue
-                    }
-
-                    let clampedQuantity = max(0, min(minifigureSnapshot.quantityHave, targetMinifigure.quantityNeeded))
-                    if targetMinifigure.quantityHave != clampedQuantity {
-                        targetMinifigure.quantityHave = clampedQuantity
-                        updatedPartCount += 1
-                    }
-
-                    let minifigurePartsLookup = makePartLookup(from: targetMinifigure.parts)
-
-                    for partSnapshot in minifigureSnapshot.parts {
-                        applyPartSnapshot(
-                            partSnapshot,
-                            parts: targetMinifigure.parts,
-                            precomputedLookup: minifigurePartsLookup,
-                            updatedPartCount: &updatedPartCount,
-                            unmatchedPartCount: &unmatchedPartCount
-                        )
-                    }
-                }
-            }
+            updatedPartCount += result.updatedPartCount
+            unmatchedPartCount += result.unmatchedPartCount
         }
 
         return ApplyResult(
@@ -505,7 +440,132 @@ extension InventorySnapshot {
         )
     }
 
-    private func normalizedSetKey(for setNumber: String) -> String {
+    /// Applies the quantities in `setSnapshot` to `set` — and to no other copy
+    /// of the same set number that its list may hold.
+    @MainActor
+    @discardableResult
+    static func apply(_ setSnapshot: SetSnapshot, to set: BrickSet) -> ApplyResult {
+        var updatedPartCount = 0
+        var unmatchedPartCount = 0
+
+        let partsLookup = makePartLookup(from: set.parts)
+
+        for partSnapshot in setSnapshot.parts {
+            applyPartSnapshot(
+                partSnapshot,
+                parts: set.parts,
+                precomputedLookup: partsLookup,
+                updatedPartCount: &updatedPartCount,
+                unmatchedPartCount: &unmatchedPartCount
+            )
+        }
+
+        if !setSnapshot.minifigures.isEmpty {
+            var minifigureLookup: [String: [Minifigure]] = [:]
+            for minifigure in set.minifigures {
+                let key = minifigure.identifier.lowercased()
+                minifigureLookup[key, default: []].append(minifigure)
+            }
+
+            for key in minifigureLookup.keys {
+                minifigureLookup[key]?.sort { $0.instanceNumber < $1.instanceNumber }
+            }
+
+            for minifigureSnapshot in setSnapshot.minifigures {
+                let identifierKey = minifigureSnapshot.identifier.lowercased()
+                guard let candidates = minifigureLookup[identifierKey], !candidates.isEmpty else {
+                    unmatchedPartCount += 1
+                    continue
+                }
+
+                let targetMinifigure: Minifigure
+                if let snapshotInstance = minifigureSnapshot.instanceNumber,
+                   let match = candidates.first(where: { $0.instanceNumber == snapshotInstance }) {
+                    targetMinifigure = match
+                } else if let fallback = candidates.first {
+                    targetMinifigure = fallback
+                } else {
+                    unmatchedPartCount += 1
+                    continue
+                }
+
+                let clampedQuantity = max(0, min(minifigureSnapshot.quantityHave, targetMinifigure.quantityNeeded))
+                if targetMinifigure.quantityHave != clampedQuantity {
+                    targetMinifigure.quantityHave = clampedQuantity
+                    updatedPartCount += 1
+                }
+
+                let minifigurePartsLookup = makePartLookup(from: targetMinifigure.parts)
+
+                for partSnapshot in minifigureSnapshot.parts {
+                    applyPartSnapshot(
+                        partSnapshot,
+                        parts: targetMinifigure.parts,
+                        precomputedLookup: minifigurePartsLookup,
+                        updatedPartCount: &updatedPartCount,
+                        unmatchedPartCount: &unmatchedPartCount
+                    )
+                }
+            }
+        }
+
+        return ApplyResult(
+            updatedPartCount: updatedPartCount,
+            matchedSetCount: 1,
+            unmatchedSetNumbers: [],
+            unmatchedPartCount: unmatchedPartCount
+        )
+    }
+
+    /// Pairs each snapshot with the set it describes, handing out every set at
+    /// most once: a list can hold several copies of one set number, each with
+    /// its own progress. Unmatched snapshots get `nil`.
+    @MainActor
+    private static func matchTargets(
+        for snapshots: [SetSnapshot],
+        among candidates: [BrickSet]
+    ) -> [BrickSet?] {
+        var targets = [BrickSet?](repeating: nil, count: snapshots.count)
+        var claimed = Set<ObjectIdentifier>()
+
+        // An ID names the exact copy, so those are matched before any snapshot
+        // falls back to a set number and takes the copy another one names.
+        let candidatesByID = Dictionary(candidates.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        for (index, snapshot) in snapshots.enumerated() {
+            guard let id = snapshot.id,
+                  let set = candidatesByID[id],
+                  claimed.insert(ObjectIdentifier(set)).inserted else {
+                continue
+            }
+
+            targets[index] = set
+        }
+
+        // Snapshots without a known ID (older files, or another device's) go
+        // by set number, preferring the copy whose name matches: copies are
+        // told apart as "Name (1)", "Name (2)".
+        let candidatesBySetNumber = Dictionary(grouping: candidates) { normalizedSetKey(for: $0.setNumber) }
+
+        for requiresMatchingName in [true, false] {
+            for (index, snapshot) in snapshots.enumerated() where targets[index] == nil {
+                let copies = candidatesBySetNumber[normalizedSetKey(for: snapshot.setNumber)] ?? []
+
+                guard let set = copies.first(where: { copy in
+                    !claimed.contains(ObjectIdentifier(copy)) && (!requiresMatchingName || copy.name == snapshot.name)
+                }) else {
+                    continue
+                }
+
+                claimed.insert(ObjectIdentifier(set))
+                targets[index] = set
+            }
+        }
+
+        return targets
+    }
+
+    private static func normalizedSetKey(for setNumber: String) -> String {
         SetImportUtilities.normalizedSetNumber(setNumber).lowercased()
     }
 
@@ -571,7 +631,9 @@ extension InventorySnapshot {
         return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
     }
 
-    private static func makeSetSnapshot(from set: BrickSet) -> SetSnapshot {
+    /// Captures the quantities currently recorded on `set`.
+    @MainActor
+    static func makeSetSnapshot(from set: BrickSet) -> SetSnapshot {
         let partSnapshots = set.parts.map { part in
             SetSnapshot.PartSnapshot(
                 partID: part.partID,
@@ -693,7 +755,7 @@ extension InventorySnapshot {
         return lhs.partID.localizedCaseInsensitiveCompare(rhs.partID) == .orderedAscending
     }
 
-    private func applyPartSnapshot(
+    private static func applyPartSnapshot(
         _ snapshot: SetSnapshot.PartSnapshot,
         parts: [Part],
         precomputedLookup: [String: [Part]]? = nil,
@@ -742,7 +804,7 @@ extension InventorySnapshot {
         updatedPartCount += ensureSubpartsCompleteIfNeeded(for: part)
     }
 
-    private func ensureSubpartsCompleteIfNeeded(for part: Part) -> Int {
+    private static func ensureSubpartsCompleteIfNeeded(for part: Part) -> Int {
         guard !part.subparts.isEmpty else { return 0 }
         guard part.quantityNeeded > 0,
               part.quantityHave >= part.quantityNeeded else {
@@ -751,7 +813,7 @@ extension InventorySnapshot {
         return markSubpartsComplete(part.subparts)
     }
 
-    private func markSubpartsComplete(_ subparts: [Part]) -> Int {
+    private static func markSubpartsComplete(_ subparts: [Part]) -> Int {
         var updates = 0
         for subpart in subparts {
             if subpart.quantityHave != subpart.quantityNeeded {
@@ -766,7 +828,7 @@ extension InventorySnapshot {
         return updates
     }
 
-    private func makePartLookup(from parts: [Part]) -> [String: [Part]] {
+    private static func makePartLookup(from parts: [Part]) -> [String: [Part]] {
         var lookup: [String: [Part]] = [:]
         for part in parts {
             insertPart(part, into: &lookup)
@@ -779,29 +841,11 @@ extension InventorySnapshot {
         return lookup
     }
 
-    private func insertPart(_ part: Part, into lookup: inout [String: [Part]]) {
+    private static func insertPart(_ part: Part, into lookup: inout [String: [Part]]) {
         let baseKey = "\(part.partID.lowercased())|\(part.colorID.lowercased())"
         let sectionKey = "\(baseKey)|\(part.inventorySection.rawValue.lowercased())"
 
         lookup[sectionKey, default: []].append(part)
         lookup[baseKey, default: []].append(part)
-    }
-}
-
-extension InventorySnapshot.SetSnapshot {
-    fileprivate func matches(_ set: BrickSet) -> Bool {
-        if let snapshotID = id, snapshotID == set.id {
-            return true
-        }
-
-        return setNumber.localizedCaseInsensitiveCompare(set.setNumber) == .orderedSame
-    }
-}
-
-extension InventorySnapshot {
-    @MainActor
-    public static func snapshot(for set: BrickSet, in list: CollectionList) -> SetSnapshot? {
-        let inventorySnapshot = make(from: [list])
-        return inventorySnapshot.sets.first { $0.matches(set) }
     }
 }

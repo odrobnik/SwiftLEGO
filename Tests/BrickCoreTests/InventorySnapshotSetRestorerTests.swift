@@ -133,4 +133,58 @@ struct InventorySnapshotSetRestorerTests {
         #expect(parentPart.quantityHave == parentPart.quantityNeeded)
         #expect(childPart.quantityHave == childPart.quantityNeeded, "Completing a parent should complete all of its sub-parts.")
     }
+
+    @Test
+    func importingTwoCopiesKeepsEachCopysQuantities() async throws {
+        let context = try makeInMemoryModelContext()
+        let list = CollectionList(name: "Restored")
+        context.insert(list)
+
+        let payload = BrickLinkSetPayload(
+            setNumber: "10220-1",
+            name: "Volkswagen T1 Camper Van",
+            parts: [
+                BrickLinkPartPayload(
+                    partID: "3001",
+                    name: "Brick 2 x 4",
+                    colorID: "5",
+                    colorName: "Red",
+                    quantityNeeded: 4,
+                    inventorySection: .regular
+                )
+            ],
+            categories: [],
+            minifigures: []
+        )
+
+        let service = MockBrickLinkService()
+        await service.setPayload(payload, for: "10220-1")
+
+        let provider = InventoryImportSetProvider(modelContext: context, service: service)
+        let restorer = InventorySnapshotSetRestorer(modelContext: context, setProvider: provider)
+
+        func copySnapshot(named name: String, bricks: Int) -> InventorySnapshot.SetSnapshot {
+            InventorySnapshot.SetSnapshot(
+                id: UUID(),
+                setNumber: "10220-1",
+                name: name,
+                parts: [
+                    InventorySnapshot.SetSnapshot.PartSnapshot(
+                        partID: "3001",
+                        colorID: "5",
+                        quantityHave: bricks,
+                        inventorySection: Part.InventorySection.regular.rawValue,
+                        instanceNumber: 1
+                    )
+                ]
+            )
+        }
+
+        let first = try await restorer.importSet(copySnapshot(named: "Camper Van (1)", bricks: 1), into: list)
+        let second = try await restorer.importSet(copySnapshot(named: "Camper Van (2)", bricks: 3), into: list)
+
+        #expect(list.sets.count == 2)
+        #expect(first.parts.first?.quantityHave == 1)
+        #expect(second.parts.first?.quantityHave == 3)
+    }
 }

@@ -3,6 +3,7 @@ import SwiftData
 
 public enum ColorImportUtilities {
     @MainActor
+    @discardableResult
     public static func refreshBrickLinkColors(
         modelContext: ModelContext,
         locale: String = "en-us",
@@ -22,7 +23,7 @@ public enum ColorImportUtilities {
 
         var updatedColors: [BrickColor] = []
 
-        let incomingIDs = Set(entries.map { $0.brickLinkColorID })
+        let incomingIDs = Set(entries.map(\.brickLinkColorID))
 
         // Remove colors no longer present
         for color in existingColors where !incomingIDs.contains(color.brickLinkColorID) {

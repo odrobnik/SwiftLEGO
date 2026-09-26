@@ -115,7 +115,7 @@ struct InventorySnapshotCompatibilityTests {
         let snapshot = try decoder.decode(InventorySnapshot.self, from: data)
 
         #expect(!snapshot.lists.isEmpty, "Snapshot should contain at least one list.")
-        let allSets = snapshot.lists.flatMap { $0.sets }
+        let allSets = snapshot.lists.flatMap(\.sets)
         #expect(allSets.count > 0, "Snapshot should include sets.")
 
         if let firstList = snapshot.lists.first,
@@ -301,15 +301,10 @@ struct InventorySnapshotCompatibilityTests {
         context.insert(list)
         try context.save()
 
-        let resolvedSnapshot = InventorySnapshot.make(from: [list])
-        let previousSetSnapshot = resolvedSnapshot.sets.first { $0.setNumber == set.setNumber }
-
         SetImportUtilities.refreshSet(
             set: set,
-            list: list,
             modelContext: context,
-            payload: refreshPayload,
-            previousSnapshot: previousSetSnapshot
+            payload: refreshPayload
         )
 
         let refreshedPart = set.parts.first
