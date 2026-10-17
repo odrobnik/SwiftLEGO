@@ -82,7 +82,8 @@ private struct SetCompletionBadge: View {
                 Text("•")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                Text(percentage.formatted(.percent.precision(.fractionLength(0))))
+                // Rounded down: a set one part short of done must not read 100%.
+                Text(percentage.formatted(.percent.precision(.fractionLength(0)).rounded(rule: .down)))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
