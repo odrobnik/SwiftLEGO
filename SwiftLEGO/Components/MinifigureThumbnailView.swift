@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// A square minifigure thumbnail with a retry button when loading fails.
+/// A square minifigure thumbnail with a retry button when loading fails for a
+/// reason that retrying can fix.
 struct MinifigureThumbnailView: View {
     let url: URL?
     let size: CGFloat
@@ -21,10 +22,10 @@ struct MinifigureThumbnailView: View {
                 case .failure(let state):
                     VStack(spacing: 6) {
                         ThumbnailPlaceholder(systemImage: "person.fill", width: size, height: size)
-                        Button("Retry") {
-                            state.retry()
+                        if let retry = state.retry {
+                            Button("Retry", action: retry)
+                                .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
             }

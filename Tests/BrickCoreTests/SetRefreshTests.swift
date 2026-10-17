@@ -108,7 +108,58 @@ struct SetRefreshTests {
         #expect(try context.fetchCount(FetchDescriptor<Minifigure>()) == 0)
     }
 
+    /// BrickLink padded the round tiles' pattern numbers, so a refresh brings
+    /// `14769pb328` back as `14769pb0328`; the count recorded on it must follow.
+    @Test
+    func aRenumberedPartKeepsItsCountThroughTheRefresh() async throws {
+        let context = try makeInMemoryModelContext()
+        let list = CollectionList(name: "Friends")
+        context.insert(list)
+
+        let set = SetImportUtilities.persistSet(
+            list: list,
+            modelContext: context,
+            setNumber: "41347-1",
+            defaultName: "Heartlake City Resort",
+            customName: nil,
+            thumbnailURLString: nil,
+            parts: [Self.roundTile(numbered: "14769pb328"), Self.roundTile(numbered: "14769pb329")],
+            categories: [],
+            minifigures: []
+        )
+        try #require(set.parts.first { $0.partID == "14769pb328" }).quantityHave = 1
+        try context.save()
+
+        let service = MockBrickLinkService()
+        await service.setPayload(
+            BrickLinkSetPayload(
+                setNumber: "41347-1",
+                name: "Heartlake City Resort",
+                parts: [Self.roundTile(numbered: "14769pb0328"), Self.roundTile(numbered: "14769pb0329")],
+                categories: [],
+                minifigures: []
+            ),
+            for: "41347-1"
+        )
+
+        try await SetImportUtilities.refreshSetFromBrickLink(set: set, modelContext: context, setProvider: service)
+
+        #expect(try #require(set.parts.first { $0.partID == "14769pb0328" }).quantityHave == 1)
+        #expect(try #require(set.parts.first { $0.partID == "14769pb0329" }).quantityHave == 0)
+    }
+
     // MARK: - Helpers
+
+    private static func roundTile(numbered partID: String) -> BrickLinkPartPayload {
+        BrickLinkPartPayload(
+            partID: partID,
+            name: "Tile, Round 2 x 2 with Bottom Stud Holder with Pattern",
+            colorID: "157",
+            colorName: "Medium Lavender",
+            quantityNeeded: 2,
+            inventorySection: .regular
+        )
+    }
 
     private func persistCopy(in list: CollectionList, context: ModelContext) -> BrickSet {
         SetImportUtilities.persistSet(

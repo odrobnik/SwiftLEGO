@@ -161,12 +161,15 @@ private struct PartSearchResultContext: View {
 }
 
 private struct PartThumbnail: View {
+    @Environment(\.modelContext) private var modelContext
     let part: Part
 
     var body: some View {
         QuickLookThumbnail(item: part) {
             if let url = part.thumbnailImageURL {
-                ThumbnailImage(url: url) { phase in
+                ThumbnailImage(url: url, replacementURL: {
+                    await PartImageHealing.healThumbnail(of: part, in: modelContext)
+                }) { phase in
                     switch phase {
                     case .empty, .loading:
                         ProgressView()
@@ -175,17 +178,15 @@ private struct PartThumbnail: View {
                             .resizable()
                             .scaledToFit()
                     case .failure(let state):
-                        if shouldShowRetry(for: state.error) {
+                        if let retry = state.retry {
                             ZStack {
                                 ThumbnailPlaceholder(systemImage: "cube.transparent", scalesSymbol: true)
                                 VStack(spacing: 6) {
                                     Image(systemName: "exclamationmark.triangle.fill")
                                         .font(.caption.weight(.bold))
                                         .foregroundStyle(.red)
-                                    Button("Retry") {
-                                        state.retry()
-                                    }
-                                    .font(.caption)
+                                    Button("Retry", action: retry)
+                                        .font(.caption)
                                 }
                                 .padding(8)
                             }
@@ -201,31 +202,6 @@ private struct PartThumbnail: View {
         }
         .frame(width: 80, height: 60)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private func shouldShowRetry(for error: Error) -> Bool {
-        if let cacheError = error as? ThumbnailCacheError,
-           let code = cacheErrorStatusCode(cacheError),
-           code == 404 || code == 410 {
-            return false
-        }
-
-        if let urlError = error as? URLError,
-           urlError.code == .fileDoesNotExist {
-            return false
-        }
-
-        return true
-    }
-
-    private func cacheErrorStatusCode(_ error: ThumbnailCacheError) -> Int? {
-        if case .invalidResponse(let statusCode) = error {
-            return statusCode
-        }
-        if case .emptyData = error {
-            return 404
-        }
-        return nil
     }
 }
 

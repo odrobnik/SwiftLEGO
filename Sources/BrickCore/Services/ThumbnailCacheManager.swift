@@ -15,13 +15,18 @@ public actor ThumbnailCacheManager {
 
     private var activeTasks: [URL: Task<Data, Error>] = [:]
 
+    /// URLs the server said have no image, with the status it gave. Asking again
+    /// would get the same answer, so they are not requested again this launch.
+    private var notFoundStatusCodes: [URL: Int] = [:]
+
     private var availablePermits: Int
     private var waitingContinuations: [CheckedContinuation<Void, Never>] = []
 
     public init(
         maxConcurrentDownloads: Int = 4,
         session: URLSession = .shared,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        cacheDirectory: URL? = nil
     ) {
         precondition(maxConcurrentDownloads > 0, "maxConcurrentDownloads must be at least 1")
         self.maxConcurrentDownloads = maxConcurrentDownloads
@@ -31,7 +36,8 @@ public actor ThumbnailCacheManager {
 
         let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
-        let cacheDirectory = cachesDirectory.appendingPathComponent("ThumbnailCache", isDirectory: true)
+        let cacheDirectory = cacheDirectory
+            ?? cachesDirectory.appendingPathComponent("ThumbnailCache", isDirectory: true)
         self.cacheDirectory = cacheDirectory
 
         if !fileManager.fileExists(atPath: cacheDirectory.path) {
@@ -52,6 +58,10 @@ public actor ThumbnailCacheManager {
         }
         if fileManager.fileExists(atPath: diskLocation.path) {
             try? fileManager.removeItem(at: diskLocation)
+        }
+
+        if let statusCode = notFoundStatusCodes[url] {
+            throw ThumbnailCacheError.invalidResponse(statusCode: statusCode)
         }
 
         if let task = activeTasks[url] {
@@ -89,7 +99,11 @@ public actor ThumbnailCacheManager {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw ThumbnailCacheError.invalidResponse(statusCode: httpResponse.statusCode)
+            let error = ThumbnailCacheError.invalidResponse(statusCode: httpResponse.statusCode)
+            if error.isNotFound {
+                notFoundStatusCodes[url] = httpResponse.statusCode
+            }
+            throw error
         }
 
         guard !data.isEmpty else {
@@ -179,4 +193,11 @@ public enum ThumbnailCacheError: Error {
     case invalidResponse(statusCode: Int?)
     case emptyData
     case managerDeallocated
+
+    /// Whether the server said there is no image at the URL. Retrying cannot
+    /// change that; only a different URL can.
+    public var isNotFound: Bool {
+        guard case .invalidResponse(let statusCode?) = self else { return false }
+        return statusCode == 404 || statusCode == 410
+    }
 }

@@ -115,16 +115,16 @@ private struct MinifigureThumbnail: View {
                     case .failure(let state):
                         ZStack {
                             ThumbnailPlaceholder(systemImage: "person.fill")
-                            VStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.red)
-                                Button("Retry") {
-                                    state.retry()
+                            if let retry = state.retry {
+                                VStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.red)
+                                    Button("Retry", action: retry)
+                                        .font(.caption)
                                 }
-                                .font(.caption)
+                                .padding(8)
                             }
-                            .padding(8)
                         }
                     }
                 }

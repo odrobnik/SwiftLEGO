@@ -36,12 +36,14 @@ public struct InventorySnapshot: Codable, Sendable {
                 case subparts
             }
 
+            /// Exact keys first, then the renumbering-tolerant ones: a refresh can
+            /// bring a part back under the padded number BrickLink moved it to.
             fileprivate var lookupKeys: [String] {
-                let base = "\(partID.lowercased())|\(colorID.lowercased())"
-                if let inventorySection, !inventorySection.isEmpty {
-                    return ["\(base)|\(inventorySection.lowercased())", base]
+                let section = inventorySection.flatMap { $0.isEmpty ? nil : $0.lowercased() }
+
+                return InventorySnapshot.partLookupBases(partID: partID, colorID: colorID).flatMap { base in
+                    section.map { ["\(base)|\($0)", base] } ?? [base]
                 }
-                return [base]
             }
         }
 
@@ -842,10 +844,23 @@ extension InventorySnapshot {
     }
 
     private static func insertPart(_ part: Part, into lookup: inout [String: [Part]]) {
-        let baseKey = "\(part.partID.lowercased())|\(part.colorID.lowercased())"
-        let sectionKey = "\(baseKey)|\(part.inventorySection.rawValue.lowercased())"
+        for baseKey in partLookupBases(partID: part.partID, colorID: part.colorID) {
+            let sectionKey = "\(baseKey)|\(part.inventorySection.rawValue.lowercased())"
 
-        lookup[sectionKey, default: []].append(part)
-        lookup[baseKey, default: []].append(part)
+            lookup[sectionKey, default: []].append(part)
+            lookup[baseKey, default: []].append(part)
+        }
+    }
+
+    /// The exact key of a part, then one shared by every zero-padding of its
+    /// pattern number, so `14769pb328` still finds `14769pb0328`. The second
+    /// lives in its own namespace, so it is never mistaken for an exact match.
+    fileprivate static func partLookupBases(partID: String, colorID: String) -> [String] {
+        let color = colorID.lowercased()
+
+        return [
+            "\(partID.lowercased())|\(color)",
+            "renumbered:\(BrickLinkItemNumber.matchingKey(for: partID))|\(color)"
+        ]
     }
 }

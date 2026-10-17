@@ -553,12 +553,15 @@ private struct OrderPartRowView: View {
 }
 
 private struct OrderPartThumbnail: View {
+    @Environment(\.modelContext) private var modelContext
     let part: OrderPart
 
     var body: some View {
         QuickLookThumbnail(item: part) {
             if let url = part.imageURL {
-                ThumbnailImage(url: url) { phase in
+                ThumbnailImage(url: url, replacementURL: {
+                    await PartImageHealing.healThumbnail(of: part, in: modelContext)
+                }) { phase in
                     switch phase {
                     case .empty, .loading:
                         ProgressView()
@@ -572,10 +575,10 @@ private struct OrderPartThumbnail: View {
                     case .failure(let state):
                         VStack(spacing: 6) {
                             ThumbnailPlaceholder(systemImage: "cube.transparent", width: 80, height: 60)
-                            Button("Retry") {
-                                state.retry()
+                            if let retry = state.retry {
+                                Button("Retry", action: retry)
+                                    .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.bordered)
                         }
                     }
                 }

@@ -113,12 +113,14 @@ public extension Part {
     }
 
     var highResolutionImageURL: URL? {
-        if let fullImageURL {
+        if let fullImageURL, !fullImageURL.path.lowercased().contains("no_image") {
             if fullImageURL.path.lowercased().contains("/pl/"),
                let colorSpecific = Self.makeColorSpecificImageURL(partID: partID, colorID: colorID) {
                 return colorSpecific
             }
-            return fullImageURL
+            // Older imports stored the 80 x 60 legacy thumbnail as the full image of
+            // parts without a color, such as sticker sheets.
+            return Self.mainImageURL(forLegacyImage: fullImageURL) ?? fullImageURL
         }
 
         if let colorSpecific = Self.makeColorSpecificImageURL(partID: partID, colorID: colorID) {
@@ -166,7 +168,29 @@ public extension Part {
         return components.url
     }
 
-    private static func makeColorSpecificImageURL(partID: String, colorID: String) -> URL? {
+    /// BrickLink's legacy part image, `img.bricklink.com/P/<color>/<item>.jpg`, is an
+    /// 80 x 60 thumbnail. The main image is filed under the same color, `0` for items
+    /// without one: `ItemImage/PN/<color>/<item>.png`.
+    internal static func mainImageURL(forLegacyImage url: URL) -> URL? {
+        let pathComponents = url.pathComponents
+        guard url.host?.lowercased() == "img.bricklink.com",
+              pathComponents.count == 4,
+              pathComponents[1].uppercased() == "P" else {
+            return nil
+        }
+
+        let colorID = pathComponents[2]
+        let itemNumber = (pathComponents[3] as NSString).deletingPathExtension
+        guard !colorID.isEmpty, !itemNumber.isEmpty else { return nil }
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "img.bricklink.com"
+        components.path = "/ItemImage/PN/\(colorID)/\(itemNumber).png"
+        return components.url
+    }
+
+    internal static func makeColorSpecificImageURL(partID: String, colorID: String) -> URL? {
         let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
         let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
@@ -179,7 +203,7 @@ public extension Part {
         return components.url
     }
 
-    private static func makeColorSpecificThumbnailURL(partID: String, colorID: String) -> URL? {
+    internal static func makeColorSpecificThumbnailURL(partID: String, colorID: String) -> URL? {
         let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
         let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
@@ -190,5 +214,30 @@ public extension Part {
         components.host = "img.bricklink.com"
         components.path = "/ItemImage/PT/\(sanitizedColorID)/\(trimmedPartID).t1.png"
         return components.url
+    }
+}
+
+extension Part {
+    /// Moves this part to the number BrickLink renumbered it to, with the image
+    /// and catalog URLs that belong to the new number.
+    func adoptItemNumber(_ itemNumber: String) {
+        let previousNumber = partID
+        partID = itemNumber
+
+        if let thumbnail = Self.makeColorSpecificThumbnailURL(partID: itemNumber, colorID: colorID) {
+            imageURLString = thumbnail.absoluteString
+        }
+
+        if let fullImage = Self.makeColorSpecificImageURL(partID: itemNumber, colorID: colorID) {
+            fullImageURLString = fullImage.absoluteString
+        }
+
+        // `catalogitem.page?P=14769pb328&idColor=157` names the item in its `P` query item.
+        if let partURLString,
+           var components = URLComponents(string: partURLString),
+           let index = components.queryItems?.firstIndex(where: { $0.name == "P" && $0.value == previousNumber }) {
+            components.queryItems?[index].value = itemNumber
+            self.partURLString = components.string ?? partURLString
+        }
     }
 }
