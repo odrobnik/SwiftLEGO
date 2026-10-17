@@ -52,3 +52,15 @@ public extension OrderPart {
         return URL(string: imageURLString)
     }
 }
+
+extension OrderPart {
+    /// Moves this order line to the number BrickLink renumbered its part to, so
+    /// it keeps matching the set parts that moved with it.
+    func adoptItemNumber(_ itemNumber: String) {
+        partID = itemNumber
+
+        if let thumbnail = Part.makeColorSpecificThumbnailURL(partID: itemNumber, colorID: colorID) {
+            imageURLString = thumbnail.absoluteString
+        }
+    }
+}

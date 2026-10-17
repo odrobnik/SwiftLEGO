@@ -166,7 +166,7 @@ public extension Part {
         return components.url
     }
 
-    private static func makeColorSpecificImageURL(partID: String, colorID: String) -> URL? {
+    internal static func makeColorSpecificImageURL(partID: String, colorID: String) -> URL? {
         let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
         let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
@@ -179,7 +179,7 @@ public extension Part {
         return components.url
     }
 
-    private static func makeColorSpecificThumbnailURL(partID: String, colorID: String) -> URL? {
+    internal static func makeColorSpecificThumbnailURL(partID: String, colorID: String) -> URL? {
         let trimmedPartID = partID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedColorID = colorID.trimmingCharacters(in: .whitespacesAndNewlines)
         let sanitizedColorID = trimmedColorID == "0" ? "" : trimmedColorID
@@ -190,5 +190,30 @@ public extension Part {
         components.host = "img.bricklink.com"
         components.path = "/ItemImage/PT/\(sanitizedColorID)/\(trimmedPartID).t1.png"
         return components.url
+    }
+}
+
+extension Part {
+    /// Moves this part to the number BrickLink renumbered it to, with the image
+    /// and catalog URLs that belong to the new number.
+    func adoptItemNumber(_ itemNumber: String) {
+        let previousNumber = partID
+        partID = itemNumber
+
+        if let thumbnail = Self.makeColorSpecificThumbnailURL(partID: itemNumber, colorID: colorID) {
+            imageURLString = thumbnail.absoluteString
+        }
+
+        if let fullImage = Self.makeColorSpecificImageURL(partID: itemNumber, colorID: colorID) {
+            fullImageURLString = fullImage.absoluteString
+        }
+
+        // `catalogitem.page?P=14769pb328&idColor=157` names the item in its `P` query item.
+        if let partURLString,
+           var components = URLComponents(string: partURLString),
+           let index = components.queryItems?.firstIndex(where: { $0.name == "P" && $0.value == previousNumber }) {
+            components.queryItems?[index].value = itemNumber
+            self.partURLString = components.string ?? partURLString
+        }
     }
 }

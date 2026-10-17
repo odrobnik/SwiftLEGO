@@ -57,10 +57,10 @@ private struct SetCardThumbnail: View {
                     case .failure(let state):
                         VStack(spacing: 12) {
                             PlaceholderArtworkView(symbol: "shippingbox.fill")
-                            Button("Retry") {
-                                state.retry()
+                            if let retry = state.retry {
+                                Button("Retry", action: retry)
+                                    .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.bordered)
                         }
                     }
                 }
