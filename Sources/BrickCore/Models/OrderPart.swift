@@ -51,6 +51,18 @@ public extension OrderPart {
         guard let imageURLString else { return nil }
         return URL(string: imageURLString)
     }
+
+    /// BrickLink's main image of the part in its color, for a closeup: order pages
+    /// only list the 80 x 60 thumbnail.
+    var highResolutionImageURL: URL? {
+        guard itemType == .part else { return nil }
+
+        if let imageURL, let mainImage = Part.mainImageURL(forLegacyImage: imageURL) {
+            return mainImage
+        }
+
+        return Part.makeColorSpecificImageURL(partID: partID, colorID: colorID)
+    }
 }
 
 extension OrderPart {

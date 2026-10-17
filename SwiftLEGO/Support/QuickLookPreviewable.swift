@@ -67,11 +67,15 @@ extension OrderPart: QuickLookPreviewable {
     var quickLookID: AnyHashable { persistentModelID }
 
     var quickLookPreferredURL: URL? {
-        imageURL
+        highResolutionImageURL ?? imageURL
     }
 
     var quickLookFallbackURL: URL? {
-        nil
+        guard let preferred = quickLookPreferredURL,
+              preferred != imageURL else {
+            return nil
+        }
+        return imageURL
     }
 
     var quickLookPreviewBaseName: String {
