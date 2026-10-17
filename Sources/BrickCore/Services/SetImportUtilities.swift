@@ -147,19 +147,28 @@ public enum SetImportUtilities {
     }
 
     public static func partPayloads(from parts: [Part]) -> [BrickLinkPartPayload] {
-        parts.map {
+        partPayloads(from: parts, parentQuantityNeeded: 1)
+    }
+
+    /// A payload counts a subpart per parent part, as BrickLink lists it, and
+    /// `makePartModel` multiplies that by the parent's quantity. A stored
+    /// subpart holds the product, so it is divided back here; otherwise every
+    /// copy of a set would multiply its subparts again.
+    private static func partPayloads(from parts: [Part], parentQuantityNeeded: Int) -> [BrickLinkPartPayload] {
+        parts.map { part in
             BrickLinkPartPayload(
-                partID: $0.partID,
-                name: $0.name,
-                colorID: $0.colorID,
-                colorName: $0.colorName,
-                quantityNeeded: $0.quantityNeeded,
-                instanceNumber: $0.instanceNumber,
-                imageURL: $0.imageURL,
-                fullImageURL: $0.fullImageURL,
-                partURL: $0.partURL,
-                inventorySection: $0.inventorySection,
-                subparts: partPayloads(from: $0.subparts)
+                partID: part.partID,
+                name: part.name,
+                colorID: part.colorID,
+                colorName: part.colorName,
+                // Beneath a parent needed zero times everything is zero, whatever the divisor.
+                quantityNeeded: part.quantityNeeded / max(parentQuantityNeeded, 1),
+                instanceNumber: part.instanceNumber,
+                imageURL: part.imageURL,
+                fullImageURL: part.fullImageURL,
+                partURL: part.partURL,
+                inventorySection: part.inventorySection,
+                subparts: partPayloads(from: part.subparts, parentQuantityNeeded: part.quantityNeeded)
             )
         }
     }
@@ -420,14 +429,25 @@ public enum SetImportUtilities {
         return minifigure
     }
 
+    /// Replaces the inventory of `set` with `payload`, keeping the quantities
+    /// recorded on it.
+    ///
+    /// Those quantities are read from `set` itself, in the same main-actor step
+    /// that swaps the inventory: edits made while `payload` was being fetched
+    /// survive, and other copies of the same set number are left alone. A set
+    /// deleted in the meantime is left as it is.
     @MainActor
     public static func refreshSet(
         set: BrickSet,
-        list: CollectionList,
         modelContext: ModelContext,
-        payload: BrickLinkSetPayload,
-        previousSnapshot: InventorySnapshot.SetSnapshot?
+        payload: BrickLinkSetPayload
     ) {
+        // A deletion still pending shows as `isDeleted`, a saved one as a missing
+        // context. Rebuilding a deleted set would leave its new parts orphaned.
+        guard !set.isDeleted, set.modelContext != nil else { return }
+
+        let progress = InventorySnapshot.makeSetSnapshot(from: set)
+
         let existingParts = set.parts
         let existingMinifigures = set.minifigures
         let existingCategories = set.categories
@@ -484,13 +504,8 @@ public enum SetImportUtilities {
         set.categories = categoryModels
         set.minifigures = minifigureModels
 
+        InventorySnapshot.apply(progress, to: set)
         try? modelContext.save()
-
-        if let snapshot = previousSnapshot {
-            let inventorySnapshot = InventorySnapshot(sets: [snapshot])
-            _ = inventorySnapshot.apply(to: [list])
-            try? modelContext.save()
-        }
     }
 
     public enum RefreshError: LocalizedError {
@@ -509,26 +524,29 @@ public enum SetImportUtilities {
         modelContext: ModelContext,
         service: BrickLinkService
     ) async throws {
+        try await refreshSetFromBrickLink(set: set, modelContext: modelContext, setProvider: service)
+    }
+
+    static func refreshSetFromBrickLink(
+        set: BrickSet,
+        modelContext: ModelContext,
+        setProvider: some BrickLinkSetProviding
+    ) async throws {
         let setInfo = await contextInfo(for: set)
 
-        guard let list = setInfo.list else {
+        guard setInfo.isInList else {
             throw RefreshError.missingCollection
         }
 
-        let previousSnapshot = await InventorySnapshot.snapshot(for: set, in: list)
-        let payload = try await service.fetchSetDetails(for: setInfo.setNumber)
+        // The set stays editable during this multi-second fetch, so its
+        // quantities are read only once `refreshSet` swaps in the new inventory.
+        let payload = try await setProvider.fetchSetDetails(for: setInfo.setNumber)
 
-        await refreshSet(
-            set: set,
-            list: list,
-            modelContext: modelContext,
-            payload: payload,
-            previousSnapshot: previousSnapshot
-        )
+        await refreshSet(set: set, modelContext: modelContext, payload: payload)
     }
 
     @MainActor
-    private static func contextInfo(for set: BrickSet) -> (list: CollectionList?, setNumber: String) {
-        (set.collection, set.setNumber)
+    private static func contextInfo(for set: BrickSet) -> (isInList: Bool, setNumber: String) {
+        (set.collection != nil, set.setNumber)
     }
 }

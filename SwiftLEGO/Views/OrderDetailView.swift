@@ -3,368 +3,101 @@ import SwiftData
 import BrickCore
 
 struct OrderDetailView: View {
-    @Query private var colors: [BrickColor]
-    @Query private var sets: [BrickSet]
-    @Bindable var order: BrickOrder
+    let order: BrickOrder
     @State private var searchText: String = ""
     @State private var effectiveSearchText: String = ""
-    @State private var missingInSetsLookup: [MissingInSetsKey: Int] = [:]
-    @State private var hasComputedMissingInSets: Bool = false
-    @State private var cachedOrderPartsByColor: [OrderPartColorGroup]?
-
-    /// Sets that participate in the wanted list. Sets the user has excluded
-    /// must not contribute to the order's "missing in sets" data.
-    private var wantedSets: [BrickSet] {
-        sets.filter { !$0.excludeFromWantedList }
-    }
-
-    private var filteredParts: [OrderPart] {
-        guard let query = normalizedSearchQuery else {
-            return order.parts
-        }
-        if let setFilter = setSearchFilter {
-            let lookup = missingLookup(for: setFilter.set)
-            return order.parts.filter { part in
-                guard matchesSetFilter(part, lookup: lookup) else { return false }
-                guard let remainingQuery = setFilter.remainingQuery else { return true }
-                return matchesOrderPart(part, query: remainingQuery)
-            }
-        }
-        return order.parts.filter { part in
-            matchesOrderPart(part, query: query)
-        }
-    }
-
-    private func computeOrderPartsByColor() -> [OrderPartColorGroup] {
-        let grouped = Dictionary(grouping: filteredParts) { part in
-            normalizeColorName(resolvedColorName(for: part))
-        }
-
-        return grouped
-            .map { key, value in
-                let sortedParts = value.sorted { lhs, rhs in
-                    let nameComparison = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
-                    if nameComparison != .orderedSame {
-                        return nameComparison == .orderedAscending
-                    }
-                    return lhs.partID.localizedCaseInsensitiveCompare(rhs.partID) == .orderedAscending
-                }
-                return OrderPartColorGroup(color: key, parts: sortedParts)
-            }
-            .sorted { lhs, rhs in lhs.color.localizedCaseInsensitiveCompare(rhs.color) == .orderedAscending }
-    }
-
-    private var orderPartsByColorCacheKey: OrderPartsByColorCacheKey {
-        OrderPartsByColorCacheKey(
-            searchText: effectiveSearchText,
-            hasSetFilter: setSearchFilter != nil,
-            orderPartIDs: order.parts.map(\.persistentModelID),
-            colorCount: colors.count
-        )
-    }
-
-    private var setFilterPartsByColor: [(color: String, parts: [SetFilterPartRow])] {
-        guard let setFilter = setSearchFilter else { return [] }
-        let orderLookup = orderQuantityLookup
-        let filtered = setFilter.set.parts.compactMap { part -> SetFilterPartRow? in
-            guard part.inventorySection != .extra else { return nil }
-            guard hasMissingHierarchy(part) else { return nil }
-            let quantityInOrder = orderQuantity(for: part, lookup: orderLookup)
-            guard quantityInOrder > 0 else { return nil }
-            guard let query = setFilter.remainingQuery else {
-                return SetFilterPartRow(part: part, orderQuantity: quantityInOrder)
-            }
-            guard matchesPartHierarchy(part, query: query) else { return nil }
-            return SetFilterPartRow(part: part, orderQuantity: quantityInOrder)
-        }
-
-        let grouped = Dictionary(grouping: filtered) { row in
-            normalizeColorName(row.part.colorName)
-        }
-
-        return grouped
-            .map { key, value in
-                let sortedParts = value.sorted { lhs, rhs in
-                    Part.subpartSortComparator(lhs.part, rhs.part)
-                }
-                return (color: key, parts: sortedParts)
-            }
-            .sorted { lhs, rhs in lhs.color.localizedCaseInsensitiveCompare(rhs.color) == .orderedAscending }
-    }
-
-    private var setFilterMinifigures: [SetFilterMinifigureRow] {
-        guard let setFilter = setSearchFilter else { return [] }
-        let orderLookup = orderQuantityLookup
-        let filtered = setFilter.set.minifigures.compactMap { minifigure -> SetFilterMinifigureRow? in
-            guard hasMissingHierarchy(minifigure) else { return nil }
-            let quantityInOrder = orderQuantity(for: minifigure, lookup: orderLookup)
-            guard quantityInOrder > 0 else { return nil }
-            guard let query = setFilter.remainingQuery else {
-                return SetFilterMinifigureRow(minifigure: minifigure, orderQuantity: quantityInOrder)
-            }
-            guard matchesMinifigureSearch(minifigure, query: query) ||
-                    minifigure.parts.contains(where: { matchesPartHierarchy($0, query: query) }) else { return nil }
-            return SetFilterMinifigureRow(minifigure: minifigure, orderQuantity: quantityInOrder)
-        }
-
-        return filtered.sorted { lhs, rhs in
-            if lhs.minifigure.name != rhs.minifigure.name {
-                return lhs.minifigure.name.localizedCaseInsensitiveCompare(rhs.minifigure.name) == .orderedAscending
-            }
-            return lhs.minifigure.identifier.localizedCaseInsensitiveCompare(rhs.minifigure.identifier) == .orderedAscending
-        }
-    }
-
-    private var normalizedSearchQuery: String? {
-        let trimmed = effectiveSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private var forwardedSearchQuery: String? {
-        if let remainingQuery = setSearchFilter?.remainingQuery {
-            return remainingQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : remainingQuery
-        }
-        let trimmed = effectiveSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
 
     var body: some View {
-        Group {
-            let partsByColor = cachedOrderPartsByColor ?? computeOrderPartsByColor()
-            let forwardedQuery = forwardedSearchQuery
-            if (setSearchFilter == nil && partsByColor.isEmpty) ||
-                (setSearchFilter != nil && setFilterPartsByColor.isEmpty && setFilterMinifigures.isEmpty) {
-                EmptyStateView(
-                    icon: "shippingbox",
-                    title: "No parts",
-                    message: emptyStateMessage
-                )
-            } else {
-                List {
-                    if setSearchFilter == nil {
-                        ForEach(partsByColor) { group in
-                            Section(group.color) {
-                                ForEach(group.parts) { part in
-                                    let missingInSetsValue = hasComputedMissingInSets
-                                        ? missingInSets(for: part, lookup: missingInSetsLookup)
-                                        : nil
-                                    NavigationLink(value: OrderPartRoute(orderPart: part, searchQuery: forwardedQuery)) {
-                                        OrderPartRowView(
-                                            part: part,
-                                            colorName: resolvedColorName(for: part),
-                                            missingInSets: missingInSetsValue
-                                        )
-                                    }
-                                }
-                            }
-                        }
-            } else {
-                        ForEach(setFilterPartsByColor, id: \.color) { group in
-                            Section(group.color) {
-                                ForEach(group.parts) { row in
-                                    PartRowNavigationWrapper(
-                                        part: row.part,
-                                        isFilteringMissing: true,
-                                        orderQuantity: row.orderQuantity
-                                    )
-                                }
-                            }
-                        }
-
-                        if !setFilterMinifigures.isEmpty {
-                            Section("Minifigures") {
-                                ForEach(setFilterMinifigures) { row in
-                                    OrderMinifigureRowView(
-                                        minifigure: row.minifigure,
-                                        orderQuantity: row.orderQuantity
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                .listStyle(.insetGrouped)
-            }
-        }
+        OrderDetailContent(
+            order: order,
+            searchQuery: effectiveSearchText.isEmpty ? nil : effectiveSearchText
+        )
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search order parts")
         .task(id: searchText) {
             await updateSearchQuery()
         }
-        .task(id: missingInSetsTaskID) {
-            await loadMissingInSetsLookup()
-        }
-        .task(id: orderPartsByColorCacheKey) {
-            cachedOrderPartsByColor = computeOrderPartsByColor()
-        }
-        .navigationTitle(navigationTitleText)
+        .quickLookPresenter()
         .toolbarTitleDisplayMode(.inline)
     }
 
-    private var emptyStateMessage: String {
-        if let setFilter = setSearchFilter {
-            return "No missing parts from \(setFilter.set.setNumber) match your search."
-        }
-        return normalizedSearchQuery == nil ? "No parts to display." : "No parts match your search."
-    }
+    private func updateSearchQuery() async {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-    private var navigationTitleText: String {
-        if let setFilter = setSearchFilter {
-            return "\(setFilter.set.setNumber) \(setFilter.set.name)"
-        }
-        return order.displayName
-    }
-
-    private struct OrderPartColorGroup: Identifiable {
-        let color: String
-        let parts: [OrderPart]
-
-        var id: String { color }
-    }
-
-    private struct OrderPartsByColorCacheKey: Equatable {
-        let searchText: String
-        let hasSetFilter: Bool
-        let orderPartIDs: [PersistentIdentifier]
-        let colorCount: Int
-    }
-
-    private struct SetSearchFilter {
-        let set: BrickSet
-        let remainingQuery: String?
-    }
-
-    private struct MissingPartKey: Hashable {
-        let partID: String
-        let colorID: String
-    }
-
-    private struct MissingLookup {
-        let partKeys: Set<MissingPartKey>
-        let minifigureIDs: Set<String>
-    }
-
-    private struct MissingInSetsKey: Hashable {
-        let itemType: OrderPart.ItemType
-        let partID: String
-        let colorID: String
-    }
-
-    private struct OrderQuantityLookup {
-        let partQuantities: [MissingPartKey: Int]
-        let minifigureQuantities: [String: Int]
-    }
-
-    private struct SetFilterPartRow: Identifiable {
-        let part: Part
-        let orderQuantity: Int
-
-        var id: PersistentIdentifier { part.persistentModelID }
-    }
-
-    private struct SetFilterMinifigureRow: Identifiable {
-        let minifigure: Minifigure
-        let orderQuantity: Int
-
-        var id: PersistentIdentifier { minifigure.persistentModelID }
-    }
-
-    private var setSearchFilter: SetSearchFilter? {
-        let trimmed = effectiveSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let terms = trimmed.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-
-        for (index, term) in terms.enumerated() {
-            guard let token = setTokenCandidate(from: term) else { continue }
-            guard let setMatch = matchSet(for: token) else { continue }
-
-            var remainingTerms = terms
-            remainingTerms.remove(at: index)
-            let remainingQuery = remainingTerms.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-            return SetSearchFilter(
-                set: setMatch,
-                remainingQuery: remainingQuery.isEmpty ? nil : remainingQuery
-            )
-        }
-
-        return nil
-    }
-
-    private func setTokenCandidate(from term: String) -> String? {
-        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        guard trimmed.allSatisfy({ $0.isNumber || $0 == "-" }) else { return nil }
-        let digitCount = trimmed.filter(\.isNumber).count
-        guard digitCount >= 4 else { return nil }
-        return trimmed
-    }
-
-    private func matchSet(for token: String) -> BrickSet? {
-        let normalizedToken = normalized(token)
-        let strippedToken = normalizeSetNumber(normalizedToken)
-
-        return wantedSets.first { set in
-            let normalizedSetNumber = normalized(set.setNumber)
-            if normalizedSetNumber == normalizedToken {
-                return true
-            }
-            let strippedSetNumber = normalizeSetNumber(normalizedSetNumber)
-            if !strippedToken.isEmpty, strippedSetNumber == strippedToken {
-                return true
-            }
-            return false
-        }
-    }
-
-    private func normalizeSetNumber(_ number: String) -> String {
-        number.split(separator: "-").first.map(String.init) ?? number
-    }
-
-    private var missingInSetsTaskID: String {
-        let orderToken = order.parts.map {
-            "\($0.itemTypeRawValue)|\($0.partID)|\($0.colorID)|\($0.quantity)"
-        }.joined(separator: ",")
-        return "\(order.persistentModelID)|\(orderToken)|\(wantedSets.count)"
-    }
-
-    @MainActor
-    private func loadMissingInSetsLookup() async {
-        hasComputedMissingInSets = false
-
-        let orderKeys = Set(order.parts.map { missingInSetsKey(for: $0) })
-        guard !orderKeys.isEmpty else {
-            missingInSetsLookup = [:]
-            hasComputedMissingInSets = true
+        guard !trimmed.isEmpty else {
+            effectiveSearchText = ""
             return
         }
 
-        let lookup = await buildMissingInSetsLookup(orderKeys: orderKeys)
-        missingInSetsLookup = lookup
-        hasComputedMissingInSets = true
+        do {
+            try await Task.sleep(for: .milliseconds(300))
+        } catch {
+            return
+        }
+
+        guard !Task.isCancelled else { return }
+        effectiveSearchText = trimmed
+    }
+}
+
+/// The order's parts for the debounced search query. Living below the view that owns
+/// the search field, it re-runs when the query settles rather than on every keystroke.
+private struct OrderDetailContent: View {
+    @Query private var sets: [BrickSet]
+    let order: BrickOrder
+    /// The trimmed search query, or `nil` when not searching.
+    let searchQuery: String?
+    /// How many of each order part the wanted sets still miss; `nil` while computing.
+    @State private var missingInSets: [MissingInSetsKey: Int]?
+
+    var body: some View {
+        // Sets the user excluded from the wanted list don't count as missing anything.
+        let wantedSets = sets.filter { !$0.excludeFromWantedList }
+        let setFilter = searchQuery.flatMap { SetSearchFilter(query: $0, sets: wantedSets) }
+
+        Group {
+            if let setFilter {
+                OrderSetFilterList(order: order, filter: setFilter)
+            } else {
+                OrderPartsList(order: order, searchQuery: searchQuery, missingInSets: missingInSets)
+            }
+        }
+        .navigationTitle(setFilter.map { "\($0.set.setNumber) \($0.set.name)" } ?? order.displayName)
+        .task(id: MissingInSetsTaskKey(order: order, wantedSets: wantedSets)) {
+            await loadMissingInSets(from: wantedSets)
+        }
     }
 
-    @MainActor
-    private func buildMissingInSetsLookup(orderKeys: Set<MissingInSetsKey>) async -> [MissingInSetsKey: Int] {
+    private func loadMissingInSets(from wantedSets: [BrickSet]) async {
+        missingInSets = nil
+
+        let orderKeys = Set(order.parts.map(MissingInSetsKey.init(orderPart:)))
+        guard !orderKeys.isEmpty else {
+            missingInSets = [:]
+            return
+        }
+
         var lookup: [MissingInSetsKey: Int] = [:]
         for set in wantedSets {
-            accumulateMissing(in: set, orderKeys: orderKeys, lookup: &lookup)
+            Self.accumulateMissing(in: set, orderKeys: orderKeys, into: &lookup)
             await Task.yield()
+            guard !Task.isCancelled else { return }
         }
-        return lookup
+        missingInSets = lookup
     }
 
-    @MainActor
-    private func accumulateMissing(
+    private static func accumulateMissing(
         in set: BrickSet,
         orderKeys: Set<MissingInSetsKey>,
-        lookup: inout [MissingInSetsKey: Int]
+        into lookup: inout [MissingInSetsKey: Int]
     ) {
         for part in set.parts {
-            accumulateMissing(part: part, orderKeys: orderKeys, lookup: &lookup)
+            accumulateMissing(part: part, orderKeys: orderKeys, into: &lookup)
         }
+
         for minifigure in set.minifigures {
             let key = MissingInSetsKey(
                 itemType: .minifigure,
-                partID: normalized(minifigure.identifier),
+                partID: SearchText.normalized(minifigure.identifier),
                 colorID: ""
             )
             if orderKeys.contains(key) {
@@ -374,16 +107,15 @@ struct OrderDetailView: View {
                 }
             }
             for part in minifigure.parts {
-                accumulateMissing(part: part, orderKeys: orderKeys, lookup: &lookup)
+                accumulateMissing(part: part, orderKeys: orderKeys, into: &lookup)
             }
         }
     }
 
-    @MainActor
-    private func accumulateMissing(
+    private static func accumulateMissing(
         part: Part,
         orderKeys: Set<MissingInSetsKey>,
-        lookup: inout [MissingInSetsKey: Int]
+        into lookup: inout [MissingInSetsKey: Int]
     ) {
         guard part.inventorySection != .extra else { return }
 
@@ -391,8 +123,8 @@ struct OrderDetailView: View {
         if missing > 0 {
             let key = MissingInSetsKey(
                 itemType: .part,
-                partID: normalized(part.partID),
-                colorID: normalized(part.colorID)
+                partID: SearchText.normalized(part.partID),
+                colorID: SearchText.normalized(part.colorID)
             )
             if orderKeys.contains(key) {
                 lookup[key, default: 0] += missing
@@ -402,112 +134,168 @@ struct OrderDetailView: View {
         // Subparts carry no `.set`/`.minifigure` backref, so they never appear in
         // `set.parts`/`minifigure.parts`. Recurse to count parts missing only as subparts.
         for child in part.subparts {
-            accumulateMissing(part: child, orderKeys: orderKeys, lookup: &lookup)
+            accumulateMissing(part: child, orderKeys: orderKeys, into: &lookup)
         }
     }
+}
 
-    private func missingInSetsKey(for orderPart: OrderPart) -> MissingInSetsKey {
-        let normalizedPartID = normalized(orderPart.partID)
+/// What the "missing in sets" counts depend on: the order's parts and the wanted sets.
+private struct MissingInSetsTaskKey: Equatable {
+    let orderPartIDs: [PersistentIdentifier]
+    let wantedSetIDs: Set<PersistentIdentifier>
+
+    init(order: BrickOrder, wantedSets: [BrickSet]) {
+        orderPartIDs = order.parts.map(\.persistentModelID)
+        wantedSetIDs = Set(wantedSets.map(\.persistentModelID))
+    }
+}
+
+private struct MissingInSetsKey: Hashable {
+    let itemType: OrderPart.ItemType
+    let partID: String
+    let colorID: String
+}
+
+extension MissingInSetsKey {
+    init(orderPart: OrderPart) {
+        let partID = SearchText.normalized(orderPart.partID)
         if orderPart.itemType == .minifigure {
-            return MissingInSetsKey(itemType: .minifigure, partID: normalizedPartID, colorID: "")
+            self.init(itemType: .minifigure, partID: partID, colorID: "")
+        } else {
+            self.init(itemType: orderPart.itemType, partID: partID, colorID: SearchText.normalized(orderPart.colorID))
         }
-        return MissingInSetsKey(
-            itemType: orderPart.itemType,
-            partID: normalizedPartID,
-            colorID: normalized(orderPart.colorID)
-        )
+    }
+}
+
+/// A search that names one of the wanted sets, like "75060 blue". It shows what that set
+/// still misses from the order, filtered by the rest of the query.
+private struct SetSearchFilter {
+    let set: BrickSet
+    let remainingQuery: String?
+
+    /// Uses the first term that looks like a set number and matches one of `sets`;
+    /// `nil` when no term does.
+    init?(query: String, sets: [BrickSet]) {
+        let terms = query.split(whereSeparator: \.isWhitespace).map(String.init)
+
+        for (index, term) in terms.enumerated() {
+            guard Self.isSetNumberCandidate(term),
+                  let set = Self.set(matching: term, in: sets) else {
+                continue
+            }
+
+            var remainingTerms = terms
+            remainingTerms.remove(at: index)
+            let remainingQuery = remainingTerms.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+
+            self.set = set
+            self.remainingQuery = remainingQuery.isEmpty ? nil : remainingQuery
+            return
+        }
+
+        return nil
     }
 
-    private func missingInSets(for part: OrderPart, lookup: [MissingInSetsKey: Int]) -> Int {
-        let key = missingInSetsKey(for: part)
-        return lookup[key] ?? 0
+    /// Digits and dashes with at least four digits, like "75060" or "75060-1".
+    private static func isSetNumberCandidate(_ term: String) -> Bool {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.allSatisfy({ $0.isNumber || $0 == "-" }) else { return false }
+        return trimmed.count(where: \.isNumber) >= 4
     }
 
-    private func missingLookup(for set: BrickSet) -> MissingLookup {
-        var partKeys = Set<MissingPartKey>()
-        var minifigureIDs = Set<String>()
+    private static func set(matching token: String, in sets: [BrickSet]) -> BrickSet? {
+        let normalizedToken = SearchText.normalized(token)
+        let strippedToken = SearchText.strippedSetNumber(normalizedToken)
 
-        func recordMissing(part: Part) {
-            guard part.inventorySectionRawValue != Part.InventorySection.extra.rawValue else { return }
-            guard hasMissingHierarchy(part) else { return }
-            let key = MissingPartKey(
-                partID: normalized(part.partID),
-                colorID: normalized(part.colorID)
+        return sets.first { set in
+            let setNumber = SearchText.normalized(set.setNumber)
+            if setNumber == normalizedToken {
+                return true
+            }
+            return !strippedToken.isEmpty && SearchText.strippedSetNumber(setNumber) == strippedToken
+        }
+    }
+}
+
+/// The order's parts matching the search, grouped by colour.
+private struct OrderPartsList: View {
+    @Query private var colors: [BrickColor]
+    let order: BrickOrder
+    let searchQuery: String?
+    let missingInSets: [MissingInSetsKey: Int]?
+
+    var body: some View {
+        let groups = colorGroups()
+
+        if groups.isEmpty {
+            EmptyStateView(
+                icon: "shippingbox",
+                title: "No parts",
+                message: searchQuery == nil ? "No parts to display." : "No parts match your search."
             )
-            partKeys.insert(key)
-            // Recurse so parts missing only as subparts (no `.set` backref) still match.
-            for child in part.subparts {
-                recordMissing(part: child)
+        } else {
+            List {
+                ForEach(groups) { group in
+                    Section(group.color) {
+                        ForEach(group.rows) { row in
+                            NavigationLink(value: row.route) {
+                                OrderPartRowView(
+                                    part: row.part,
+                                    colorName: row.colorName,
+                                    missingInSets: row.missingInSets
+                                )
+                            }
+                        }
+                    }
+                }
             }
+            .listStyle(.insetGrouped)
         }
-
-        for part in set.parts {
-            recordMissing(part: part)
-        }
-
-        for minifigure in set.minifigures {
-            if hasMissingHierarchy(minifigure) {
-                minifigureIDs.insert(normalized(minifigure.identifier))
-            }
-            for part in minifigure.parts {
-                recordMissing(part: part)
-            }
-        }
-
-        return MissingLookup(partKeys: partKeys, minifigureIDs: minifigureIDs)
     }
 
-    private var orderQuantityLookup: OrderQuantityLookup {
-        var partQuantities: [MissingPartKey: Int] = [:]
-        var minifigureQuantities: [String: Int] = [:]
-
-        for part in order.parts {
-            switch part.itemType {
-            case .minifigure:
-                let key = normalized(part.partID)
-                minifigureQuantities[key, default: 0] += part.quantity
-            case .part:
-                let key = MissingPartKey(
-                    partID: normalized(part.partID),
-                    colorID: normalized(part.colorID)
-                )
-                partQuantities[key, default: 0] += part.quantity
-            }
-        }
-
-        return OrderQuantityLookup(
-            partQuantities: partQuantities,
-            minifigureQuantities: minifigureQuantities
+    private func colorGroups() -> [OrderPartColorGroup] {
+        let colorNames = Dictionary(
+            colors.map { ($0.brickLinkColorID, $0.brickLinkName) },
+            uniquingKeysWith: { first, _ in first }
         )
-    }
+        let partQuery = searchQuery.flatMap(PartSearchQuery.init)
 
-    private func orderQuantity(for part: Part, lookup: OrderQuantityLookup) -> Int {
-        let key = MissingPartKey(
-            partID: normalized(part.partID),
-            colorID: normalized(part.colorID)
-        )
-        return lookup.partQuantities[key] ?? 0
-    }
+        let rows = order.parts.compactMap { part -> OrderPartRow? in
+            let colorName = Self.resolvedColorName(for: part, colorNames: colorNames)
 
-    private func orderQuantity(for minifigure: Minifigure, lookup: OrderQuantityLookup) -> Int {
-        let key = normalized(minifigure.identifier)
-        return lookup.minifigureQuantities[key] ?? 0
-    }
+            if searchQuery != nil {
+                guard let partQuery,
+                      partQuery.matches(partID: part.partID, colorName: colorName, name: part.name) else {
+                    return nil
+                }
+            }
 
-    private func matchesSetFilter(_ part: OrderPart, lookup: MissingLookup) -> Bool {
-        switch part.itemType {
-        case .minifigure:
-            return lookup.minifigureIDs.contains(normalized(part.partID))
-        case .part:
-            let key = MissingPartKey(
-                partID: normalized(part.partID),
-                colorID: normalized(part.colorID)
+            return OrderPartRow(
+                part: part,
+                colorName: colorName,
+                missingInSets: missingInSets.map { $0[MissingInSetsKey(orderPart: part)] ?? 0 },
+                route: OrderPartRoute(orderPart: part, searchQuery: searchQuery)
             )
-            return lookup.partKeys.contains(key)
         }
+
+        return Dictionary(grouping: rows) { row in
+            let trimmed = row.colorName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "Unknown Color" : trimmed
+        }
+        .map { color, rows in
+            let sortedRows = rows.sorted { lhs, rhs in
+                let nameComparison = lhs.part.name.localizedCaseInsensitiveCompare(rhs.part.name)
+                if nameComparison != .orderedSame {
+                    return nameComparison == .orderedAscending
+                }
+                return lhs.part.partID.localizedCaseInsensitiveCompare(rhs.part.partID) == .orderedAscending
+            }
+            return OrderPartColorGroup(color: color, rows: sortedRows)
+        }
+        .sorted { lhs, rhs in lhs.color.localizedCaseInsensitiveCompare(rhs.color) == .orderedAscending }
     }
 
-    private func resolvedColorName(for part: OrderPart) -> String {
+    private static func resolvedColorName(for part: OrderPart, colorNames: [Int: String]) -> String {
         if part.itemType == .minifigure {
             return "Minifigure"
         }
@@ -515,330 +303,208 @@ struct OrderDetailView: View {
         if !trimmed.isEmpty {
             return trimmed
         }
-        if let colorID = Int(part.colorID),
-           let match = colors.first(where: { $0.brickLinkColorID == colorID }) {
-            return match.brickLinkName
+        if let colorID = Int(part.colorID), let name = colorNames[colorID] {
+            return name
         }
         if part.colorID.isEmpty {
             return "Unknown Color"
         }
         return "Color \(part.colorID)"
     }
+}
 
-    private func normalizeColorName(_ name: String) -> String {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Unknown Color" : trimmed
-    }
+/// An order part with everything its row shows, resolved once for the list.
+private struct OrderPartRow: Identifiable {
+    let part: OrderPart
+    let colorName: String
+    let missingInSets: Int?
+    let route: OrderPartRoute
 
-    private func matchesOrderPart(_ part: OrderPart, query: String) -> Bool {
-        let rawQuery = normalized(query)
-        guard !rawQuery.isEmpty else { return false }
+    var id: PersistentIdentifier { part.persistentModelID }
+}
 
-        let startsWithNumber = rawQuery.first?.isNumber == true
-        let components = rawQuery.split(whereSeparator: { $0.isWhitespace })
-        let primaryToken = components.first.map(String.init) ?? rawQuery
-        let primaryTokenIsShortLength = isShortLengthToken(primaryToken)
-        let primaryTokenIsNumericOnly = primaryToken.allSatisfy { $0.isNumber }
-        let primaryTokenIsNumeric = primaryTokenIsNumericOnly && !primaryTokenIsShortLength
-        let primaryTokenIsDimensionQuery = normalizedDimensionQuery(for: primaryToken) != nil
-        let numericPrefixToken = String(primaryToken.prefix { $0.isNumber })
-        let dimensionPrefixQuery = normalizedDimensionPrefix(in: rawQuery)
-        let shouldEnforceNumericPrefix = !numericPrefixToken.isEmpty && dimensionPrefixQuery == nil && !primaryTokenIsShortLength
-        let shouldMatchPartIDPrefix = startsWithNumber && !primaryTokenIsNumericOnly && !primaryTokenIsDimensionQuery && !primaryTokenIsShortLength
-        let normalizedQueryTokens = queryTokens(from: rawQuery)
-        let secondaryTokens = normalizedQueryTokens.dropFirst()
+private struct OrderPartColorGroup: Identifiable {
+    let color: String
+    let rows: [OrderPartRow]
 
-        let resolvedColor = resolvedColorName(for: part)
-        let partIDLower = normalized(part.partID)
-        let colorLower = normalized(resolvedColor)
-        let nameLower = normalized(part.name)
-        let searchable = searchableText(for: part, colorName: resolvedColor)
-        let partTokens = partSearchTokens(for: part, colorName: resolvedColor)
+    var id: String { color }
+}
 
-        if shouldEnforceNumericPrefix, !matchesNumericPartID(part.partID, numericQuery: numericPrefixToken) {
-            return false
-        }
+/// The parts and minifigures of the set named in the search that are still missing and
+/// that the order contains.
+private struct OrderSetFilterList: View {
+    let order: BrickOrder
+    let filter: SetSearchFilter
 
-        if let dimensionPrefixQuery, !searchable.contains(dimensionPrefixQuery) {
-            return false
-        }
+    var body: some View {
+        let orderQuantities = OrderQuantityLookup(order: order)
+        let query = filter.remainingQuery.flatMap(PartSearchQuery.init)
+        let partGroups = partsByColor(orderQuantities: orderQuantities, query: query)
+        let minifigureRows = minifigures(orderQuantities: orderQuantities, query: query)
 
-        let matches: Bool
-        if dimensionPrefixQuery != nil {
-            if normalizedQueryTokens.count <= 1 {
-                matches = true
-            } else {
-                matches = secondaryTokens.allSatisfy { token in
-                    matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
-                }
-            }
-        } else if primaryTokenIsNumeric {
-            if secondaryTokens.isEmpty {
-                matches = true
-            } else {
-                matches = secondaryTokens.allSatisfy { token in
-                    matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
-                }
-            }
-        } else if primaryTokenIsDimensionQuery {
-            matches = matchesToken(primaryToken, partID: part.partID, partTokens: partTokens, searchableText: searchable) &&
-            secondaryTokens.allSatisfy { token in
-                matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
-            }
-        } else if shouldMatchPartIDPrefix {
-            if !partIDLower.hasPrefix(primaryToken) {
-                return false
-            }
-            if secondaryTokens.isEmpty {
-                matches = true
-            } else {
-                matches = secondaryTokens.allSatisfy { token in
-                    matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
-                }
-            }
-        } else if colorLower.contains(rawQuery) || nameLower.contains(rawQuery) {
-            matches = true
+        if partGroups.isEmpty && minifigureRows.isEmpty {
+            EmptyStateView(
+                icon: "shippingbox",
+                title: "No parts",
+                message: "No missing parts from \(filter.set.setNumber) match your search."
+            )
         } else {
-            matches = normalizedQueryTokens.allSatisfy { token in
-                matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
-            }
-        }
+            List {
+                ForEach(partGroups, id: \.color) { group in
+                    Section(group.color) {
+                        ForEach(group.rows) { row in
+                            PartRowNavigationWrapper(part: row.part, orderQuantity: row.orderQuantity)
+                        }
+                    }
+                }
 
-        return matches
+                if !minifigureRows.isEmpty {
+                    Section("Minifigures") {
+                        ForEach(minifigureRows) { row in
+                            OrderMinifigureRowView(minifigure: row.minifigure, orderQuantity: row.orderQuantity)
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .environment(\.isFilteringMissingParts, true)
+        }
     }
 
-    private func matchesPartHierarchy(_ part: Part, query: String) -> Bool {
-        if matchesPartSearch(part, query: query) {
+    private func partsByColor(
+        orderQuantities: OrderQuantityLookup,
+        query: PartSearchQuery?
+    ) -> [(color: String, rows: [SetFilterPartRow])] {
+        let rows = filter.set.parts.compactMap { part -> SetFilterPartRow? in
+            guard part.inventorySection != .extra, Self.hasMissingHierarchy(part) else { return nil }
+
+            let quantityInOrder = orderQuantities.quantity(of: part)
+            guard quantityInOrder > 0 else { return nil }
+
+            if let query, !Self.matchesHierarchy(of: part, query: query) {
+                return nil
+            }
+            return SetFilterPartRow(part: part, orderQuantity: quantityInOrder)
+        }
+
+        return Dictionary(grouping: rows) { row in
+            let trimmed = row.part.colorName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "Unknown Color" : trimmed
+        }
+        .map { color, rows in
+            let sortedRows = rows.sorted { lhs, rhs in
+                Part.subpartSortComparator(lhs.part, rhs.part)
+            }
+            return (color: color, rows: sortedRows)
+        }
+        .sorted { lhs, rhs in lhs.color.localizedCaseInsensitiveCompare(rhs.color) == .orderedAscending }
+    }
+
+    private func minifigures(
+        orderQuantities: OrderQuantityLookup,
+        query: PartSearchQuery?
+    ) -> [SetFilterMinifigureRow] {
+        let queryTokens = filter.remainingQuery.map(SearchText.tokens(from:)) ?? []
+
+        return filter.set.minifigures
+            .compactMap { minifigure -> SetFilterMinifigureRow? in
+                guard Self.hasMissingHierarchy(minifigure) else { return nil }
+
+                let quantityInOrder = orderQuantities.quantity(of: minifigure)
+                guard quantityInOrder > 0 else { return nil }
+
+                if let query {
+                    let matchesFigure = Self.matches(minifigure, tokens: queryTokens)
+                    guard matchesFigure || minifigure.parts.contains(where: { Self.matchesHierarchy(of: $0, query: query) }) else {
+                        return nil
+                    }
+                }
+                return SetFilterMinifigureRow(minifigure: minifigure, orderQuantity: quantityInOrder)
+            }
+            .sorted { lhs, rhs in
+                if lhs.minifigure.name != rhs.minifigure.name {
+                    return lhs.minifigure.name.localizedCaseInsensitiveCompare(rhs.minifigure.name) == .orderedAscending
+                }
+                return lhs.minifigure.identifier.localizedCaseInsensitiveCompare(rhs.minifigure.identifier) == .orderedAscending
+            }
+    }
+
+    private static func matchesHierarchy(of part: Part, query: PartSearchQuery) -> Bool {
+        let colorName = part.colorName.isEmpty ? "Unknown Color" : part.colorName
+        if query.matches(partID: part.partID, colorName: colorName, name: part.name) {
             return true
         }
-
-        return part.subparts.contains { matchesPartHierarchy($0, query: query) }
+        return part.subparts.contains { matchesHierarchy(of: $0, query: query) }
     }
 
-    private func matchesMinifigureSearch(_ minifigure: Minifigure, query: String) -> Bool {
-        let tokens = queryTokens(from: query)
+    private static func matches(_ minifigure: Minifigure, tokens: [String]) -> Bool {
         guard !tokens.isEmpty else { return true }
 
-        let figureTokens = Set(queryTokens(from: "\(minifigure.identifier) \(minifigure.name)"))
+        let figureTokens = Set(SearchText.tokens(from: "\(minifigure.identifier) \(minifigure.name)"))
         return tokens.allSatisfy { token in
-            figureTokens.contains(where: { $0.contains(token) || $0.hasPrefix(token) })
+            figureTokens.contains { $0.contains(token) }
         }
     }
 
-    private func matchesPartSearch(_ part: Part, query: String) -> Bool {
-        let rawQuery = normalized(query)
-        guard !rawQuery.isEmpty else { return false }
+    private static func hasMissingHierarchy(_ part: Part) -> Bool {
+        part.quantityHave < part.quantityNeeded || part.subparts.contains { hasMissingHierarchy($0) }
+    }
 
-        let startsWithNumber = rawQuery.first?.isNumber == true
-        let components = rawQuery.split(whereSeparator: { $0.isWhitespace })
-        let primaryToken = components.first.map(String.init) ?? rawQuery
-        let primaryTokenIsShortLength = isShortLengthToken(primaryToken)
-        let primaryTokenIsNumericOnly = primaryToken.allSatisfy { $0.isNumber }
-        let primaryTokenIsNumeric = primaryTokenIsNumericOnly && !primaryTokenIsShortLength
-        let primaryTokenIsDimensionQuery = normalizedDimensionQuery(for: primaryToken) != nil
-        let numericPrefixToken = String(primaryToken.prefix { $0.isNumber })
-        let dimensionPrefixQuery = normalizedDimensionPrefix(in: rawQuery)
-        let shouldEnforceNumericPrefix = !numericPrefixToken.isEmpty && dimensionPrefixQuery == nil && !primaryTokenIsShortLength
-        let shouldMatchPartIDPrefix = startsWithNumber && !primaryTokenIsNumericOnly && !primaryTokenIsDimensionQuery && !primaryTokenIsShortLength
-        let normalizedQueryTokens = queryTokens(from: rawQuery)
-        let secondaryTokens = normalizedQueryTokens.dropFirst()
+    private static func hasMissingHierarchy(_ minifigure: Minifigure) -> Bool {
+        minifigure.quantityHave < minifigure.quantityNeeded || minifigure.parts.contains { hasMissingHierarchy($0) }
+    }
+}
 
-        let colorName = part.colorName.isEmpty ? "Unknown Color" : part.colorName
-        let partIDLower = normalized(part.partID)
-        let colorLower = normalized(colorName)
-        let nameLower = normalized(part.name)
-        let searchable = searchableText(for: part, colorName: colorName)
-        let partTokens = partSearchTokens(for: part, colorName: colorName)
+/// How many of each part and minifigure the order contains.
+private struct OrderQuantityLookup {
+    private struct PartColorKey: Hashable {
+        let partID: String
+        let colorID: String
+    }
 
-        if shouldEnforceNumericPrefix, !matchesNumericPartID(part.partID, numericQuery: numericPrefixToken) {
-            return false
-        }
+    private var partQuantities: [PartColorKey: Int] = [:]
+    private var minifigureQuantities: [String: Int] = [:]
 
-        if let dimensionPrefixQuery, !searchable.contains(dimensionPrefixQuery) {
-            return false
-        }
-
-        let matches: Bool
-        if dimensionPrefixQuery != nil {
-            if normalizedQueryTokens.count <= 1 {
-                matches = true
-            } else {
-                matches = secondaryTokens.allSatisfy { token in
-                    matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
-                }
-            }
-        } else if primaryTokenIsNumeric {
-            if secondaryTokens.isEmpty {
-                matches = true
-            } else {
-                matches = secondaryTokens.allSatisfy { token in
-                    matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
-                }
-            }
-        } else if primaryTokenIsDimensionQuery {
-            matches = matchesToken(primaryToken, partID: part.partID, partTokens: partTokens, searchableText: searchable) &&
-            secondaryTokens.allSatisfy { token in
-                matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
-            }
-        } else if shouldMatchPartIDPrefix {
-            if !partIDLower.hasPrefix(primaryToken) {
-                return false
-            }
-            if secondaryTokens.isEmpty {
-                matches = true
-            } else {
-                matches = secondaryTokens.allSatisfy { token in
-                    matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
-                }
-            }
-        } else if colorLower.contains(rawQuery) || nameLower.contains(rawQuery) {
-            matches = true
-        } else {
-            matches = normalizedQueryTokens.allSatisfy { token in
-                matchesToken(token, partID: part.partID, partTokens: partTokens, searchableText: searchable)
+    init(order: BrickOrder) {
+        for part in order.parts {
+            switch part.itemType {
+            case .minifigure:
+                minifigureQuantities[SearchText.normalized(part.partID), default: 0] += part.quantity
+            case .part:
+                let key = PartColorKey(
+                    partID: SearchText.normalized(part.partID),
+                    colorID: SearchText.normalized(part.colorID)
+                )
+                partQuantities[key, default: 0] += part.quantity
             }
         }
-
-        return matches
     }
 
-    private func partSearchTokens(for part: OrderPart, colorName: String) -> [String] {
-        let combined = "\(part.partID) \(colorName) \(part.name)"
-        return Array(Set(queryTokens(from: combined)))
+    func quantity(of part: Part) -> Int {
+        let key = PartColorKey(
+            partID: SearchText.normalized(part.partID),
+            colorID: SearchText.normalized(part.colorID)
+        )
+        return partQuantities[key] ?? 0
     }
 
-    private func partSearchTokens(for part: Part, colorName: String) -> [String] {
-        let combined = "\(part.partID) \(colorName) \(part.name)"
-        return Array(Set(queryTokens(from: combined)))
+    func quantity(of minifigure: Minifigure) -> Int {
+        minifigureQuantities[SearchText.normalized(minifigure.identifier)] ?? 0
     }
+}
 
-    private func matchesToken(
-        _ token: String,
-        partID: String,
-        partTokens: [String],
-        searchableText: String
-    ) -> Bool {
-        if token.allSatisfy({ $0.isNumber }) && !isShortLengthToken(token) {
-            if matchesNumericPartID(partID, numericQuery: token) {
-                return true
-            }
+private struct SetFilterPartRow: Identifiable {
+    let part: Part
+    let orderQuantity: Int
 
-            return partTokens.contains { $0 == token }
-        }
+    var id: PersistentIdentifier { part.persistentModelID }
+}
 
-        if let dimensionQuery = normalizedDimensionQuery(for: token),
-           searchableText.contains(dimensionQuery) {
-            return true
-        }
+private struct SetFilterMinifigureRow: Identifiable {
+    let minifigure: Minifigure
+    let orderQuantity: Int
 
-        return partTokens.contains { $0.hasPrefix(token) || $0.contains(token) }
-    }
-
-    private func isShortLengthToken(_ token: String) -> Bool {
-        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-
-        var normalizedToken = trimmed.lowercased()
-        if normalizedToken.hasSuffix("l") {
-            normalizedToken.removeLast()
-        }
-
-        guard (1...2).contains(normalizedToken.count) else { return false }
-        return normalizedToken.allSatisfy { $0.isNumber }
-    }
-
-    private func matchesNumericPartID(_ partID: String, numericQuery: String) -> Bool {
-        let normalizedQuery = normalized(numericQuery.trimmingCharacters(in: .whitespacesAndNewlines))
-        guard !normalizedQuery.isEmpty else { return false }
-
-        let numericPrefix = normalized(partID.trimmingCharacters(in: .whitespacesAndNewlines))
-            .prefix { $0.isNumber }
-
-        guard !numericPrefix.isEmpty else { return false }
-        return numericPrefix == normalizedQuery
-    }
-
-    private func normalizedDimensionPrefix(in query: String) -> String? {
-        let prefix = query.prefix { character in
-            character.isNumber || character.isWhitespace || character == "x" || character == "X" || character == "×"
-        }
-        guard !prefix.isEmpty else { return nil }
-        return normalizedDimensionQuery(for: String(prefix))
-    }
-
-    private func normalizedDimensionQuery(for token: String) -> String? {
-        let lowercased = normalized(token).replacingOccurrences(of: "×", with: "x")
-        let compact = lowercased.replacingOccurrences(of: " ", with: "")
-
-        guard compact.contains("x") else { return nil }
-
-        let components = compact.split(separator: "x", omittingEmptySubsequences: false)
-        guard components.count >= 2 else { return nil }
-
-        let numericComponents = components.map(String.init)
-        guard numericComponents.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isNumber } }) else {
-            return nil
-        }
-
-        return numericComponents.joined(separator: " x ")
-    }
-
-    private func searchableText(for part: OrderPart, colorName: String) -> String {
-        let combined = normalized("\(part.partID) \(colorName) \(part.name)")
-            .replacingOccurrences(of: "×", with: "x")
-
-        return combined
-            .split(whereSeparator: { $0.isWhitespace })
-            .joined(separator: " ")
-    }
-
-    private func searchableText(for part: Part, colorName: String) -> String {
-        let combined = normalized("\(part.partID) \(colorName) \(part.name)")
-            .replacingOccurrences(of: "×", with: "x")
-
-        return combined
-            .split(whereSeparator: { $0.isWhitespace })
-            .joined(separator: " ")
-    }
-
-    private func queryTokens(from text: String) -> [String] {
-        text
-            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-            .map { normalized(String($0)) }
-    }
-
-    private func normalized(_ text: String) -> String {
-        text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-    }
-
-    private func hasMissingHierarchy(_ part: Part) -> Bool {
-        if part.quantityHave < part.quantityNeeded {
-            return true
-        }
-
-        return part.subparts.contains { hasMissingHierarchy($0) }
-    }
-
-    private func hasMissingHierarchy(_ minifigure: Minifigure) -> Bool {
-        if minifigure.quantityHave < minifigure.quantityNeeded {
-            return true
-        }
-
-        return minifigure.parts.contains { hasMissingHierarchy($0) }
-    }
-
-    private func updateSearchQuery() async {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if trimmed.isEmpty {
-            await MainActor.run { effectiveSearchText = "" }
-            return
-        }
-
-        do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
-        guard !Task.isCancelled else { return }
-        await MainActor.run { effectiveSearchText = trimmed }
-    }
+    var id: PersistentIdentifier { minifigure.persistentModelID }
 }
 
 private struct OrderPartRowView: View {
@@ -848,7 +514,7 @@ private struct OrderPartRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            thumbnail
+            OrderPartThumbnail(part: part)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(displayName)
@@ -884,9 +550,12 @@ private struct OrderPartRowView: View {
         let trimmed = part.name.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Part \(part.partID)" : trimmed
     }
+}
 
-    @ViewBuilder
-    private var thumbnail: some View {
+private struct OrderPartThumbnail: View {
+    let part: OrderPart
+
+    var body: some View {
         QuickLookThumbnail(item: part) {
             if let url = part.imageURL {
                 ThumbnailImage(url: url) { phase in
@@ -902,7 +571,7 @@ private struct OrderPartRowView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     case .failure(let state):
                         VStack(spacing: 6) {
-                            placeholder
+                            ThumbnailPlaceholder(systemImage: "cube.transparent", width: 80, height: 60)
                             Button("Retry") {
                                 state.retry()
                             }
@@ -912,42 +581,20 @@ private struct OrderPartRowView: View {
                 }
                 .background(.white)
             } else {
-                placeholder
+                ThumbnailPlaceholder(systemImage: "cube.transparent", width: 80, height: 60)
             }
         }
-    }
-
-    private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color(uiColor: .tertiarySystemFill))
-            .frame(width: 80, height: 60)
-            .overlay {
-                Image(systemName: "cube.transparent")
-                    .foregroundStyle(.secondary)
-            }
     }
 }
 
 private struct OrderMinifigureRowView: View {
     @Environment(\.modelContext) private var modelContext
-    @Bindable var minifigure: Minifigure
-    let orderQuantity: Int?
-
-    init(minifigure: Minifigure, orderQuantity: Int? = nil) {
-        self._minifigure = Bindable(minifigure)
-        self.orderQuantity = orderQuantity
-    }
-
-    private var quantityBinding: Binding<Int> {
-        Binding(
-            get: { minifigure.quantityHave },
-            set: { updateQuantity(to: $0) }
-        )
-    }
+    let minifigure: Minifigure
+    var orderQuantity: Int? = nil
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            OrderMinifigureThumbnailView(url: minifigure.imageURL, size: 56)
+            MinifigureThumbnailView(url: minifigure.imageURL, size: 56)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(minifigure.displayName(includeInstanceSuffix: true))
@@ -965,7 +612,7 @@ private struct OrderMinifigureRowView: View {
                     .font(.title3.bold())
                     .contentTransition(.numericText())
 
-                Stepper("", value: quantityBinding, in: 0...max(0, minifigure.quantityNeeded))
+                Stepper("", value: quantityHave, in: 0...max(0, minifigure.quantityNeeded))
                     .labelsHidden()
 
                 if let orderQuantity, orderQuantity > 0 {
@@ -979,65 +626,22 @@ private struct OrderMinifigureRowView: View {
         .padding(.vertical, 6)
     }
 
+    private var quantityHave: Binding<Int> {
+        Binding(
+            get: { minifigure.quantityHave },
+            set: { updateQuantity(to: $0) }
+        )
+    }
+
     private func updateQuantity(to newValue: Int) {
         let clamped = max(0, min(newValue, minifigure.quantityNeeded))
         guard clamped != minifigure.quantityHave else { return }
 
-        let applyChange = {
+        withAnimation {
             minifigure.quantityHave = clamped
-            _minifigure.wrappedValue.synchronizeParts(to: clamped)
+            minifigure.synchronizeParts(to: clamped)
             try? modelContext.save()
         }
-
-        withAnimation {
-            applyChange()
-        }
-    }
-}
-
-private struct OrderMinifigureThumbnailView: View {
-    let url: URL?
-    let size: CGFloat
-
-    var body: some View {
-        Group {
-            if let url {
-                ThumbnailImage(url: url) { phase in
-                    switch phase {
-                    case .empty, .loading:
-                        ProgressView()
-                            .frame(width: size, height: size)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: size, height: size)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    case .failure(let state):
-                        VStack(spacing: 6) {
-                            placeholder
-                            Button("Retry") {
-                                state.retry()
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    }
-                }
-                .background(.white)
-            } else {
-                placeholder
-            }
-        }
-    }
-
-    private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color(uiColor: .tertiarySystemFill))
-            .frame(width: size, height: size)
-            .overlay {
-                Image(systemName: "person.fill")
-                    .foregroundStyle(.secondary)
-            }
     }
 }
 

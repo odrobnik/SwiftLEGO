@@ -7,7 +7,7 @@ import BrickCore
 struct MinifigureSearchResultRow: View {
     @Environment(\.modelContext) private var modelContext
     let set: BrickSet
-    @Bindable var minifigure: Minifigure
+    let minifigure: Minifigure
 
     private var missingCount: Int {
         max(minifigure.quantityNeeded - minifigure.quantityHave, 0)
@@ -78,7 +78,7 @@ struct MinifigureSearchResultRow: View {
 
         let applyChange = {
             minifigure.quantityHave = clamped
-            _minifigure.wrappedValue.synchronizeParts(to: clamped)
+            minifigure.synchronizeParts(to: clamped)
             try? modelContext.save()
         }
 
@@ -114,7 +114,7 @@ private struct MinifigureThumbnail: View {
                             .scaledToFit()
                     case .failure(let state):
                         ZStack {
-                            placeholder
+                            ThumbnailPlaceholder(systemImage: "person.fill")
                             VStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.caption.weight(.bold))
@@ -130,7 +130,7 @@ private struct MinifigureThumbnail: View {
                 }
                 .background(.white)
             } else {
-                placeholder
+                ThumbnailPlaceholder(systemImage: "person.fill")
             }
         }
         .frame(width: 60, height: 60)
@@ -139,15 +139,6 @@ private struct MinifigureThumbnail: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
         )
-    }
-
-    private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color(uiColor: .tertiarySystemFill))
-            .overlay {
-                Image(systemName: "person.fill")
-                    .foregroundStyle(.secondary)
-            }
     }
 }
 

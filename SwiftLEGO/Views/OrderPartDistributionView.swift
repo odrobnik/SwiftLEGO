@@ -157,6 +157,7 @@ struct OrderPartDistributionView: View {
         .task(id: matchingMinifigureIDs) {
             cachedMinifigureMatches = computeMinifigureMatches()
         }
+        .quickLookPresenter()
         .navigationTitle(displayName)
         .toolbarTitleDisplayMode(.inline)
     }

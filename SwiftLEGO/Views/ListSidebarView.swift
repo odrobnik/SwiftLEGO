@@ -5,33 +5,18 @@ import BrickCore
 
 struct ListSidebarView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.brickLinkService) private var brickLinkService
+    @Environment(AppNavigation.self) private var navigation
     @Query(animation: .default) private var lists: [CollectionList]
     @Query(animation: .default) private var orders: [BrickOrder]
-    @Binding var selectionID: PersistentIdentifier?
-    @Binding var selectedOrderID: PersistentIdentifier?
-    @Binding var selectedCategoryPath: [String]?
-    @State private var editorState: EditorState?
-    @State private var expandedCategoryIDs: Set<String> = []
-    @State private var setBeingEdited: BrickSet?
+    @State private var sidebarState = SidebarState()
     @State private var exportConfiguration = ExportConfiguration()
     @State private var isImportingInventory = false
     @State private var isImportingOrder = false
     @State private var importAlert: ImportAlert?
-    @State private var importingListIDs: Set<PersistentIdentifier> = []
     @State private var importStatusMessage: String?
     @State private var pendingImportURL: URL?
     @State private var pendingOrderImportURL: URL?
-    let onSetSelected: (BrickSet) -> Void
-    let onCategorySelected: ([String]?) -> Void
-    let onOrderSelected: (BrickOrder) -> Void
-    private let brickLinkService = BrickLinkService()
-    private let orderParser = BrickLinkOrderDetailParser()
-
-    private var listCountDescription: String {
-        "\(lists.count) list\(lists.count == 1 ? "" : "s")"
-    }
-    private let uncategorizedCategoryTitle = "Uncategorized"
-    private let rootCategoryTitle = CategoryConstants.rootCategoryTitle
 
     var body: some View {
         List {
@@ -49,52 +34,12 @@ struct ListSidebarView: View {
             if !lists.isEmpty {
                 Section("Lists") {
                     ForEach(lists) { list in
-                        Button {
-                            selectList(list)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "square.stack.3d.up")
-                                    .foregroundStyle(.secondary)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(list.name)
-                                        .font(.subheadline)
-                                        .lineLimit(1)
-                                    if importingListIDs.contains(list.persistentModelID) {
-                                        HStack(spacing: 6) {
-                                            ProgressView()
-                                                .scaleEffect(0.6)
-                                            Text("Importing…")
-                                        }
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    } else {
-                                        Text("\(list.sets.count) set\(list.sets.count == 1 ? "" : "s")")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                            }
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(listSelectionBackground(for: list))
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Rename", systemImage: "pencil") {
-                                editorState = .rename(list)
-                            }
-                            Button(role: .destructive) {
-                                delete(list)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
+                        SidebarListRow(list: list)
                     }
                     .onDelete { indexSet in
-                        indexSet.map { lists[$0] }.forEach(delete)
+                        for list in indexSet.map({ lists[$0] }) {
+                            navigation.delete(list, in: modelContext)
+                        }
                     }
                 }
             }
@@ -102,76 +47,37 @@ struct ListSidebarView: View {
             if !orders.isEmpty {
                 Section("Orders") {
                     ForEach(orders) { order in
-                        Button {
-                            selectOrder(order)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "cart")
-                                    .foregroundStyle(.secondary)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(order.displayName)
-                                        .font(.subheadline)
-                                        .lineLimit(1)
-                                    Text("^[\(order.parts.count) item](inflect: true)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                            }
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(orderSelectionBackground(for: order))
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                delete(order)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
+                        SidebarOrderRow(order: order)
                     }
                     .onDelete { indexSet in
-                        indexSet.map { orders[$0] }.forEach(delete)
+                        for order in indexSet.map({ orders[$0] }) {
+                            navigation.delete(order, in: modelContext)
+                        }
                     }
                 }
             }
 
-            if !categoryNodes.isEmpty {
-                Section {
-                    if let root = rootCategoryNode {
-                        rootCategoryRow(for: root)
-                        ForEach(root.children) { node in
-                            categoryTreeRow(for: node, level: 0)
-                        }
-                    } else {
-                        ForEach(categoryNodes) { node in
-                            categoryTreeRow(for: node, level: 0)
-                        }
-                    }
-                }
-            }
+            CategoryTreeSection()
         }
+        .environment(sidebarState)
         .listStyle(.sidebar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    editorState = .create
+                    sidebarState.editorState = .create
                 } label: {
                     Label("Add List", systemImage: "plus")
                 }
             }
             ToolbarItemGroup(placement: .secondaryAction) {
                 Button {
-                    beginInventoryImport()
+                    isImportingInventory = true
                 } label: {
                     Label("Import Collection", systemImage: "square.and.arrow.down")
                 }
 
                 Button {
-                    beginOrderImport()
+                    isImportingOrder = true
                 } label: {
                     Label("Import Order", systemImage: "cart.badge.plus")
                 }
@@ -203,24 +109,12 @@ struct ListSidebarView: View {
                 .padding()
             }
         }
-        .onChange(of: lists.count) { _, _ in
-            ensureSelection()
+        .sheet(item: $sidebarState.editorState) { state in
+            ListEditorView(mode: state)
+                .environment(navigation)
         }
-        .onChange(of: orders.count) { _, _ in
-            ensureSelection()
-        }
-        .sheet(item: $editorState) { state in
-            ListEditorView(
-                mode: state,
-                onSubmit: handleEditorSubmit(_:),
-                onDelete: { list in delete(list) }
-            )
-        }
-        .sheet(item: $setBeingEdited) { set in
-            SetEditView(set: set)
-        }
-        .onChange(of: selectedCategoryPath) { _, newValue in
-            if let path = newValue {
+        .onChange(of: navigation.selectedCategoryPath) { _, path in
+            if let path {
                 expandAncestors(of: path)
             }
         }
@@ -268,57 +162,19 @@ struct ListSidebarView: View {
         .task(id: pendingImportURL) {
             guard let url = pendingImportURL else { return }
             await processImport(from: url)
-            await MainActor.run {
+            // Picking another file cancels this import and starts a new task for it;
+            // only clear the request if it is still this one.
+            if pendingImportURL == url {
                 pendingImportURL = nil
             }
         }
         .task(id: pendingOrderImportURL) {
             guard let url = pendingOrderImportURL else { return }
             await processOrderImport(from: url)
-            await MainActor.run {
+            if pendingOrderImportURL == url {
                 pendingOrderImportURL = nil
             }
         }
-    }
-
-    private func delete(_ list: CollectionList) {
-        if selectionID == list.persistentModelID {
-            selectionID = nil
-        }
-        modelContext.delete(list)
-        try? modelContext.save()
-        ensureSelection()
-        if lists.isEmpty {
-            selectedCategoryPath = nil
-            onCategorySelected(nil)
-        }
-    }
-
-    private func delete(_ order: BrickOrder) {
-        if selectedOrderID == order.persistentModelID {
-            selectedOrderID = nil
-        }
-        modelContext.delete(order)
-        try? modelContext.save()
-        ensureSelection()
-    }
-
-    private func handleEditorSubmit(_ result: EditorResult) {
-        switch result {
-        case .created(let name):
-            let newList = CollectionList(name: name)
-            modelContext.insert(newList)
-            selectionID = newList.persistentModelID
-            selectedCategoryPath = nil
-            onCategorySelected(nil)
-        case .renamed(let list, let name):
-            list.name = name
-            selectionID = list.persistentModelID
-            selectedCategoryPath = nil
-            onCategorySelected(nil)
-        }
-
-        try? modelContext.save()
     }
 
     private func beginInventoryExport() {
@@ -343,15 +199,6 @@ struct ListSidebarView: View {
         )
     }
 
-    private func beginInventoryImport() {
-        isImportingInventory = true
-    }
-
-    private func beginOrderImport() {
-        isImportingOrder = true
-    }
-
-    @MainActor
     private func processImport(from sourceURL: URL) async {
         importStatusMessage = "Reading file…"
         do {
@@ -363,26 +210,25 @@ struct ListSidebarView: View {
 
             let summary = try await performImport(using: snapshot)
             importAlert = .success(summary)
-            importStatusMessage = nil
+        } catch is CancellationError {
+            // The import stopped early; what it imported so far is kept.
+        } catch let importError as InventoryImportError {
+            importAlert = .error(importError.localizedDescription)
         } catch {
-            if let importError = error as? InventoryImportError {
-                importAlert = .error(importError.localizedDescription)
-            } else {
-                importAlert = .error("Import failed: \(error.localizedDescription)")
-            }
-            importingListIDs.removeAll()
-            importStatusMessage = nil
+            importAlert = .error("Import failed: \(error.localizedDescription)")
         }
+
+        sidebarState.importingListIDs.removeAll()
+        importStatusMessage = nil
     }
 
-    @MainActor
     private func processOrderImport(from sourceURL: URL) async {
         importStatusMessage = "Reading order…"
         do {
             let data = try await loadFileData(from: sourceURL)
             importStatusMessage = "Parsing order…"
 
-            let parsed = try await orderParser.parseOrderDetail(
+            let parsed = try await BrickLinkOrderDetailParser().parseOrderDetail(
                 htmlData: data,
                 baseURL: URL(string: "https://www.bricklink.com")
             )
@@ -409,15 +255,13 @@ struct ListSidebarView: View {
 
             let summary: LocalizedStringResource = "Imported \(orderName) with ^[\(parts.count) part](inflect: true)."
             importAlert = .success(Text(summary))
-            importStatusMessage = nil
+        } catch let importError as OrderImportError {
+            importAlert = .error(importError.localizedDescription)
         } catch {
-            if let importError = error as? OrderImportError {
-                importAlert = .error(importError.localizedDescription)
-            } else {
-                importAlert = .error("Order import failed: \(error.localizedDescription)")
-            }
-            importStatusMessage = nil
+            importAlert = .error("Order import failed: \(error.localizedDescription)")
         }
+
+        importStatusMessage = nil
     }
 
     private func inferredOrderName(from parsed: BrickLinkOrderDetail, sourceURL: URL) -> String {
@@ -544,7 +388,7 @@ struct ListSidebarView: View {
 
         importStatusMessage = "Refreshing colors…"
         let localeIdentifier = localeIdentifier(for: .current)
-        _ = try await ColorImportUtilities.refreshBrickLinkColors(
+        try await ColorImportUtilities.refreshBrickLinkColors(
             modelContext: modelContext,
             locale: localeIdentifier
         )
@@ -557,7 +401,7 @@ struct ListSidebarView: View {
 
     private func missingColorIDs(from neededIDs: Set<Int>) -> Set<Int> {
         let descriptor = FetchDescriptor<BrickColor>()
-        let existingIDs = (try? modelContext.fetch(descriptor))?.map { $0.brickLinkColorID } ?? []
+        let existingIDs = (try? modelContext.fetch(descriptor))?.map(\.brickLinkColorID) ?? []
         return neededIDs.subtracting(existingIDs)
     }
 
@@ -594,13 +438,15 @@ struct ListSidebarView: View {
         }.value
     }
 
-    @MainActor
+    /// Imports the lists, sets and orders of `snapshot`. When the import task is
+    /// cancelled it stops after the current set, keeps the lists imported so far and
+    /// throws `CancellationError`.
     private func performImport(using snapshot: InventorySnapshot) async throws -> Text {
         if snapshot.lists.isEmpty && snapshot.sets.isEmpty && snapshot.orders.isEmpty {
             throw InventoryImportError.emptySnapshot
         }
 
-        importingListIDs.removeAll()
+        sidebarState.importingListIDs.removeAll()
 
         let existingLists = Array(lists)
         var lines: [String] = []
@@ -614,27 +460,34 @@ struct ListSidebarView: View {
         } else {
             let setProvider = InventoryImportSetProvider(modelContext: modelContext, service: brickLinkService)
             let setRestorer = InventorySnapshotSetRestorer(modelContext: modelContext, setProvider: setProvider)
-            var usedNames = Set(existingLists.map { $0.name })
+            var usedNames = Set(existingLists.map(\.name))
             var createdLists: [CollectionList] = []
             var totalImportedSets = 0
             var missingSetNumbers = Set<String>()
 
             for listSnapshot in snapshot.lists {
+                if Task.isCancelled { break }
+
                 let uniqueName = uniqueListName(for: listSnapshot.name, usedNames: &usedNames)
                 let newList = CollectionList(name: uniqueName)
                 modelContext.insert(newList)
                 let listID = newList.persistentModelID
-                importingListIDs.insert(listID)
+                sidebarState.importingListIDs.insert(listID)
                 importStatusMessage = "Importing \(uniqueName)…"
 
                 var importedCount = 0
                 for setSnapshot in listSnapshot.sets {
+                    if Task.isCancelled { break }
+
                     do {
                         importStatusMessage = "Syncing \(setSnapshot.setNumber)…"
                         _ = try await setRestorer.importSet(setSnapshot, into: newList)
                         importedCount += 1
                         totalImportedSets += 1
                     } catch {
+                        // A fetch that failed because the import was cancelled says
+                        // nothing about whether the set exists.
+                        if Task.isCancelled { break }
                         missingSetNumbers.insert(setSnapshot.setNumber)
                     }
                     importStatusMessage = "Importing \(uniqueName)…"
@@ -646,12 +499,13 @@ struct ListSidebarView: View {
                     modelContext.delete(newList)
                 }
 
-                importingListIDs.remove(listID)
+                sidebarState.importingListIDs.remove(listID)
             }
 
-            importingListIDs.removeAll()
+            sidebarState.importingListIDs.removeAll()
 
             try modelContext.save()
+            try Task.checkCancellation()
 
             if !createdLists.isEmpty {
                 let names = createdLists.map(\.name).joined(separator: ", ")
@@ -676,7 +530,6 @@ struct ListSidebarView: View {
         return Text(lines.joined(separator: "\n"))
     }
 
-    @MainActor
     private func importOrders(from snapshot: InventorySnapshot) throws -> String? {
         guard !snapshot.orders.isEmpty else { return nil }
         importStatusMessage = "Importing orders…"
@@ -769,135 +622,176 @@ struct ListSidebarView: View {
         }
     }
 
-    private func ensureSelection() {
-        guard selectedCategoryPath == nil else { return }
-        guard selectionID == nil, selectedOrderID == nil else { return }
-
-        if let firstList = lists.first {
-            selectionID = firstList.persistentModelID
-        } else if let firstOrder = orders.first {
-            selectedOrderID = firstOrder.persistentModelID
+    private func expandAncestors(of path: [String]) {
+        guard path.count > 1 else { return }
+        for depth in 1..<path.count {
+            sidebarState.expandedCategoryIDs.insert(CategoryNode.id(for: Array(path.prefix(depth))))
         }
     }
+}
 
-    private var categoryNodes: [CategoryNode] {
-        let allSets = lists.flatMap { $0.sets }
-        guard !allSets.isEmpty else { return [] }
+/// Sidebar state that the extracted rows read themselves, so that the row closures
+/// of the sidebar's lists depend on nothing but their item.
+@MainActor
+@Observable
+private final class SidebarState {
+    var importingListIDs: Set<PersistentIdentifier> = []
+    var expandedCategoryIDs: Set<String> = []
+    var editorState: EditorState?
+}
 
-        var nodesByID: [String: MutableCategoryNode] = [:]
-        var rootNodes: [MutableCategoryNode] = []
+private struct SidebarListRow: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppNavigation.self) private var navigation
+    @Environment(SidebarState.self) private var sidebarState
+    let list: CollectionList
 
-        for set in allSets {
-            let path = [rootCategoryTitle] + categoryPath(for: set)
-            guard !path.isEmpty else { continue }
-
-            var parentNode: MutableCategoryNode?
-
-            for depth in 0..<path.count {
-                let currentPath = Array(path.prefix(depth + 1))
-                let id = categoryID(for: currentPath)
-
-                let node: MutableCategoryNode
-                if let existing = nodesByID[id] {
-                    node = existing
-                } else {
-                    node = MutableCategoryNode(name: currentPath.last ?? "", path: currentPath)
-                    nodesByID[id] = node
-
-                    if let parent = parentNode {
-                        parent.children.append(node)
+    var body: some View {
+        Button {
+            navigation.select(.list(list.persistentModelID))
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "square.stack.3d.up")
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(list.name)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    if sidebarState.importingListIDs.contains(list.persistentModelID) {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                            Text("Importing…")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     } else {
-                        rootNodes.append(node)
+                        Text("^[\(list.sets.count) set](inflect: true)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
-
-                node.setIDs.insert(set.persistentModelID)
-                parentNode = node
+                Spacer()
+            }
+            .sidebarRowStyle(isSelected: navigation.selection == .list(list.persistentModelID))
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Rename", systemImage: "pencil") {
+                sidebarState.editorState = .rename(list)
+            }
+            Button(role: .destructive) {
+                navigation.delete(list, in: modelContext)
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
         }
-
-        func convert(_ node: MutableCategoryNode) -> CategoryNode {
-            let children = node.children
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-                .map(convert)
-
-            return CategoryNode(
-                id: categoryID(for: node.path),
-                name: node.name,
-                path: node.path,
-                setIDs: node.setIDs,
-                children: children
-            )
-        }
-
-        return rootNodes
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            .map(convert)
     }
+}
 
-    private var rootCategoryNode: CategoryNode? {
-        categoryNodes.first(where: { $0.path == [rootCategoryTitle] })
-    }
+private struct SidebarOrderRow: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppNavigation.self) private var navigation
+    let order: BrickOrder
 
-    private func categoryPath(for set: BrickSet) -> [String] {
-        var path = set.normalizedCategoryPath(uncategorizedTitle: uncategorizedCategoryTitle)
-
-        if path.isEmpty {
-            path = [uncategorizedCategoryTitle]
-        }
-
-        return path
-    }
-
-    @ViewBuilder
-    private func rootCategoryRow(for node: CategoryNode) -> some View {
+    var body: some View {
         Button {
-            selectCategory(node)
+            navigation.select(.order(order.persistentModelID))
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "cart")
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(order.displayName)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    Text("^[\(order.parts.count) item](inflect: true)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .sidebarRowStyle(isSelected: navigation.selection == .order(order.persistentModelID))
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                navigation.delete(order, in: modelContext)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+}
+
+/// The category tree of the sidebar. It builds the tree from its own query, so import
+/// progress and selection changes in the rest of the sidebar don't rebuild it.
+private struct CategoryTreeSection: View {
+    @Query(animation: .default) private var lists: [CollectionList]
+
+    var body: some View {
+        if let root = CategoryNode.tree(of: lists) {
+            Section {
+                CategoryRootRow(name: root.name, path: root.path, setCount: root.setCount)
+                ForEach(root.children) { node in
+                    CategoryTreeRow(node: node)
+                }
+            }
+        }
+    }
+}
+
+private struct CategoryRootRow: View {
+    @Environment(AppNavigation.self) private var navigation
+    let name: String
+    let path: [String]
+    let setCount: Int
+
+    var body: some View {
+        Button {
+            navigation.select(.category(path))
         } label: {
             HStack(spacing: 6) {
-                Text(node.name)
+                Text(name)
                     .font(.title3.weight(.semibold))
                 Spacer()
-                Text("\(node.setCount)")
+                Text("\(setCount)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selectionBackground(for: node))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .sidebarRowStyle(isSelected: navigation.selectedCategoryPath == path)
         }
         .buttonStyle(.plain)
     }
+}
 
-    @ViewBuilder
-    private func categoryTreeRow(for node: CategoryNode, level: Int) -> some View {
-        let isRootCategory = node.path == [rootCategoryTitle]
-        let nameFont: Font = {
-            if isRootCategory {
-                return .footnote.weight(.semibold)
-            } else if node.children.isEmpty {
-                return .subheadline
-            } else {
-                return .subheadline.weight(.semibold)
-            }
-        }()
-        let leading = level == 0 ? 0 : CGFloat(level) * 12
+/// A category below the root, followed by its subcategories while it is expanded.
+private struct CategoryTreeRow: View {
+    @Environment(AppNavigation.self) private var navigation
+    @Environment(SidebarState.self) private var sidebarState
+    let node: CategoryNode
 
+    /// The children of the root are at level 0.
+    private var level: Int {
+        max(node.path.count - 2, 0)
+    }
+
+    private var isExpanded: Bool {
+        sidebarState.expandedCategoryIDs.contains(node.id)
+            || navigation.selectedCategoryPath?.starts(with: node.path) == true
+    }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 2) {
                 if node.children.isEmpty {
                     Color.clear
                         .frame(width: 24, height: 24)
-                } else if isRootCategory {
-                    Color.clear
-                        .frame(width: 24, height: 24)
                 } else {
                     Button {
-                        toggleCategoryExpansion(node)
+                        toggleExpansion()
                     } label: {
-                        Image(systemName: isCategoryExpanded(node) ? "chevron.down" : "chevron.right")
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .foregroundStyle(.secondary)
                             .frame(width: 24, height: 24)
                     }
@@ -905,147 +799,128 @@ struct ListSidebarView: View {
                 }
 
                 Button {
-                    selectCategory(node)
+                    navigation.select(.category(node.path))
                 } label: {
-                    HStack(spacing: isRootCategory ? 6 : 8) {
+                    HStack(spacing: 8) {
                         Text(node.name)
-                            .font(nameFont)
+                            .font(node.children.isEmpty ? .subheadline : .subheadline.weight(.semibold))
                             .lineLimit(1)
                         Spacer()
                         Text("\(node.setCount)")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(selectionBackground(for: node))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .sidebarRowStyle(isSelected: navigation.selectedCategoryPath == node.path)
                 }
                 .buttonStyle(.plain)
             }
-            if (isRootCategory || isCategoryExpanded(node)), !node.children.isEmpty {
+
+            if isExpanded, !node.children.isEmpty {
                 ForEach(node.children) { child in
-                    AnyView(categoryTreeRow(for: child, level: level + 1))
+                    CategoryTreeRow(node: child)
                 }
             }
         }
-        .padding(.leading, isRootCategory ? 0 : leading)
+        .padding(.leading, CGFloat(level) * 12)
     }
 
-    @ViewBuilder
-    private func selectionBackground(for node: CategoryNode) -> some View {
-        if selectedCategoryPath == node.path {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.accentColor.opacity(0.12))
+    private func toggleExpansion() {
+        if sidebarState.expandedCategoryIDs.contains(node.id) {
+            sidebarState.expandedCategoryIDs.remove(node.id)
         } else {
-            Color.clear
+            sidebarState.expandedCategoryIDs.insert(node.id)
         }
     }
+}
 
-    private func selectCategory(_ node: CategoryNode) {
-        selectionID = nil
-        selectedOrderID = nil
-        selectedCategoryPath = node.path
-        onCategorySelected(node.path)
-        expandAncestors(of: node.path)
+private extension View {
+    /// The padding and selection highlight of a sidebar row.
+    func sidebarRowStyle(isSelected: Bool) -> some View {
+        padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
+}
 
-    private func selectList(_ list: CollectionList) {
-        selectedCategoryPath = nil
-        selectionID = list.persistentModelID
-        selectedOrderID = nil
-        onCategorySelected(nil)
-    }
+/// A category in the sidebar tree, with the number of sets filed under it.
+private struct CategoryNode: Identifiable {
+    let id: String
+    let name: String
+    let path: [String]
+    let setCount: Int
+    let children: [CategoryNode]
 
-    private func selectOrder(_ order: BrickOrder) {
-        selectionID = nil
-        selectedCategoryPath = nil
-        selectedOrderID = order.persistentModelID
-        onCategorySelected(nil)
-        onOrderSelected(order)
-    }
-
-    private func toggleCategoryExpansion(_ node: CategoryNode) {
-        let id = node.id
-        if expandedCategoryIDs.contains(id) {
-            expandedCategoryIDs.remove(id)
-        } else {
-            expandedCategoryIDs.insert(id)
-        }
-    }
-
-    private func isCategoryExpanded(_ node: CategoryNode) -> Bool {
-        if node.path == [rootCategoryTitle] {
-            return true
-        }
-
-        return expandedCategoryIDs.contains(node.id) || selectedCategoryPath?.starts(with: node.path) == true
-    }
-
-    private func expandAncestors(of path: [String]) {
-        guard path.count > 1 else { return }
-        for depth in 1..<path.count {
-            let prefix = Array(path.prefix(depth))
-            expandedCategoryIDs.insert(categoryID(for: prefix))
-        }
-    }
-
-    private func categoryID(for path: [String]) -> String {
+    static func id(for path: [String]) -> String {
         path.joined(separator: "\u{001F}")
     }
 
-    private func listSelectionBackground(for list: CollectionList) -> some View {
-        if selectionID == list.persistentModelID {
-            return AnyView(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.accentColor.opacity(0.12)))
+    /// The categories of all sets in `lists` under a root "Sets" node, or `nil` when
+    /// there are no sets.
+    static func tree(of lists: [CollectionList]) -> CategoryNode? {
+        let allSets = lists.flatMap(\.sets)
+        guard !allSets.isEmpty else { return nil }
+
+        let rootPath = [CategoryConstants.rootCategoryTitle]
+        let root = Builder(name: CategoryConstants.rootCategoryTitle, path: rootPath)
+        var buildersByID = [id(for: rootPath): root]
+
+        for set in allSets {
+            let setID = set.persistentModelID
+            root.setIDs.insert(setID)
+
+            var parent = root
+            var path = rootPath
+            for component in categoryPath(of: set) {
+                path.append(component)
+                let nodeID = id(for: path)
+
+                let node: Builder
+                if let existing = buildersByID[nodeID] {
+                    node = existing
+                } else {
+                    node = Builder(name: component, path: path)
+                    buildersByID[nodeID] = node
+                    parent.children.append(node)
+                }
+
+                node.setIDs.insert(setID)
+                parent = node
+            }
         }
-        return AnyView(Color.clear)
+
+        return root.build()
     }
 
-    private func orderSelectionBackground(for order: BrickOrder) -> some View {
-        if selectedOrderID == order.persistentModelID {
-            return AnyView(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.accentColor.opacity(0.12)))
-        }
-        return AnyView(Color.clear)
+    private static func categoryPath(of set: BrickSet) -> [String] {
+        let path = set.normalizedCategoryPath(uncategorizedTitle: CategoryConstants.uncategorizedTitle)
+        return path.isEmpty ? [CategoryConstants.uncategorizedTitle] : path
     }
 
-    private final class MutableCategoryNode {
+    private final class Builder {
         let name: String
         let path: [String]
         var setIDs: Set<PersistentIdentifier> = []
-        var children: [MutableCategoryNode] = []
+        var children: [Builder] = []
 
         init(name: String, path: [String]) {
             self.name = name
             self.path = path
         }
+
+        func build() -> CategoryNode {
+            CategoryNode(
+                id: CategoryNode.id(for: path),
+                name: name,
+                path: path,
+                setCount: setIDs.count,
+                children: children
+                    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                    .map { $0.build() }
+            )
+        }
     }
-
-    private struct CategoryNode: Identifiable {
-        let id: String
-        let name: String
-        let path: [String]
-        let setIDs: Set<PersistentIdentifier>
-        let children: [CategoryNode]
-
-        var setCount: Int { setIDs.count }
-    }
-
-    private func handleSetSelection(_ set: BrickSet, in list: CollectionList) {
-        selectionID = list.persistentModelID
-        selectedCategoryPath = nil
-        onCategorySelected(nil)
-        onSetSelected(set)
-    }
-
-    private func deleteSet(_ set: BrickSet) {
-        modelContext.delete(set)
-        try? modelContext.save()
-    }
-
-    private func selectionHighlight(for set: BrickSet) -> some View { Color.clear }
 }
 
 private struct ImportAlert: Identifiable {
@@ -1118,11 +993,6 @@ private struct ExportDocumentEnvelope: FileDocument {
 }
 
 // MARK: - Editor Support
-
-enum EditorResult {
-    case created(String)
-    case renamed(CollectionList, String)
-}
 
 enum EditorState: Identifiable {
     case create

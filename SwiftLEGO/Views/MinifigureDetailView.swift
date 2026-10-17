@@ -5,57 +5,48 @@ import BrickCore
 #endif
 
 struct MinifigureDetailView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Bindable var minifigure: Minifigure
+    let minifigure: Minifigure
     @State private var showMissingOnly: Bool = false
 
-    init(minifigure: Minifigure) {
-        self._minifigure = Bindable(minifigure)
-    }
-
     private var partsByColor: [(color: String, parts: [Part])] {
-        let grouped = Dictionary(grouping: filteredParts) { part in
-            normalizeColorName(part.colorName)
-        }
-
-        return grouped
-            .map { group in
-                let sortedParts = group.value.sorted { lhs, rhs in
-                    Part.subpartSortComparator(lhs, rhs)
-                }
-                return (color: group.key, parts: sortedParts)
-            }
-            .sorted { lhs, rhs in lhs.color < rhs.color }
-    }
-
-    private var filteredParts: [Part] {
-        showMissingOnly
+        let parts = showMissingOnly
             ? minifigure.parts.filter { $0.quantityHave < $0.quantityNeeded }
             : minifigure.parts
+
+        return Dictionary(grouping: parts) { part in
+            normalizeColorName(part.colorName)
+        }
+        .map { color, parts in
+            let sortedParts = parts.sorted { lhs, rhs in
+                Part.subpartSortComparator(lhs, rhs)
+            }
+            return (color: color, parts: sortedParts)
+        }
+        .sorted { lhs, rhs in lhs.color < rhs.color }
     }
 
     var body: some View {
-        List {
-            headerSection
+        let groups = partsByColor
 
-            if partsByColor.isEmpty {
+        List {
+            MinifigureHeaderSection(minifigure: minifigure)
+
+            if groups.isEmpty {
                 Section {
                     Text("No parts to display.")
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ForEach(partsByColor, id: \.color) { group in
+                ForEach(groups, id: \.color) { group in
                     Section(group.color) {
                         ForEach(group.parts) { part in
-                            PartRowNavigationWrapper(
-                                part: part,
-                                isFilteringMissing: showMissingOnly
-                            )
+                            PartRowNavigationWrapper(part: part)
                         }
                     }
                 }
             }
         }
+        .environment(\.isFilteringMissingParts, showMissingOnly)
         .quickLookPresenter()
         .listStyle(.insetGrouped)
         .toolbarTitleDisplayMode(.inline)
@@ -79,7 +70,16 @@ struct MinifigureDetailView: View {
         }
     }
 
-    private var headerSection: some View {
+    private func normalizeColorName(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Unknown Color" : trimmed
+    }
+}
+
+private struct MinifigureHeaderSection: View {
+    let minifigure: Minifigure
+
+    var body: some View {
         Section {
             HStack(alignment: .top, spacing: 16) {
                 MinifigureThumbnail(minifigure: minifigure)
@@ -114,27 +114,12 @@ struct MinifigureDetailView: View {
         }
     }
 
-    private func normalizeColorName(_ name: String) -> String {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Unknown Color" : trimmed
-    }
-
     private var categoryDescription: String? {
         guard !minifigure.categories.isEmpty else { return nil }
-        let path = minifigure.normalizedCategoryPath(uncategorizedTitle: "Uncategorized")
-        guard !(path.count == 1 && path.first == "Uncategorized") else { return nil }
+        let uncategorized = CategoryConstants.uncategorizedTitle
+        let path = minifigure.normalizedCategoryPath(uncategorizedTitle: uncategorized)
+        guard path != [uncategorized] else { return nil }
         return path.joined(separator: " / ")
-    }
-
-    private func updateQuantity(to newValue: Int) {
-        let clamped = max(0, min(newValue, minifigure.quantityNeeded))
-        guard clamped != minifigure.quantityHave else { return }
-
-        withAnimation {
-            minifigure.quantityHave = clamped
-            _minifigure.wrappedValue.synchronizeParts(to: clamped)
-            try? modelContext.save()
-        }
     }
 }
 
@@ -156,7 +141,7 @@ private struct MinifigureThumbnail: View {
                             .frame(maxWidth: 120, maxHeight: 120)
                     case .failure(let state):
                         ZStack {
-                            placeholder
+                            ThumbnailPlaceholder(systemImage: "person.fill")
                             VStack(spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.title3.weight(.bold))
@@ -172,19 +157,10 @@ private struct MinifigureThumbnail: View {
                 }
                 .background(.white)
             } else {
-                placeholder
+                ThumbnailPlaceholder(systemImage: "person.fill")
             }
         }
         .frame(width: 120, height: 120)
-    }
-
-    private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color(uiColor: .tertiarySystemFill))
-            .overlay {
-                Image(systemName: "person.fill")
-                    .foregroundStyle(.secondary)
-            }
     }
 }
 

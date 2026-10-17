@@ -1,9 +1,5 @@
 import SwiftUI
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 import BrickCore
 
 enum ThumbnailImagePhase {
@@ -29,38 +25,72 @@ private enum ThumbnailImageError: LocalizedError {
     }
 }
 
+/// Loads a thumbnail through `ThumbnailCacheManager` while the view is on screen and
+/// hands each loading phase to `content`.
 struct ThumbnailImage<Content: View>: View {
-    private let url: URL?
-    @StateObject private var viewModel: ThumbnailImageViewModel
-    private let content: (ThumbnailImagePhase) -> Content
+    let url: URL?
+    var cache: ThumbnailCacheManager = .shared
+    @ViewBuilder let content: (ThumbnailImagePhase) -> Content
 
-    init(
-        url: URL?,
-        cache: ThumbnailCacheManager = .shared,
-        @ViewBuilder content: @escaping (ThumbnailImagePhase) -> Content
-    ) {
-        self.url = url
-        _viewModel = StateObject(wrappedValue: ThumbnailImageViewModel(url: url, cache: cache))
-        self.content = content
+    @State private var phase: ThumbnailImagePhase = .empty
+    /// The URL `phase` shows the image of, so reappearing doesn't load it again.
+    @State private var loadedURL: URL?
+    /// Bumped by Retry to restart the load for the same URL.
+    @State private var attempt = 0
+
+    var body: some View {
+        content(phase)
+            .task(id: LoadRequest(url: url, attempt: attempt)) {
+                await load()
+            }
     }
 
-    init(
-        url: URL?,
-        cache: ThumbnailCacheManager = .shared
-    ) where Content == DefaultThumbnailImageContent {
+    private struct LoadRequest: Equatable {
+        let url: URL?
+        let attempt: Int
+    }
+
+    private func load() async {
+        guard let url else {
+            phase = .empty
+            loadedURL = nil
+            return
+        }
+
+        if loadedURL == url, case .success = phase {
+            return
+        }
+
+        phase = .loading
+        loadedURL = nil
+
+        do {
+            let data = try await cache.data(for: url)
+            try Task.checkCancellation()
+
+            guard let image = UIImage(data: data) else {
+                await cache.removeCachedData(for: url)
+                throw ThumbnailImageError.decodingFailed
+            }
+
+            phase = .success(Image(uiImage: image))
+            loadedURL = url
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            phase = .failure(ThumbnailImageErrorState(error: error) {
+                attempt += 1
+            })
+        }
+    }
+}
+
+extension ThumbnailImage where Content == DefaultThumbnailImageContent {
+    init(url: URL?, cache: ThumbnailCacheManager = .shared) {
         self.init(url: url, cache: cache) { phase in
             DefaultThumbnailImageContent(phase: phase)
         }
-    }
-
-    var body: some View {
-        content(viewModel.phase)
-            .onAppear {
-                viewModel.startLoadingIfNeeded()
-            }
-            .onChange(of: url) { _, newValue in
-                viewModel.setURL(newValue)
-            }
     }
 }
 
@@ -91,114 +121,5 @@ struct DefaultThumbnailImageContent: View {
             }
             .padding(12)
         }
-    }
-}
-
-@MainActor
-private final class ThumbnailImageViewModel: ObservableObject {
-    @Published private(set) var phase: ThumbnailImagePhase = .empty
-
-    private let cache: ThumbnailCacheManager
-    private var currentURL: URL?
-    private var currentTask: Task<Void, Never>?
-    private var lastSuccessfulURL: URL?
-    private var hasStartedLoading = false
-
-    init(url: URL?, cache: ThumbnailCacheManager) {
-        self.cache = cache
-        self.currentURL = url
-    }
-
-    deinit {
-        currentTask?.cancel()
-    }
-
-    func startLoadingIfNeeded() {
-        guard !hasStartedLoading else { return }
-        hasStartedLoading = true
-        loadImage(force: false)
-    }
-
-    func setURL(_ url: URL?) {
-        guard url != currentURL else { return }
-        currentURL = url
-        lastSuccessfulURL = nil
-        hasStartedLoading = false
-        loadImage(force: true)
-    }
-
-    func retry(force: Bool = true) {
-        loadImage(force: force)
-    }
-
-    private func loadImage(force: Bool) {
-        guard let url = currentURL else {
-            phase = .empty
-            lastSuccessfulURL = nil
-            hasStartedLoading = false
-            currentTask?.cancel()
-            currentTask = nil
-            return
-        }
-
-        if !force,
-           let lastURL = lastSuccessfulURL,
-           lastURL == url,
-           case .success = phase {
-            return
-        }
-
-        hasStartedLoading = true
-        phase = .loading
-        currentTask?.cancel()
-
-        let cache = cache
-
-        currentTask = Task { [weak self] in
-            guard let self else { return }
-
-            do {
-                let data = try await cache.data(for: url)
-                guard !Task.isCancelled else { return }
-
-                guard let image = self.makeImage(from: data) else {
-                    await cache.removeCachedData(for: url)
-                    throw ThumbnailImageError.decodingFailed
-                }
-
-                await MainActor.run {
-                    self.lastSuccessfulURL = url
-                    self.phase = .success(image)
-                }
-            } catch is CancellationError {
-                return
-            } catch {
-                guard !Task.isCancelled else { return }
-                let retryAction: () -> Void = { [weak self] in
-                    Task { @MainActor in
-                        self?.retry(force: true)
-                    }
-                }
-
-                await MainActor.run {
-                    self.phase = .failure(
-                        ThumbnailImageErrorState(
-                            error: error,
-                            retry: retryAction
-                        )
-                    )
-                }
-            }
-        }
-    }
-
-    private func makeImage(from data: Data) -> Image? {
-        #if os(macOS)
-            guard let nsImage = NSImage(data: data) else { return nil }
-            return Image(nsImage: nsImage)
-        #else
-            guard let uiImage = UIImage(data: data) else { return nil }
-            return Image(uiImage: uiImage)
-        #endif
     }
 }

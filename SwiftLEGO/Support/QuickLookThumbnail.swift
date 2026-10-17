@@ -8,58 +8,37 @@ struct QuickLookThumbnail<Item: QuickLookPreviewable, Content: View>: View {
 
     @Environment(\.quickLookPresenter) private var presenter
 
-    private let item: Item
-    private let overlayAlignment: Alignment
-    private let gesture: Gesture
-    private let content: Content
-
-    init(
-        item: Item,
-        overlayAlignment: Alignment = .bottomTrailing,
-        gesture: Gesture = .longPress,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.item = item
-        self.overlayAlignment = overlayAlignment
-        self.gesture = gesture
-        self.content = content()
-    }
+    let item: Item
+    var overlayAlignment: Alignment = .bottomTrailing
+    var gesture: Gesture = .longPress
+    @ViewBuilder let content: Content
 
     var body: some View {
-        Group {
-            if let presenter {
-                let isLoading = presenter.isLoading(item)
-                interactiveContent(isLoading: isLoading) {
+        if let presenter {
+            let base = content
+                .contentShape(Rectangle())
+                .overlay(alignment: overlayAlignment) {
+                    if presenter.isLoading(item) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(4)
+                            .background(.thinMaterial, in: Capsule())
+                    }
+                }
+                .accessibilityAddTraits(.isButton)
+
+            switch gesture {
+            case .tap:
+                base.onTapGesture {
                     presenter.present(item)
                 }
-            } else {
-                content
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func interactiveContent(
-        isLoading: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        let base = content
-            .contentShape(Rectangle())
-            .overlay(alignment: overlayAlignment) {
-                if isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(4)
-                        .background(.thinMaterial, in: Capsule())
+            case .longPress:
+                base.onLongPressGesture {
+                    presenter.present(item)
                 }
             }
-            .accessibilityAddTraits(.isButton)
-
-        switch gesture {
-        case .tap:
-            base.onTapGesture(perform: action)
-        case .longPress:
-            base.onLongPressGesture(perform: action)
+        } else {
+            content
         }
     }
 }
@@ -77,14 +56,9 @@ extension View {
 }
 
 struct QuickLookMenuButton<Item: QuickLookPreviewable, LabelContent: View>: View {
-    private let item: Item
-    private let label: () -> LabelContent
     @Environment(\.quickLookPresenter) private var presenter
-
-    init(item: Item, @ViewBuilder label: @escaping () -> LabelContent) {
-        self.item = item
-        self.label = label
-    }
+    let item: Item
+    @ViewBuilder let label: () -> LabelContent
 
     var body: some View {
         Button {

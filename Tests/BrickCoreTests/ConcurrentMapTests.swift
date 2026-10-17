@@ -19,6 +19,15 @@ struct ConcurrentMapTests {
 		}
 	}
 
+	/// Counts transforms as they start.
+	private actor StartCounter {
+		private(set) var count = 0
+
+		func increment() {
+			count += 1
+		}
+	}
+
 	@Test
 	func resultsKeepInputOrder() async throws {
 		let input = Array(1...50)
@@ -74,5 +83,35 @@ struct ConcurrentMapTests {
 		let results = try await mapConcurrently([1, 2, 3], limit: 0) { $0 + 1 }
 
 		#expect(results == [2, 3, 4])
+	}
+
+	/// With 40 items the cancellation lands while the window still has rows to
+	/// refill; with 4 it lands in the last window, when there is nothing left to start.
+	@Test(.timeLimit(.minutes(1)), arguments: [40, 4])
+	func cancellationThrowsInsteadOfReturningAPartialArray(itemCount: Int) async throws {
+		let started = StartCounter()
+
+		let mapping = Task {
+			try await mapConcurrently(Array(1...itemCount), limit: 4) { value in
+				await started.increment()
+				// Like the inventory service's `try?` fetches, this swallows the
+				// cancellation and returns a value anyway.
+				try? await Task.sleep(for: .seconds(60))
+				return value
+			}
+		}
+
+		// Cancel once the first window is in flight.
+		while await started.count < 4 {
+			try await Task.sleep(for: .milliseconds(1))
+		}
+		mapping.cancel()
+
+		await #expect(throws: CancellationError.self) {
+			try await mapping.value
+		}
+
+		let startedCount = await started.count
+		#expect(startedCount == 4, "No transform should start after cancelling, yet \(startedCount) started in total.")
 	}
 }

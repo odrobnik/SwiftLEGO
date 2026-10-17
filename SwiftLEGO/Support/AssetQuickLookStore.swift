@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import BrickCore
 
 actor AssetQuickLookStore {
@@ -43,6 +44,10 @@ actor AssetQuickLookStore {
         let data = try await ThumbnailCacheManager.shared.data(for: url)
         let destination = previewFileURL(for: url, item: item)
         do {
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             try data.write(to: destination, options: .atomic)
         } catch {
             try? FileManager.default.removeItem(at: destination)
@@ -51,11 +56,20 @@ actor AssetQuickLookStore {
         return destination
     }
 
+    /// The file is named after the item, which Quick Look shows as its title, inside a
+    /// folder per source URL: the colours of one part share a name but not an image.
     private func previewFileURL(for url: URL, item: any QuickLookPreviewable) -> URL {
         let sanitizedBase = sanitizeFilename(item.quickLookPreviewBaseName)
         let pathExtension = url.pathExtension.isEmpty ? "jpg" : url.pathExtension
         let filename = sanitizedBase.isEmpty ? "Preview" : sanitizedBase
+        let sourceDigest = SHA256.hash(data: Data(url.absoluteString.utf8))
+            .prefix(8)
+            .map { String(format: "%02x", $0) }
+            .joined()
+
         return FileManager.default.temporaryDirectory
+            .appendingPathComponent("QuickLook", isDirectory: true)
+            .appendingPathComponent(sourceDigest, isDirectory: true)
             .appendingPathComponent(filename, isDirectory: false)
             .appendingPathExtension(pathExtension)
     }

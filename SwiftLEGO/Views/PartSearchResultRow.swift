@@ -7,7 +7,7 @@ import BrickCore
 struct PartSearchResultRow: View {
     @Environment(\.modelContext) private var modelContext
     let set: BrickSet
-    @Bindable var part: Part
+    let part: Part
     let owningMinifigure: Minifigure?
     let parentChain: [Part]
 
@@ -23,39 +23,6 @@ struct PartSearchResultRow: View {
             return part
         }
         return parentChain.last ?? part
-    }
-
-    private var totalMissing: Int {
-        missingCount(for: part)
-    }
-
-    private var totalNeeded: Int {
-        part.quantityNeeded
-    }
-
-    private var totalHave: Int {
-        part.quantityHave
-    }
-
-    private var secondaryContextLine: String? {
-        var segments: [String] = []
-
-        if let owningMinifigure {
-            let name = owningMinifigure.displayName().trimmingCharacters(in: .whitespacesAndNewlines)
-            if !name.isEmpty {
-                segments.append("Minifigure: \(name)")
-            }
-        }
-
-        let parentNames = parentChain
-            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        if !parentNames.isEmpty {
-            segments.append(parentNames.joined(separator: " › "))
-        }
-
-        return segments.isEmpty ? nil : segments.joined(separator: " • ")
     }
 
     var body: some View {
@@ -87,36 +54,11 @@ struct PartSearchResultRow: View {
                 .frame(minWidth: 150, alignment: .center)
             }
 
-            HStack(alignment: .center, spacing: 12) {
-                Text(set.collection?.name ?? "List")
-                    .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule()
-                            .fill(Color.accentColor.opacity(0.12))
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
-                    )
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(set.setNumber) • \(set.name)")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.trailing)
-
-                    if let line = secondaryContextLine {
-                        Text(line)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.trailing)
-                    }
-                }
-            }
+            PartSearchResultContext(
+                set: set,
+                owningMinifigure: owningMinifigure,
+                parentChain: parentChain
+            )
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button {
@@ -127,10 +69,6 @@ struct PartSearchResultRow: View {
             .tint(.green)
             .disabled(part.quantityHave >= part.quantityNeeded)
         }
-    }
-
-    private func missingCount(for part: Part) -> Int {
-        max(part.quantityNeeded - part.quantityHave, 0)
     }
 
     private func updateQuantity(to newValue: Int) {
@@ -160,6 +98,68 @@ struct PartSearchResultRow: View {
     }
 }
 
+/// Where a part search result sits: its list, set, owning minifigure and parent parts.
+/// A separate view so that stepping the part's quantity doesn't rebuild it.
+private struct PartSearchResultContext: View {
+    let set: BrickSet
+    let owningMinifigure: Minifigure?
+    let parentChain: [Part]
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(set.collection?.name ?? "List")
+                .font(.footnote.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(Color.accentColor.opacity(0.12))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
+                )
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(set.setNumber) • \(set.name)")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+
+                if let line = secondaryContextLine {
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+        }
+    }
+
+    private var secondaryContextLine: String? {
+        var segments: [String] = []
+
+        if let owningMinifigure {
+            let name = owningMinifigure.displayName().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty {
+                segments.append("Minifigure: \(name)")
+            }
+        }
+
+        let parentNames = parentChain
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if !parentNames.isEmpty {
+            segments.append(parentNames.joined(separator: " › "))
+        }
+
+        return segments.isEmpty ? nil : segments.joined(separator: " • ")
+    }
+}
+
 private struct PartThumbnail: View {
     let part: Part
 
@@ -177,7 +177,7 @@ private struct PartThumbnail: View {
                     case .failure(let state):
                         if shouldShowRetry(for: state.error) {
                             ZStack {
-                                placeholder
+                                ThumbnailPlaceholder(systemImage: "cube.transparent", scalesSymbol: true)
                                 VStack(spacing: 6) {
                                     Image(systemName: "exclamationmark.triangle.fill")
                                         .font(.caption.weight(.bold))
@@ -190,33 +190,17 @@ private struct PartThumbnail: View {
                                 .padding(8)
                             }
                         } else {
-                            placeholder
+                            ThumbnailPlaceholder(systemImage: "cube.transparent", scalesSymbol: true)
                         }
                     }
                 }
                 .background(.white)
             } else {
-                placeholder
+                ThumbnailPlaceholder(systemImage: "cube.transparent", scalesSymbol: true)
             }
         }
         .frame(width: 80, height: 60)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color(uiColor: .tertiarySystemFill))
-            .overlay {
-                GeometryReader { proxy in
-                    let dimension = min(proxy.size.width, proxy.size.height) * 0.6
-                    Image(systemName: "cube.transparent")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: dimension, height: dimension)
-                        .foregroundStyle(.secondary)
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                }
-            }
     }
 
     private func shouldShowRetry(for error: Error) -> Bool {

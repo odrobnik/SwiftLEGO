@@ -47,7 +47,7 @@ public final class BrickColorRefreshManager {
 
         do {
             let localeIdentifier = Self.localeIdentifier(for: locale)
-            _ = try await ColorImportUtilities.refreshBrickLinkColors(
+            try await ColorImportUtilities.refreshBrickLinkColors(
                 modelContext: modelContext,
                 locale: localeIdentifier,
                 service: service

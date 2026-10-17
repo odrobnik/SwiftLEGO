@@ -3,44 +3,13 @@ import SwiftData
 import BrickCore
 
 struct SetCardView: View {
-    @Bindable var brickSet: BrickSet
-
-    init(brickSet: BrickSet) {
-        self._brickSet = Bindable(brickSet)
-    }
+    let brickSet: BrickSet
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(.white))
-
-                if let url = brickSet.thumbnailURL {
-                    ThumbnailImage(url: url) { phase in
-                        switch phase {
-                        case .empty, .loading:
-                            ProgressView()
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFit()
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        case .failure(let state):
-                            VStack(spacing: 12) {
-                                PlaceholderArtworkView(symbol: "shippingbox.fill")
-                                Button("Retry") {
-                                    state.retry()
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                    }
-                } else {
-                    PlaceholderArtworkView(symbol: "shippingbox.fill")
-                }
-            }
-            .frame(height: 240)
-            .clipped()
+            SetCardThumbnail(url: brickSet.thumbnailURL)
+                .frame(height: 240)
+                .clipped()
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
@@ -49,12 +18,7 @@ struct SetCardView: View {
                         .textCase(.uppercase)
                         .foregroundStyle(.secondary)
 
-                    if let completionText {
-                        Text("•")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                        completionText
-                    }
+                    SetCompletionBadge(brickSet: brickSet)
                 }
 
                 Text(brickSet.name)
@@ -70,13 +34,59 @@ struct SetCardView: View {
             .shadow(color: Color.primary.opacity(0.15), radius: 14, x: 0, y: 10)
         }
     }
+}
 
-    private var completionText: Text? {
-        guard let percentage = completionPercentage else { return nil }
-        let formatted = percentage.formatted(.percent.precision(.fractionLength(0)))
-        return Text(formatted)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
+private struct SetCardThumbnail: View {
+    let url: URL?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(.white))
+
+            if let url {
+                ThumbnailImage(url: url) { phase in
+                    switch phase {
+                    case .empty, .loading:
+                        ProgressView()
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    case .failure(let state):
+                        VStack(spacing: 12) {
+                            PlaceholderArtworkView(symbol: "shippingbox.fill")
+                            Button("Retry") {
+                                state.retry()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                }
+            } else {
+                PlaceholderArtworkView(symbol: "shippingbox.fill")
+            }
+        }
+    }
+}
+
+/// "• 42%" for how much of the set's regular parts and minifigures are owned. It reads
+/// every part's quantity, so a quantity change updates only the badge, not the card.
+private struct SetCompletionBadge: View {
+    let brickSet: BrickSet
+
+    var body: some View {
+        if let percentage = completionPercentage {
+            HStack(spacing: 6) {
+                Text("•")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Text(percentage.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var completionPercentage: Double? {
